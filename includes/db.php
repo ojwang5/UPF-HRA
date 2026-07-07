@@ -156,12 +156,22 @@ function migrate(PDO $pdo): void {
             _migrate_v2($pdo);
             $pdo->exec("PRAGMA user_version = 2");
             $pdo->exec("COMMIT");
+            $v = 2;
         } catch (\Throwable $e) {
             $pdo->exec("ROLLBACK");
             $pdo->exec("PRAGMA foreign_keys = ON");
             throw $e;
         }
         $pdo->exec("PRAGMA foreign_keys = ON");
+    }
+
+    if ($v < 3) {
+        // v3: add email, directorate, unit columns to employees
+        $cols = array_column($pdo->query("PRAGMA table_info(employees)")->fetchAll(), 'name');
+        if (!in_array('email',       $cols)) $pdo->exec("ALTER TABLE employees ADD COLUMN email TEXT");
+        if (!in_array('directorate', $cols)) $pdo->exec("ALTER TABLE employees ADD COLUMN directorate TEXT");
+        if (!in_array('unit',        $cols)) $pdo->exec("ALTER TABLE employees ADD COLUMN unit TEXT");
+        $pdo->exec("PRAGMA user_version = 3");
     }
 }
 

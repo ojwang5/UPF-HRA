@@ -48,13 +48,9 @@ $unreadCount = $user ? unread_notification_count($user) : 0;
 <header class="topbar">
   <div class="topbar-inner">
     <?php if ($user): ?>
-    <!-- Hamburger — mobile only -->
+    <!-- Hamburger — MOBILE ONLY (hidden on desktop via CSS) -->
     <button class="hamburger" id="hamburger" aria-label="Open menu" onclick="openDrawer()">
       <span></span><span></span><span></span>
-    </button>
-    <!-- Sidebar collapse toggle — desktop only -->
-    <button class="sb-toggle" id="sb-toggle" aria-label="Toggle sidebar" title="Collapse sidebar" onclick="toggleSidebar()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
     <?php endif; ?>
     <img src="/assets/logo.jpg" alt="UPF" class="logo">
