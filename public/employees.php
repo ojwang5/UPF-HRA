@@ -98,7 +98,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
       </details>
       <!-- Add / Edit form toggle -->
-      <details class="form-panel" id="emp-form" <?= ($editing || flash_peek('err')) ? 'open' : '' ?>>
+      <details class="form-panel" id="emp-form" <?= $editing ? 'open' : '' ?>>
         <summary><button type="button" class="btn-icon bi-primary" title="<?= $editing ? 'Edit record' : 'Add personnel' ?>"><?= $editing ? ICO_EDIT : ICO_PLUS ?></button></summary>
         <div class="form-body">
           <h4 style="margin:0 0 14px;color:var(--navy-800)"><?= $editing ? 'Edit Personnel Record' : 'Add New Personnel' ?></h4>
@@ -186,6 +186,5 @@ include __DIR__ . '/../includes/header.php';
     });
   });
 })();
-function flash_peek(k){ return false; } // server-side only
 </script>
 <?php include __DIR__ . '/../includes/footer.php'; ?>
