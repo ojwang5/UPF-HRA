@@ -196,6 +196,53 @@ tbody tr:hover td{background:#fafbfd}
 .btn-gold:hover{background:#b8870a;color:#fff}
 .btn-sm{padding:5px 11px;font-size:12px}
 
+/* ===== Icon-only buttons (widget style) ===== */
+.btn-icon{
+  width:34px;height:34px;padding:0;border-radius:8px;
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;border:1px solid transparent;
+  transition:all .15s ease;flex-shrink:0;text-decoration:none;
+  font-family:inherit;position:relative;
+}
+.btn-icon .ico{width:16px;height:16px;pointer-events:none;flex-shrink:0}
+.btn-icon:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm);text-decoration:none}
+/* Variants */
+.bi-primary{background:var(--primary);color:#fff}
+.bi-primary:hover{background:var(--primary-700);color:#fff}
+.bi-secondary{background:var(--navy-50);color:var(--navy-700);border-color:var(--border)}
+.bi-secondary:hover{background:var(--navy-100);color:var(--navy-800)}
+.bi-danger{background:transparent;color:var(--red);border-color:#fca5a5}
+.bi-danger:hover{background:var(--red-soft)}
+.bi-gold{background:var(--gold);color:#fff}
+.bi-gold:hover{background:#b8870a;color:#fff}
+.bi-green{background:var(--green-soft);color:var(--green);border-color:#86efac}
+.bi-green:hover{background:#bbf7d0}
+/* Size variants */
+.bi-sm{width:28px;height:28px;border-radius:6px}
+.bi-sm .ico{width:13px;height:13px}
+.bi-lg{width:42px;height:42px;border-radius:10px}
+.bi-lg .ico{width:20px;height:20px}
+/* Tooltip via title attr is native; also support data-tip */
+[title]{cursor:pointer}
+
+/* ===== Card header row ===== */
+.chr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap}
+.chr h3,.chr h2{margin:0}
+.action-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+/* ===== Collapsible form panels ===== */
+.form-panel>summary{list-style:none;cursor:pointer}
+.form-panel>summary::-webkit-details-marker{display:none}
+.form-panel .form-body{
+  background:var(--navy-50);border:1px solid var(--border);
+  border-radius:10px;padding:20px;margin-top:10px;
+  animation:panelIn .15s ease;
+}
+@keyframes panelIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+/* When open, style the toggle button differently */
+.form-panel[open]>summary .btn-icon{background:var(--navy-700);color:#fff;transform:rotate(45deg)}
+.form-panel[open]>summary .bi-primary{background:var(--navy-700);color:#fff}
+
 /* ===== Forms ===== */
 .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px;align-items:end}
 .form-group{display:flex;flex-direction:column;gap:5px;flex:1;min-width:160px}

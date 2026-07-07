@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'post'     => $pdo->prepare("INSERT INTO posts (station_id,name,code) VALUES (?,?,?)")->execute([(int)$_POST['parent_id'],$name,$code]),
                 default    => null,
             };
-            flash('msg', ucfirst($level).' added successfully.');
+            flash('msg', ucfirst($level).' added.');
         } catch (\Throwable $e) { flash('err','Error: '.$e->getMessage()); }
     } elseif ($action === 'delete') {
         try {
@@ -43,117 +43,102 @@ $divisions = $pdo->query("SELECT d.*,r.name AS region_name FROM divisions d JOIN
 $stations  = $pdo->query("SELECT s.*,d.name AS div_name,r.name AS region_name FROM stations s JOIN divisions d ON d.id=s.division_id JOIN regions r ON r.id=d.region_id ORDER BY r.name,d.name,s.name")->fetchAll();
 $posts     = $pdo->query("SELECT p.*,s.name AS sta_name,d.name AS div_name,r.name AS region_name FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id JOIN regions r ON r.id=d.region_id ORDER BY r.name,d.name,s.name,p.name")->fetchAll();
 
-function del_form(string $level, int $id): string {
-    return '<form method="post" style="display:inline" onsubmit="return confirm(\'Delete this '.htmlspecialchars($level).'?\')">
+// Helper: delete button
+function del_ico(string $level, int $id): string {
+    return '<form method="post" style="display:contents" onsubmit="return confirm(\'Delete this '.htmlspecialchars($level).'?\')">
         <input type="hidden" name="action" value="delete">
         <input type="hidden" name="level" value="'.htmlspecialchars($level).'">
         <input type="hidden" name="id" value="'.$id.'">
-        <button class="btn btn-sm btn-danger">Delete</button></form>';
+        <button type="submit" class="btn-icon bi-danger bi-sm" title="Delete">'.ICO_TRASH.'</button></form>';
 }
 
 include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
-  <div><h1>Organisational Structure</h1><div class="desc">Manage the police hierarchy: Region → Division → Station → Post</div></div>
+  <div><h1>Organisational Structure</h1><div class="desc">Region → Division → Station → Post hierarchy management</div></div>
 </div>
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 <?php if ($m=flash('err')): ?><div class="alert alert-error"><?= e($m) ?></div><?php endif; ?>
 
-<!-- Regions -->
-<div class="card">
-  <h3>Regions <span class="badge badge-admin"><?= count($regions) ?></span></h3>
-  <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-    <input type="hidden" name="action" value="add"><input type="hidden" name="level" value="region">
-    <div class="form-group" style="flex:2"><label>Region Name</label><input type="text" name="name" required placeholder="e.g. Kampala Metropolitan"></div>
-    <div class="form-group"><label>Code</label><input type="text" name="code" required placeholder="KLA" maxlength="10"></div>
-    <div class="form-group"><label>Location</label><input type="text" name="location" placeholder="Kampala"></div>
-    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-sm">Add Region</button></div>
-  </form>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Name</th><th>Code</th><th>Location</th><th>Divisions</th><th></th></tr></thead>
-    <tbody>
-      <?php foreach ($regions as $r): $divCount=count(array_filter($divisions,fn($d)=>$d['region_id']===$r['id'])); ?>
-      <tr><td><strong><?= e($r['name']) ?></strong></td><td><?= e($r['code']) ?></td><td><?= e($r['location']) ?></td><td><?= $divCount ?></td>
-          <td><?= del_form('region',(int)$r['id']) ?></td></tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-</div>
+<?php
+$sections = [
+    ['level'=>'region',   'label'=>'Regions',    'count'=>count($regions),   'parentLabel'=>null,        'parents'=>[]],
+    ['level'=>'division', 'label'=>'Divisions',  'count'=>count($divisions), 'parentLabel'=>'Region',    'parents'=>$regions],
+    ['level'=>'station',  'label'=>'Stations',   'count'=>count($stations),  'parentLabel'=>'Division',  'parents'=>$divisions],
+    ['level'=>'post',     'label'=>'Posts',       'count'=>count($posts),     'parentLabel'=>'Station',   'parents'=>$stations],
+];
 
-<!-- Divisions -->
+$tableData = [
+    'region'   => $regions,
+    'division' => $divisions,
+    'station'  => $stations,
+    'post'     => $posts,
+];
+$tableHeaders = [
+    'region'   => ['Name','Code','Location','Divisions'],
+    'division' => ['Region','Division','Code','Stations'],
+    'station'  => ['Region','Division','Station','Code','Posts'],
+    'post'     => ['Region','Division','Station','Post','Code'],
+];
+foreach ($sections as $sec):
+    $lvl = $sec['level'];
+?>
 <div class="card">
-  <h3>Divisions / Districts <span class="badge badge-admin"><?= count($divisions) ?></span></h3>
-  <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-    <input type="hidden" name="action" value="add"><input type="hidden" name="level" value="division">
-    <div class="form-group" style="flex:2"><label>Division Name</label><input type="text" name="name" required></div>
-    <div class="form-group"><label>Code</label><input type="text" name="code" required maxlength="12"></div>
-    <div class="form-group" style="flex:2"><label>Parent Region</label>
-      <select name="parent_id" required><option value="">— select —</option>
-        <?php foreach ($regions as $r): ?><option value="<?= $r['id'] ?>"><?= e($r['name']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-sm">Add Division</button></div>
-  </form>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Region</th><th>Division</th><th>Code</th><th>Stations</th><th></th></tr></thead>
-    <tbody>
-      <?php foreach ($divisions as $d): $staCount=count(array_filter($stations,fn($s)=>$s['division_id']===$d['id'])); ?>
-      <tr><td class="muted"><?= e($d['region_name']) ?></td><td><?= e($d['name']) ?></td><td><?= e($d['code']) ?></td><td><?= $staCount ?></td>
-          <td><?= del_form('division',(int)$d['id']) ?></td></tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-</div>
+  <div class="chr">
+    <h3><?= $sec['label'] ?> <span class="badge badge-admin"><?= $sec['count'] ?></span></h3>
+    <details class="form-panel">
+      <summary><button type="button" class="btn-icon bi-primary" title="Add <?= strtolower($sec['label']) ?>"><?= ICO_PLUS ?></button></summary>
+      <div class="form-body">
+        <h4 style="margin:0 0 12px;color:var(--navy-800)">Add <?= ucfirst($lvl) ?></h4>
+        <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <input type="hidden" name="action" value="add">
+          <input type="hidden" name="level" value="<?= $lvl ?>">
+          <div class="form-group" style="flex:2"><label>Name</label><input type="text" name="name" required placeholder="e.g. <?= $sec['label'] ?> name"></div>
+          <div class="form-group"><label>Code</label><input type="text" name="code" required placeholder="CODE" maxlength="16"></div>
+          <?php if ($lvl==='region'): ?>
+            <div class="form-group"><label>Location</label><input type="text" name="location" placeholder="City/Town"></div>
+          <?php endif; ?>
+          <?php if (!empty($sec['parents'])): ?>
+            <div class="form-group" style="flex:2"><label>Parent <?= $sec['parentLabel'] ?></label>
+              <select name="parent_id" required><option value="">— select —</option>
+                <?php foreach ($sec['parents'] as $p): ?>
+                  <option value="<?= $p['id'] ?>"><?= e(($p['region_name']??'').' '.($p['div_name']??'').' '.$p['name']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          <?php endif; ?>
+          <div class="form-group" style="flex:0">
+            <label>&nbsp;</label>
+            <button class="btn-icon bi-gold bi-lg" type="submit" title="Save"><?= ICO_SAVE ?></button>
+          </div>
+        </form>
+      </div>
+    </details>
+  </div>
 
-<!-- Stations -->
-<div class="card">
-  <h3>Stations <span class="badge badge-admin"><?= count($stations) ?></span></h3>
-  <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-    <input type="hidden" name="action" value="add"><input type="hidden" name="level" value="station">
-    <div class="form-group" style="flex:2"><label>Station Name</label><input type="text" name="name" required></div>
-    <div class="form-group"><label>Code</label><input type="text" name="code" required maxlength="14"></div>
-    <div class="form-group" style="flex:2"><label>Parent Division</label>
-      <select name="parent_id" required><option value="">— select —</option>
-        <?php foreach ($divisions as $d): ?><option value="<?= $d['id'] ?>"><?= e($d['region_name'].' › '.$d['name']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-sm">Add Station</button></div>
-  </form>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Region</th><th>Division</th><th>Station</th><th>Code</th><th>Posts</th><th></th></tr></thead>
-    <tbody>
-      <?php foreach ($stations as $s): $pCount=count(array_filter($posts,fn($p)=>$p['station_id']===$s['id'])); ?>
-      <tr><td class="muted"><?= e($s['region_name']) ?></td><td class="muted"><?= e($s['div_name']) ?></td>
-          <td><?= e($s['name']) ?></td><td><?= e($s['code']) ?></td><td><?= $pCount ?></td>
-          <td><?= del_form('station',(int)$s['id']) ?></td></tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><?php foreach ($tableHeaders[$lvl] as $h): ?><th><?= $h ?></th><?php endforeach; ?><th style="width:48px"></th></tr></thead>
+      <tbody>
+        <?php if ($lvl==='region'): foreach ($regions as $r): $dc=count(array_filter($divisions,fn($d)=>$d['region_id']===$r['id'])); ?>
+        <tr><td><strong><?= e($r['name']) ?></strong></td><td><?= e($r['code']) ?></td><td><?= e($r['location']) ?></td><td><?= $dc ?></td><td><?= del_ico('region',(int)$r['id']) ?></td></tr>
+        <?php endforeach; elseif ($lvl==='division'): foreach ($divisions as $d): $sc=count(array_filter($stations,fn($s)=>$s['division_id']===$d['id'])); ?>
+        <tr><td class="muted"><?= e($d['region_name']) ?></td><td><strong><?= e($d['name']) ?></strong></td><td><?= e($d['code']) ?></td><td><?= $sc ?></td><td><?= del_ico('division',(int)$d['id']) ?></td></tr>
+        <?php endforeach; elseif ($lvl==='station'): foreach ($stations as $s): $pc=count(array_filter($posts,fn($p)=>$p['station_id']===$s['id'])); ?>
+        <tr><td class="muted"><?= e($s['region_name']) ?></td><td class="muted"><?= e($s['div_name']) ?></td><td><strong><?= e($s['name']) ?></strong></td><td><?= e($s['code']) ?></td><td><?= $pc ?></td><td><?= del_ico('station',(int)$s['id']) ?></td></tr>
+        <?php endforeach; elseif ($lvl==='post'): foreach ($posts as $p): ?>
+        <tr><td class="muted"><?= e($p['region_name']) ?></td><td class="muted"><?= e($p['div_name']) ?></td><td class="muted"><?= e($p['sta_name']) ?></td><td><strong><?= e($p['name']) ?></strong></td><td><?= e($p['code']) ?></td><td><?= del_ico('post',(int)$p['id']) ?></td></tr>
+        <?php endforeach; endif; ?>
+        <?php if (!$tableData[$lvl]): ?><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">None yet.</td></tr><?php endif; ?>
+      </tbody>
+    </table>
+  </div>
 </div>
+<?php endforeach; ?>
 
-<!-- Posts -->
-<div class="card">
-  <h3>Posts <span class="badge badge-admin"><?= count($posts) ?></span></h3>
-  <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
-    <input type="hidden" name="action" value="add"><input type="hidden" name="level" value="post">
-    <div class="form-group" style="flex:2"><label>Post Name</label><input type="text" name="name" required></div>
-    <div class="form-group"><label>Code</label><input type="text" name="code" required maxlength="16"></div>
-    <div class="form-group" style="flex:2"><label>Parent Station</label>
-      <select name="parent_id" required><option value="">— select —</option>
-        <?php foreach ($stations as $s): ?><option value="<?= $s['id'] ?>"><?= e($s['region_name'].' › '.$s['div_name'].' › '.$s['name']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-sm">Add Post</button></div>
-  </form>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Region</th><th>Division</th><th>Station</th><th>Post</th><th>Code</th><th></th></tr></thead>
-    <tbody>
-      <?php foreach ($posts as $p): ?>
-      <tr><td class="muted"><?= e($p['region_name']) ?></td><td class="muted"><?= e($p['div_name']) ?></td>
-          <td class="muted"><?= e($p['sta_name']) ?></td><td><?= e($p['name']) ?></td><td><?= e($p['code']) ?></td>
-          <td><?= del_form('post',(int)$p['id']) ?></td></tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-</div>
+<script>
+document.querySelectorAll('details.form-panel').forEach(d=>{
+  d.addEventListener('toggle',()=>{ if(d.open) document.querySelectorAll('details.form-panel').forEach(o=>{ if(o!==d) o.open=false; }); });
+});
+</script>
 <?php include __DIR__ . '/../includes/footer.php'; ?>

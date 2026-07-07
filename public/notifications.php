@@ -26,68 +26,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $notifs = notifications_for($user, false, 100);
 $regions = is_superadmin($user) ? $pdo->query("SELECT * FROM regions ORDER BY name")->fetchAll() : [];
+
 include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
-  <div><h1>Notifications</h1><div class="desc">System updates, approvals, and broadcasts</div></div>
-  <form method="post"><input type="hidden" name="action" value="mark_all"><button class="btn btn-secondary">Mark all read</button></form>
+  <div><h1>Notifications</h1><div class="desc">System alerts, approvals, and broadcasts</div></div>
+  <div class="action-bar">
+    <?php if (is_superadmin($user)): ?>
+    <details class="form-panel" id="broadcast-form">
+      <summary><button type="button" class="btn-icon bi-gold" title="Send broadcast"><?= ICO_BELL ?></button></summary>
+      <div class="form-body">
+        <h4 style="margin:0 0 12px;color:var(--navy-800)">Send Broadcast</h4>
+        <form method="post">
+          <input type="hidden" name="action" value="broadcast">
+          <div class="form-row">
+            <div class="form-group" style="flex:2"><label>Title</label><input type="text" name="title" required></div>
+            <div class="form-group"><label>Audience</label>
+              <select name="audience" id="aud-sel" onchange="var v=this.value;document.getElementById('br-fld').style.display=v==='region'?'':'none';document.getElementById('rl-fld').style.display=v==='role'?'':'none'">
+                <option value="all">All users</option>
+                <option value="region">A Region</option>
+                <option value="role">A Role</option>
+              </select>
+            </div>
+            <div class="form-group" id="br-fld" style="display:none"><label>Region</label>
+              <select name="region_id"><?php foreach ($regions as $r): ?><option value="<?= $r['id'] ?>"><?= e($r['name']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div class="form-group" id="rl-fld" style="display:none"><label>Role</label>
+              <select name="target_role">
+                <?php foreach (array_keys(ROLE_LABELS) as $r): ?><option value="<?= $r ?>"><?= e(role_label($r)) ?></option><?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1"><label>Message</label><textarea name="message" rows="2" required></textarea></div>
+          </div>
+          <div class="action-bar" style="margin-top:10px">
+            <button class="btn-icon bi-gold bi-lg" type="submit" title="Send broadcast"><?= ICO_SEND ?></button>
+          </div>
+        </form>
+      </div>
+    </details>
+    <?php endif; ?>
+    <!-- Mark all read -->
+    <form method="post" style="display:contents">
+      <input type="hidden" name="action" value="mark_all">
+      <button type="submit" class="btn-icon bi-secondary" title="Mark all as read"><?= ICO_OK_ALL ?></button>
+    </form>
+  </div>
 </div>
+
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 
-<?php if (is_superadmin($user)): ?>
 <div class="card">
-  <h3>Send Broadcast</h3>
-  <form method="post">
-    <input type="hidden" name="action" value="broadcast">
-    <div class="form-row">
-      <div class="form-group" style="flex:2"><label>Title</label><input type="text" name="title" required></div>
-      <div class="form-group"><label>Audience</label>
-        <select name="audience" id="aud-sel" onchange="var v=this.value;document.getElementById('br-fld').style.display=v==='region'?'':'none';document.getElementById('rl-fld').style.display=v==='role'?'':'none'">
-          <option value="all">All users</option>
-          <option value="region">A Region</option>
-          <option value="role">A Role</option>
-        </select>
-      </div>
-      <div class="form-group" id="br-fld" style="display:none"><label>Region</label>
-        <select name="region_id"><?php foreach ($regions as $r): ?><option value="<?= $r['id'] ?>"><?= e($r['name']) ?></option><?php endforeach; ?></select>
-      </div>
-      <div class="form-group" id="rl-fld" style="display:none"><label>Role</label>
-        <select name="target_role">
-          <?php foreach (array_keys(ROLE_LABELS) as $r): ?><option value="<?= $r ?>"><?= e(role_label($r)) ?></option><?php endforeach; ?>
-        </select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="flex:1"><label>Message</label><textarea name="message" rows="3" required></textarea></div>
-      <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-gold">Send</button></div>
-    </div>
-  </form>
-</div>
-<?php endif; ?>
-
-<div class="card">
-  <h3>Inbox</h3>
-  <?php if (!$notifs): ?><div class="muted" style="padding:18px 0;text-align:center">No notifications yet.</div><?php endif; ?>
+  <div class="chr"><h3>Inbox <?php $unread=count(array_filter($notifs,fn($n)=>empty($n['read_at_user']))); if($unread): ?><span class="badge badge-sick"><?= $unread ?> new</span><?php endif; ?></h3></div>
+  <?php if (!$notifs): ?><div class="muted" style="padding:18px 0;text-align:center">Inbox is empty.</div><?php endif; ?>
   <?php foreach ($notifs as $n): $unread=empty($n['read_at_user']); ?>
   <div class="notif <?= $unread?'unread':'' ?>">
     <div class="notif-dot"></div>
-    <div class="notif-body">
+    <div class="notif-body" style="flex:1">
       <div class="notif-title"><?= e($n['title']) ?><?php if ($unread): ?><span class="badge badge-leave" style="margin-left:8px;font-size:10px">NEW</span><?php endif; ?></div>
       <div class="notif-msg"><?= e($n['message']) ?></div>
       <div class="notif-meta">
         <?= e(date('M j, Y · H:i',strtotime($n['created_at']))) ?>
-        <?= $n['sender'] ? ' · from '.e($n['sender']) : '' ?>
-        · <?= e($n['audience']) ?>
+        <?= $n['sender'] ? ' · '.e($n['sender']) : '' ?>
         <?php if ($n['link']): ?> · <a href="<?= e($n['link']) ?>">Open →</a><?php endif; ?>
-        <?php if ($unread): ?>
-        <form method="post" style="display:inline">
-          <input type="hidden" name="action" value="mark_one"><input type="hidden" name="id" value="<?= $n['id'] ?>">
-          <button class="link-btn">mark read</button>
-        </form>
-        <?php endif; ?>
       </div>
     </div>
+    <?php if ($unread): ?>
+    <form method="post" style="display:contents">
+      <input type="hidden" name="action" value="mark_one"><input type="hidden" name="id" value="<?= $n['id'] ?>">
+      <button type="submit" class="btn-icon bi-secondary bi-sm" title="Mark as read" style="align-self:flex-start;margin-top:4px"><?= ICO_SAVE ?></button>
+    </form>
+    <?php endif; ?>
   </div>
   <?php endforeach; ?>
 </div>
+
+<style>.notif{display:flex;gap:12px;padding:14px 6px;border-bottom:1px solid var(--border);align-items:flex-start}</style>
+<script>
+document.querySelectorAll('details.form-panel').forEach(d=>{
+  d.addEventListener('toggle',()=>{ if(d.open) document.querySelectorAll('details.form-panel').forEach(o=>{ if(o!==d) o.open=false; }); });
+});
+</script>
 <?php include __DIR__ . '/../includes/footer.php'; ?>
