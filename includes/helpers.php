@@ -24,7 +24,7 @@ const ICO_GEN    = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="cur
 const ICO_BELL   = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
 const ICO_OK_ALL = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/><polyline points="20 12 9 23 4 18"/></svg>';
 
-const ALL_STATUSES = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course'];
+const ALL_STATUSES = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted'];
 const STATUS_LABELS = [
     'present'      => 'Present',
     'awol'         => 'AWOL',
@@ -34,6 +34,7 @@ const STATUS_LABELS = [
     'disciplinary' => 'Disciplinary',
     'on_duty'      => 'On Duty',
     'on_course'    => 'On Course',
+    'deserted'     => 'Deserted',
 ];
 const STATUS_BADGE_CLASS = [
     'present'      => 'badge-present',
@@ -44,6 +45,7 @@ const STATUS_BADGE_CLASS = [
     'disciplinary' => 'badge-disciplinary',
     'on_duty'      => 'badge-on_duty',
     'on_course'    => 'badge-on_course',
+    'deserted'     => 'badge-awol',
 ];
 
 function status_label(string $s): string { return STATUS_LABELS[$s] ?? ucfirst($s); }
@@ -107,7 +109,8 @@ function hierarchy_summary(PDO $pdo, string $date, array $user): array {
                SUM(CASE WHEN ds.status='suspended'    THEN 1 ELSE 0 END) AS suspended,
                SUM(CASE WHEN ds.status='disciplinary' THEN 1 ELSE 0 END) AS disciplinary,
                SUM(CASE WHEN ds.status='on_duty'      THEN 1 ELSE 0 END) AS on_duty,
-               SUM(CASE WHEN ds.status='on_course'    THEN 1 ELSE 0 END) AS on_course
+               SUM(CASE WHEN ds.status='on_course'    THEN 1 ELSE 0 END) AS on_course,
+               SUM(CASE WHEN ds.status='deserted'     THEN 1 ELSE 0 END) AS deserted
         FROM employees e
         {$joinClause}
         LEFT JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
@@ -119,10 +122,10 @@ function hierarchy_summary(PDO $pdo, string $date, array $user): array {
     $stmt->execute(array_merge([$date], $scopeParams));
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
-        foreach (['total','male','female','present','awol','on_leave','sick','suspended','disciplinary','on_duty','on_course'] as $k) {
+        foreach (['total','male','female','present','awol','on_leave','sick','suspended','disciplinary','on_duty','on_course','deserted'] as $k) {
             $r[$k] = (int)($r[$k] ?? 0);
         }
-        $r['unrecorded'] = $r['total'] - ($r['present']+$r['awol']+$r['on_leave']+$r['sick']+$r['suspended']+$r['disciplinary']+$r['on_duty']+$r['on_course']);
+        $r['unrecorded'] = $r['total'] - ($r['present']+$r['awol']+$r['on_leave']+$r['sick']+$r['suspended']+$r['disciplinary']+$r['on_duty']+$r['on_course']+$r['deserted']);
     }
     return $rows;
 }
@@ -141,7 +144,7 @@ function build_hierarchy_joins(string $upTo): string {
 }
 
 function sum_totals(array $rows): array {
-    $t = ['total'=>0,'male'=>0,'female'=>0,'present'=>0,'awol'=>0,'on_leave'=>0,'sick'=>0,'suspended'=>0,'disciplinary'=>0,'on_duty'=>0,'on_course'=>0,'unrecorded'=>0];
+    $t = ['total'=>0,'male'=>0,'female'=>0,'present'=>0,'awol'=>0,'on_leave'=>0,'sick'=>0,'suspended'=>0,'disciplinary'=>0,'on_duty'=>0,'on_course'=>0,'deserted'=>0,'unrecorded'=>0];
     foreach ($rows as $r) foreach ($t as $k=>$_) $t[$k] += ($r[$k] ?? 0);
     return $t;
 }

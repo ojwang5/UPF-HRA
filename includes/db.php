@@ -172,6 +172,39 @@ function migrate(PDO $pdo): void {
         if (!in_array('directorate', $cols)) $pdo->exec("ALTER TABLE employees ADD COLUMN directorate TEXT");
         if (!in_array('unit',        $cols)) $pdo->exec("ALTER TABLE employees ADD COLUMN unit TEXT");
         $pdo->exec("PRAGMA user_version = 3");
+        $v = 3;
+    }
+
+    if ($v < 4) {
+        // v4: add photo_path to employees; recreate daily_status to allow 'deserted' status
+        $pdo->exec("PRAGMA foreign_keys = OFF");
+        $pdo->exec("BEGIN");
+        try {
+            $empCols = array_column($pdo->query("PRAGMA table_info(employees)")->fetchAll(), 'name');
+            if (!in_array('photo_path', $empCols)) {
+                $pdo->exec("ALTER TABLE employees ADD COLUMN photo_path TEXT");
+            }
+            // Recreate daily_status with deserted added to CHECK
+            $pdo->exec("CREATE TABLE IF NOT EXISTS daily_status_v4 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted')),
+                notes TEXT,
+                recorded_by INTEGER REFERENCES users(id),
+                UNIQUE(employee_id, date)
+            )");
+            $pdo->exec("INSERT OR IGNORE INTO daily_status_v4 SELECT * FROM daily_status");
+            $pdo->exec("DROP TABLE daily_status");
+            $pdo->exec("ALTER TABLE daily_status_v4 RENAME TO daily_status");
+            $pdo->exec("PRAGMA user_version = 4");
+            $pdo->exec("COMMIT");
+        } catch (\Throwable $e) {
+            $pdo->exec("ROLLBACK");
+            $pdo->exec("PRAGMA foreign_keys = ON");
+            throw $e;
+        }
+        $pdo->exec("PRAGMA foreign_keys = ON");
     }
 }
 

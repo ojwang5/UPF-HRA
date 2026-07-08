@@ -312,18 +312,27 @@ tbody tr:hover td{background:#fafbfd}
 .chr h3,.chr h2{margin:0}
 .action-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 
-/* ===== Collapsible form panels ===== */
-.form-panel>summary{list-style:none;cursor:pointer}
-.form-panel>summary::-webkit-details-marker{display:none}
-.form-panel .form-body{
-  background:var(--navy-50);border:1px solid var(--border);
-  border-radius:10px;padding:20px;margin-top:10px;
-  animation:panelIn .15s ease;
+/* ===== Panel-drop dropdown system ===== */
+.panel-wrap{position:relative;display:inline-block}
+.panel-drop{
+  display:none;position:absolute;right:0;top:calc(100% + 8px);
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:200;
+  padding:20px;min-width:300px;
+  animation:panelIn .14s ease;
 }
+.panel-drop.is-open{display:block}
+.panel-drop h4{margin:0 0 14px;color:var(--navy-800);font-size:14px}
 @keyframes panelIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
-/* When open, style the toggle button differently */
-.form-panel[open]>summary .btn-icon{background:var(--navy-700);color:#fff;transform:rotate(45deg)}
-.form-panel[open]>summary .bi-primary{background:var(--navy-700);color:#fff}
+/* Active trigger button */
+[data-panel-open]{background:var(--primary)!important;color:#fff!important}
+
+/* Legacy form-body still used inside panel-drop */
+.form-body{padding:4px}
+
+/* ===== Stat card clickable ===== */
+.stat-card-link{cursor:pointer;text-decoration:none;display:contents}
+.stat.is-active{ring:2px solid var(--primary);box-shadow:0 0 0 3px rgba(31,53,89,.2)}
 
 /* ===== Forms ===== */
 .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px;align-items:end}
@@ -347,6 +356,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 .badge-on_duty{background:#cffafe;color:#0c4a6e}
 .badge-on_course{background:#d1fae5;color:#065f46}
 .badge-admin{background:var(--navy-100);color:var(--navy-800)}
+.badge-deserted{background:#fce7f3;color:#9d174d}
 
 /* ===== Daily status table ===== */
 .card-group-header{font-weight:600;color:var(--navy-700);font-size:13px;margin-bottom:10px;padding:8px 12px;background:var(--navy-50);border-radius:6px;border-left:3px solid var(--gold)}
@@ -356,6 +366,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 .row-awol td{background:#fff5f5}
 .row-on_duty td{background:#f0fdfe}
 .row-on_course td{background:#f0fdf4}
+.row-deserted td{background:#fdf2f8}
 
 /* ===== Login ===== */
 .login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--navy-900),var(--primary));padding:20px}
