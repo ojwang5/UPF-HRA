@@ -90,6 +90,7 @@ if ($format === 'excel') {
 }
 
 /* ── PDF (print-ready HTML) ── */
+$logoB64 = 'data:image/jpeg;base64,' . base64_encode(file_get_contents(__DIR__ . '/assets/logo.jpg'));
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -98,31 +99,48 @@ if ($format === 'excel') {
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff}
-.cover{text-align:center;padding:30px 20px;border-bottom:2px solid #1f3559;margin-bottom:16px}
-.cover h1{font-size:17px;font-weight:700;color:#1f3559;letter-spacing:1px;margin-bottom:4px}
-.cover .sub{font-size:11px;color:#555}
-.cover .meta{font-size:10px;color:#888;margin-top:6px}
+.cover{display:flex;align-items:center;gap:20px;padding:20px 20px 16px;border-bottom:3px solid #d4a017;margin-bottom:16px;background:linear-gradient(135deg,#1f3559 0%,#15243d 100%);color:#fff}
+.cover-logo{width:70px;height:70px;border-radius:50%;border:2px solid #d4a017;object-fit:cover;flex-shrink:0;background:#fff;padding:2px}
+.cover-text{flex:1}
+.cover-text .org{font-size:16px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
+.cover-text .sys{font-size:11px;opacity:.85;margin-top:2px;letter-spacing:.5px}
+.cover-text .motto{font-size:9px;font-style:italic;color:#d4a017;letter-spacing:3px;margin-top:4px}
+.cover-meta{text-align:right;font-size:10px;opacity:.8;line-height:1.6}
+.cover-meta strong{color:#d4a017;font-size:12px;display:block;margin-bottom:4px}
 table{width:100%;border-collapse:collapse;margin-bottom:20px}
-th{background:#1f3559;color:#fff;padding:6px 8px;font-size:10px;text-align:left;letter-spacing:.5px}
-td{padding:5px 8px;border-bottom:1px solid #e5e9f0;font-size:10px}
+th{background:#1f3559;color:#fff;padding:7px 9px;font-size:10px;text-align:left;letter-spacing:.5px;text-transform:uppercase}
+td{padding:5px 9px;border-bottom:1px solid #e5e9f0;font-size:10px}
 tr:nth-child(even) td{background:#f8f9fc}
-.summary{font-size:11px;color:#555;margin-bottom:12px}
+.summary{font-size:11px;color:#555;margin-bottom:12px;padding:8px 20px;background:#f8f9fc;border-left:3px solid #1f3559}
+.print-btn{display:inline-block;margin-left:12px;padding:4px 12px;background:#1f3559;color:#fff;border:none;border-radius:5px;font-size:11px;cursor:pointer;text-decoration:none}
+.footer-bar{text-align:center;font-size:9px;color:#aaa;padding:14px 20px;border-top:1px solid #e5e9f0;margin-top:10px}
 @media print{
   body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .no-print{display:none}
+  .no-print{display:none !important}
+  .cover{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
 <body>
 <div class="cover">
-  <h1>UGANDA POLICE FORCE — MDD MANAGEMENT SYSTEM</h1>
-  <div class="sub">Personnel Register</div>
-  <div class="meta">Scope: <?= htmlspecialchars(user_scope_label($user)) ?> &nbsp;|&nbsp; Generated: <?= date('j F Y, H:i') ?> &nbsp;|&nbsp; By: <?= htmlspecialchars($user['full_name']) ?> (<?= htmlspecialchars(role_label($user['role'])) ?>)</div>
-  <?php if ($search): ?><div class="meta">Search filter: "<?= htmlspecialchars($search) ?>"</div><?php endif; ?>
+  <img src="<?= $logoB64 ?>" alt="UPF Logo" class="cover-logo">
+  <div class="cover-text">
+    <div class="org">Uganda Police Force</div>
+    <div class="sys">MDD Management System — Personnel Register</div>
+    <div class="motto">Protect &amp; Serve</div>
+  </div>
+  <div class="cover-meta">
+    <strong><?= htmlspecialchars(user_scope_label($user)) ?></strong>
+    Generated: <?= date('j F Y') ?><br>
+    <?= date('H:i') ?> hrs &nbsp;·&nbsp; <?= htmlspecialchars($user['full_name']) ?><br>
+    <?= htmlspecialchars(role_label($user['role'])) ?>
+    <?php if ($search): ?><br>Filter: "<?= htmlspecialchars($search) ?>"<?php endif; ?>
+  </div>
 </div>
 
-<div class="summary no-print" style="padding:0 20px 10px">
-  <strong><?= count($rows) ?></strong> personnel record(s) | <a href="javascript:window.print()">🖨 Print / Save as PDF</a>
+<div class="summary no-print" style="padding:8px 20px 10px;display:flex;align-items:center;gap:10px">
+  <strong><?= count($rows) ?></strong> personnel record(s)
+  <a href="javascript:window.print()" class="print-btn">🖨 Print / Save as PDF</a>
 </div>
 
 <div style="padding:0 10px">

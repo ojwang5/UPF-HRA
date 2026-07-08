@@ -206,6 +206,14 @@ function migrate(PDO $pdo): void {
         }
         $pdo->exec("PRAGMA foreign_keys = ON");
     }
+
+    if ($v < 5) {
+        // v5: add email and phone columns to users table
+        $uCols = array_column($pdo->query("PRAGMA table_info(users)")->fetchAll(), 'name');
+        if (!in_array('email', $uCols)) $pdo->exec("ALTER TABLE users ADD COLUMN email TEXT");
+        if (!in_array('phone', $uCols)) $pdo->exec("ALTER TABLE users ADD COLUMN phone TEXT");
+        $pdo->exec("PRAGMA user_version = 5");
+    }
 }
 
 function _migrate_v2(PDO $pdo): void {
