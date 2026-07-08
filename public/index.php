@@ -65,39 +65,40 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- 9 Stat Cards (clickable) -->
 <?php
+// Each entry: [status_key, label, css_class, color, bg_color, svg_icon, hint_text]
 $cards = [
-  ['present',      'on_leave_key'=>'present',  'Present',      'stat-present',      '#22c55e', '#dcfce7',
+  ['present',      'Present',      'stat-present',      '#22c55e', '#dcfce7',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
    'On duty and accounted for'],
-  ['awol',         'on_leave_key'=>'awol',      'AWOL',         'stat-awol',         '#ef4444', '#fee2e2',
+  ['awol',         'AWOL',         'stat-awol',         '#ef4444', '#fee2e2',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
    'Absent without official leave'],
-  ['on_leave',     'on_leave_key'=>'on_leave',  'On Leave',     'stat-leave',        '#3b82f6', '#dbeafe',
+  ['on_leave',     'On Leave',     'stat-leave',        '#3b82f6', '#dbeafe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
    'Approved leave absence'],
-  ['sick',         'on_leave_key'=>'sick',       'Sick',         'stat-sick',         '#f59e0b', '#fef3c7',
+  ['sick',         'Sick',         'stat-sick',         '#f59e0b', '#fef3c7',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
    'Medical / sick absence'],
-  ['suspended',    'on_leave_key'=>'suspended',  'Suspended',    'stat-suspended',    '#7c3aed', '#ede9fe',
+  ['suspended',    'Suspended',    'stat-suspended',    '#7c3aed', '#ede9fe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
    'Under suspension order'],
-  ['disciplinary', 'on_leave_key'=>'disciplinary','Disciplinary', 'stat-disciplinary', '#dc2626', '#fee2e2',
+  ['disciplinary', 'Disciplinary', 'stat-disciplinary', '#dc2626', '#fee2e2',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
    'Facing disciplinary action'],
-  ['on_duty',      'on_leave_key'=>'on_duty',    'On Duty',      'stat-on_duty',      '#0891b2', '#cffafe',
+  ['on_duty',      'On Duty',      'stat-on_duty',      '#0891b2', '#cffafe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
    'Deployed / operational duty'],
-  ['on_course',    'on_leave_key'=>'on_course',  'On Course',    'stat-on_course',    '#059669', '#d1fae5',
+  ['on_course',    'On Course',    'stat-on_course',    '#059669', '#d1fae5',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
    'Attending training / course'],
-  ['deserted',     'on_leave_key'=>'deserted',   'Deserted',     'stat-deserted',     '#be185d', '#fce7f3',
+  ['deserted',     'Deserted',     'stat-deserted',     '#be185d', '#fce7f3',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
    'Left post without permission'],
 ];
 ?>
 <div class="grid grid-4 dash-stats">
 <?php foreach ($cards as $card):
-  [$key, , $label, $cls, $color, $bg, $icon, $hint] = $card;
+  [$key, $label, $cls, $color, $bg, $icon, $hint] = $card;
   $val = $tot[$key] ?? 0;
   $pct = $tot['total'] > 0 ? round($val / $tot['total'] * 100) : 0;
   $isActive = ($detail === $key);
