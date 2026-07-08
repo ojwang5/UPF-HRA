@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'create') {
                 $pdo->prepare("INSERT INTO employees (service_no,full_name,gender,rank,directorate,unit,region_id,division_id,station_id,post_id,email,phone,photo_path) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
                     ->execute([$sno,$name,$gender,$rank,$dir,$unit,$ch['region_id'],$ch['division_id'],$ch['station_id'],$post_id,$email,$phone,$photo]);
-                flash('msg','Personnel record created.');
+                flash('msg','Personnel record created successfully.');
             } else {
                 $id = (int)$_POST['id'];
                 if ($photo) {
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } catch (\PDOException $ex) {
             $msg = (str_contains($ex->getMessage(),'UNIQUE') && str_contains($ex->getMessage(),'service_no'))
-                ? "Force/File number '{$sno}' is already in use. Choose a different number."
+                ? "Force/File number '{$sno}' is already in use."
                 : 'Could not save: '.$ex->getMessage();
             flash('err', $msg);
         }
@@ -139,11 +139,14 @@ if ($canPickPost) {
     $posts = $pdo->query($psql." ORDER BY reg,div,sta,p.name")->fetchAll();
 }
 
+$ranks = ['Constable','Special Police Constable','Corporal','Sergeant','Staff Sergeant','Inspector','Assistant Superintendent','Superintendent','Senior Superintendent','Commissioner','Assistant Inspector General','Deputy Inspector General','Inspector General'];
 $directorates = ['Operations','Criminal Investigations','Special Branch','Traffic','Fire Brigade','Marine','Administration','Finance','Human Resource','Training','Logistics','Media','Legal','ICT','Other'];
 $units = ['General Duty','Flying Squad','Anti-Stock Theft','Anti-Terrorism','Border Security','K9 Unit','Rapid Response','VIP Protection','Community Policing','Other'];
 
 include __DIR__ . '/../includes/header.php';
 ?>
+
+<!-- ════════════════════════════ PAGE HEADER ════════════════════════════ -->
 <div class="page-header">
   <div>
     <h1>Personnel</h1>
@@ -204,77 +207,43 @@ include __DIR__ . '/../includes/header.php';
       </div>
     </div>
 
-    <!-- ADD / EDIT -->
+    <!-- BULK UPLOAD -->
     <div class="panel-wrap">
-      <button class="btn-icon <?= $editing ? 'bi-gold' : 'bi-primary' ?>" data-panel="panel-form"
-        title="<?= $editing ? 'Edit: '.e($editing['full_name']) : 'Add New Personnel' ?>"
-        <?= $editing ? 'data-panel-open="1"' : '' ?>
-      ><?= $editing ? ICO_EDIT : ICO_PLUS ?></button>
-      <div class="panel-drop" id="panel-form" style="min-width:min(700px,90vw);right:0;<?= $editing?'display:block':'' ?>">
-        <h4><?= $editing ? ICO_EDIT.' Edit — '.e($editing['full_name']) : ICO_PLUS.' Add New Personnel' ?></h4>
-        <form method="post" enctype="multipart/form-data">
-          <input type="hidden" name="action" value="<?= $editing?'update':'create' ?>">
-          <?php if ($editing): ?><input type="hidden" name="id" value="<?= $editing['id'] ?>"><?php endif; ?>
-          <div class="form-row">
-            <div class="form-group" style="min-width:140px"><label>Force/File Number *</label>
-              <input type="text" name="service_no" required value="<?= e($editing['service_no']??'') ?>" placeholder="e.g. UPF-12345">
-            </div>
-            <div class="form-group" style="min-width:120px"><label>Rank *</label>
-              <input type="text" name="rank" required value="<?= e($editing['rank']??'') ?>" list="ranks-list" placeholder="Constable…">
-              <datalist id="ranks-list"><?php foreach (['Constable','Corporal','Sergeant','Inspector','ASP','SP','SSP','Commissioner','AIG','DIG','IGP'] as $r): ?><option value="<?= $r ?>"><?php endforeach; ?></datalist>
-            </div>
-            <div class="form-group" style="flex:2;min-width:180px"><label>Full Name(s) *</label>
-              <input type="text" name="full_name" required value="<?= e($editing['full_name']??'') ?>">
-            </div>
-            <div class="form-group" style="min-width:90px"><label>Gender *</label>
-              <select name="gender">
-                <option value="M" <?= ($editing['gender']??'')==='M'?'selected':'' ?>>Male</option>
-                <option value="F" <?= ($editing['gender']??'')==='F'?'selected':'' ?>>Female</option>
-              </select>
-            </div>
+      <button class="btn-icon bi-secondary" data-panel="panel-bulk" title="Bulk import personnel">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </button>
+      <div class="panel-drop" id="panel-bulk" style="min-width:360px;right:0">
+        <h4>
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Bulk Import Personnel
+        </h4>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 14px">Upload a CSV file to add multiple personnel records at once. Download the template first to see the required format.</p>
+        <a href="/bulk-import.php?tpl=1" class="btn-icon bi-secondary bi-lg" style="width:100%;justify-content:center;text-decoration:none;margin-bottom:14px;gap:8px;font-size:12px;font-weight:600">
+          <?= ICO_DL ?> <span>Download CSV Template</span>
+        </a>
+        <form method="post" action="/bulk-import.php" enctype="multipart/form-data" target="_blank">
+          <div class="drop-zone" id="bulk-drop-zone" onclick="document.getElementById('bulk-file').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            <p><strong>Click to choose</strong> or drag &amp; drop your CSV file here</p>
+            <p id="bulk-file-name" style="margin-top:8px;font-weight:600;color:var(--primary);display:none"></p>
           </div>
-          <div class="form-row">
-            <div class="form-group" style="flex:2;min-width:160px"><label>Directorate</label>
-              <select name="directorate">
-                <option value="">— select —</option>
-                <?php foreach ($directorates as $d): ?><option value="<?= $d ?>" <?= ($editing['directorate']??'')===$d?'selected':'' ?>><?= $d ?></option><?php endforeach; ?>
-              </select>
-            </div>
-            <div class="form-group" style="flex:2;min-width:160px"><label>Functional Unit</label>
-              <input type="text" name="unit" value="<?= e($editing['unit']??'') ?>" list="units-list" placeholder="e.g. General Duty">
-              <datalist id="units-list"><?php foreach ($units as $u): ?><option value="<?= $u ?>"><?php endforeach; ?></datalist>
-            </div>
-            <?php if ($canPickPost): ?>
-            <div class="form-group" style="flex:3;min-width:200px"><label>Assigned Post *</label>
-              <select name="post_id" required>
-                <option value="">— select post —</option>
-                <?php foreach ($posts as $pt): ?>
-                  <option value="<?= $pt['id'] ?>" <?= ($editing['post_id']??0)==$pt['id']?'selected':'' ?>><?= e("{$pt['reg']} › {$pt['div']} › {$pt['sta']} › {$pt['name']}") ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            <?php else: ?>
-              <input type="hidden" name="post_id" value="<?= (int)$user['post_id'] ?>">
-            <?php endif; ?>
-          </div>
-          <div class="form-row">
-            <div class="form-group" style="flex:2;min-width:180px"><label>Email</label>
-              <input type="email" name="email" value="<?= e($editing['email']??'') ?>" placeholder="officer@upf.go.ug">
-            </div>
-            <div class="form-group" style="min-width:140px"><label>Phone</label>
-              <input type="tel" name="phone" value="<?= e($editing['phone']??'') ?>" placeholder="+256…">
-            </div>
-            <div class="form-group" style="min-width:160px"><label>Photo (optional)</label>
-              <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" style="font-size:12px;padding:5px">
-            </div>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn-icon bi-gold bi-lg" type="submit"><?= ICO_SAVE ?> <span style="font-size:12px;margin-left:4px">Save</span></button>
-            <?php if ($editing): ?><a class="btn-icon bi-secondary bi-lg" href="/employees.php"><?= ICO_CANCEL ?> <span style="font-size:12px;margin-left:4px">Cancel</span></a><?php endif; ?>
-          </div>
+          <input type="file" id="bulk-file" name="csv_file" accept=".csv,text/csv" style="display:none">
+          <button class="btn-icon bi-primary bi-lg" type="submit" style="width:100%;justify-content:center;margin-top:12px;gap:8px;font-size:12px;font-weight:600">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Import Personnel</span>
+          </button>
         </form>
       </div>
     </div>
+
+    <!-- ADD BUTTON — opens modal -->
+    <button class="btn-icon bi-primary" id="btn-open-modal"
+      title="<?= $editing ? 'Edit: '.e($editing['full_name']) : 'Add New Personnel' ?>"
+      style="gap:6px;padding:0 14px;width:auto;font-size:12px;font-weight:600"
+    >
+      <?= $editing ? ICO_EDIT : ICO_PLUS ?>
+      <span><?= $editing ? 'Edit Record' : 'Add Personnel' ?></span>
+    </button>
 
   </div>
 </div>
@@ -283,47 +252,45 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($m=flash('err')): ?><div class="alert alert-error"><?= e($m) ?></div><?php endif; ?>
 <?php if ($search): ?><div class="alert" style="background:var(--navy-50);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px">Search: <strong><?= e($search) ?></strong> — <?= count($employees) ?> result(s) &nbsp;<a href="/employees.php" style="color:var(--primary)">Clear</a></div><?php endif; ?>
 
-<!-- DETAIL VIEW PANEL -->
+<!-- ════════════════════════════ DETAIL VIEW PANEL ════════════════════════════ -->
 <?php if ($viewing): ?>
-<div class="card" style="border-left:4px solid var(--primary);margin-bottom:8px">
+<div class="card" style="border-left:4px solid var(--primary);margin-bottom:16px">
   <div class="chr">
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <!-- Photo frame -->
-      <div style="width:80px;height:80px;border-radius:10px;overflow:hidden;border:2px solid var(--border);background:var(--navy-50);flex-shrink:0;display:flex;align-items:center;justify-content:center">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="width:72px;height:72px;border-radius:10px;overflow:hidden;border:2px solid var(--border);background:var(--navy-50);flex-shrink:0;display:flex;align-items:center;justify-content:center">
         <?php if (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])): ?>
           <img src="/uploads/photos/<?= e($viewing['photo_path']) ?>" alt="Photo" style="width:100%;height:100%;object-fit:cover">
         <?php else: ?>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" width="36" height="36"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" width="32" height="32"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
         <?php endif; ?>
       </div>
       <div>
-        <h3 style="margin:0"><?= e($viewing['rank'].' '.$viewing['full_name']) ?></h3>
-        <div class="muted" style="font-size:12px"><?= e($viewing['service_no']) ?> &nbsp;·&nbsp; <?= $viewing['gender']==='M'?'Male':'Female' ?></div>
+        <h3 style="margin:0 0 3px"><?= e($viewing['rank'].' '.$viewing['full_name']) ?></h3>
+        <div style="font-size:12px;color:var(--muted)"><?= e($viewing['service_no']) ?> &nbsp;·&nbsp; <?= $viewing['gender']==='M'?'Male':'Female' ?></div>
       </div>
     </div>
     <a class="btn-icon bi-secondary bi-sm" href="/employees.php<?= $search?'?q='.urlencode($search):'' ?>" title="Close"><?= ICO_CANCEL ?></a>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px">
     <?php foreach ([
       'Directorate'=>$viewing['directorate']??'—','Unit'=>$viewing['unit']??'—',
       'Region'=>$viewing['region_name']??'—','Division'=>$viewing['division_name']??'—',
       'Station'=>$viewing['station_name']??'—','Post'=>$viewing['post_name']??'—',
       'Email'=>$viewing['email']??'—','Phone'=>$viewing['phone']??'—',
     ] as $lbl=>$val): ?>
-    <div style="padding:8px 12px;background:var(--navy-50);border-radius:8px">
-      <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px"><?= $lbl ?></div>
+    <div style="padding:10px 12px;background:var(--navy-50);border-radius:8px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:2px"><?= $lbl ?></div>
       <div style="font-weight:600;color:var(--navy-800);font-size:13px"><?= e($val) ?></div>
     </div>
     <?php endforeach; ?>
   </div>
-  <div style="display:flex;gap:6px;margin-top:14px">
-    <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit"><?= ICO_EDIT ?></a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span style="font-size:12px;margin-left:4px">Edit</span></a>
     <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>?')">
       <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $viewing['id'] ?>">
-      <button class="btn-icon bi-danger" type="submit" title="Delete"><?= ICO_TRASH ?></button>
+      <button class="btn-icon bi-danger" type="submit" title="Delete"><?= ICO_TRASH ?> <span style="font-size:12px;margin-left:4px">Remove</span></button>
     </form>
-    <!-- Upload photo for this record -->
-    <form method="post" enctype="multipart/form-data" style="display:contents">
+    <form method="post" enctype="multipart/form-data" style="display:flex;align-items:center;gap:6px;background:var(--navy-50);padding:5px 10px;border-radius:8px;border:1px solid var(--border)">
       <input type="hidden" name="action" value="update">
       <input type="hidden" name="id" value="<?= $viewing['id'] ?>">
       <input type="hidden" name="service_no" value="<?= e($viewing['service_no']) ?>">
@@ -335,17 +302,15 @@ include __DIR__ . '/../includes/header.php';
       <input type="hidden" name="post_id" value="<?= (int)$viewing['post_id'] ?>">
       <input type="hidden" name="email" value="<?= e($viewing['email']??'') ?>">
       <input type="hidden" name="phone" value="<?= e($viewing['phone']??'') ?>">
-      <div style="display:flex;align-items:center;gap:6px;background:var(--navy-50);padding:4px 10px 4px 6px;border-radius:8px;border:1px solid var(--border)">
-        <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:0;white-space:nowrap">Change Photo:</label>
-        <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" style="font-size:11px;max-width:180px">
-        <button class="btn-icon bi-gold bi-sm" type="submit" title="Upload photo"><?= ICO_SAVE ?></button>
-      </div>
+      <label style="font-size:11px;white-space:nowrap">Change Photo:</label>
+      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" style="font-size:11px;max-width:160px">
+      <button class="btn-icon bi-gold bi-sm" type="submit" title="Upload"><?= ICO_SAVE ?></button>
     </form>
   </div>
 </div>
 <?php endif; ?>
 
-<!-- PERSONNEL TABLE -->
+<!-- ════════════════════════════ PERSONNEL TABLE ════════════════════════════ -->
 <div class="card">
   <div class="chr">
     <h3>Personnel Register <span class="badge badge-admin"><?= count($employees) ?></span></h3>
@@ -354,39 +319,44 @@ include __DIR__ . '/../includes/header.php';
     <table>
       <thead>
         <tr>
-          <th>Photo</th><th>File No</th><th>Rank</th><th>Name</th><th>G</th>
+          <th style="width:46px"></th>
+          <th>File No</th><th>Rank</th><th>Full Name</th><th>G</th>
           <th>Directorate</th><th>Unit</th>
-          <th>Region</th><th>Division</th><th>Station</th><th>Post</th>
-          <th>Email</th><th>Phone</th>
-          <th style="width:88px;text-align:center">Actions</th>
+          <th>Region</th><th>Division</th><th>Station / Post</th>
+          <th>Contact</th>
+          <th style="width:80px;text-align:center">Actions</th>
         </tr>
       </thead>
       <tbody>
         <?php foreach ($employees as $emp): ?>
         <tr class="<?= $viewId===$emp['id']?'row-on_duty':'' ?>">
-          <td style="padding:4px 6px;width:40px">
+          <td style="padding:4px 6px">
             <?php if (!empty($emp['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$emp['photo_path'])): ?>
-              <img src="/uploads/photos/<?= e($emp['photo_path']) ?>" alt="" style="width:36px;height:36px;border-radius:6px;object-fit:cover">
+              <img src="/uploads/photos/<?= e($emp['photo_path']) ?>" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block">
             <?php else: ?>
-              <div style="width:36px;height:36px;border-radius:6px;background:var(--navy-50);border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
+              <div style="width:36px;height:36px;border-radius:8px;background:var(--navy-50);border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
                 <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
               </div>
             <?php endif; ?>
           </td>
           <td style="font-family:monospace;font-size:12px"><?= e($emp['service_no']) ?></td>
-          <td><?= e($emp['rank']) ?></td>
-          <td><strong><?= e($emp['full_name']) ?></strong></td>
-          <td><?= e($emp['gender']) ?></td>
+          <td style="font-size:12px;white-space:nowrap"><?= e($emp['rank']) ?></td>
+          <td><strong style="font-size:13px"><?= e($emp['full_name']) ?></strong></td>
+          <td style="font-size:12px"><?= e($emp['gender']) ?></td>
           <td style="font-size:12px"><?= e($emp['directorate']??'—') ?></td>
           <td style="font-size:12px"><?= e($emp['unit']??'—') ?></td>
-          <td class="muted" style="font-size:12px"><?= e($emp['region_name']??'—') ?></td>
-          <td class="muted" style="font-size:12px"><?= e($emp['division_name']??'—') ?></td>
-          <td class="muted" style="font-size:12px"><?= e($emp['station_name']??'—') ?></td>
-          <td style="font-size:12px"><?= e($emp['post_name']??'—') ?></td>
-          <td style="font-size:11px"><?= e($emp['email']??'') ?></td>
-          <td style="font-size:11px;white-space:nowrap"><?= e($emp['phone']??'') ?></td>
+          <td style="font-size:12px;color:var(--muted)"><?= e($emp['region_name']??'—') ?></td>
+          <td style="font-size:12px;color:var(--muted)"><?= e($emp['division_name']??'—') ?></td>
+          <td style="font-size:12px">
+            <div><?= e($emp['station_name']??'—') ?></div>
+            <div style="font-size:11px;color:var(--muted)"><?= e($emp['post_name']??'') ?></div>
+          </td>
+          <td style="font-size:11px">
+            <?php if ($emp['email']): ?><div><?= e($emp['email']) ?></div><?php endif; ?>
+            <?php if ($emp['phone']): ?><div style="color:var(--muted)"><?= e($emp['phone']) ?></div><?php endif; ?>
+          </td>
           <td>
-            <div style="display:flex;gap:3px;justify-content:center;flex-wrap:nowrap">
+            <div style="display:flex;gap:3px;justify-content:center">
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?view=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="View details"><?= ICO_EYE ?></a>
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?edit=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit"><?= ICO_EDIT ?></a>
               <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($emp['full_name'])) ?>?')">
@@ -399,9 +369,9 @@ include __DIR__ . '/../includes/header.php';
         </tr>
         <?php endforeach; ?>
         <?php if (!$employees): ?>
-        <tr><td colspan="14" style="text-align:center;color:var(--muted);padding:32px">
-          <?= $search ? 'No results for "'.e($search).'". ' : 'No personnel found. ' ?>
-          <?php if ($search): ?><a href="/employees.php">Clear search</a><?php endif; ?>
+        <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:40px 20px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32" style="display:block;margin:0 auto 10px;opacity:.4"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <?= $search ? 'No results for "'.e($search).'". <a href="/employees.php">Clear search</a>' : 'No personnel found. Click <strong>Add Personnel</strong> to get started.' ?>
         </td></tr>
         <?php endif; ?>
       </tbody>
@@ -409,11 +379,215 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
-<?php if ($editId): ?>
+<!-- ════════════════════════════ ADD / EDIT MODAL DRAWER ════════════════════════════ -->
+<div class="modal-overlay" id="personnel-modal">
+  <div class="modal-drawer">
+    <div class="modal-head">
+      <div>
+        <h2 id="modal-title"><?= $editing ? 'Edit Personnel Record' : 'Add New Personnel' ?></h2>
+        <div class="subtitle" id="modal-subtitle"><?= $editing ? e($editing['full_name']) : 'Fill in all required fields to register a new member' ?></div>
+      </div>
+      <button class="modal-close" id="btn-close-modal" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <form method="post" enctype="multipart/form-data" id="personnel-form">
+        <input type="hidden" name="action" value="<?= $editing?'update':'create' ?>">
+        <?php if ($editing): ?><input type="hidden" name="id" value="<?= $editing['id'] ?>"><?php endif; ?>
+
+        <!-- SECTION 1: Identity -->
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Identity &amp; Service Details
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="min-width:160px;max-width:200px">
+              <label>Force / File Number <span style="color:var(--red)">*</span></label>
+              <input type="text" name="service_no" required value="<?= e($editing['service_no']??'') ?>" placeholder="e.g. UPF-12345" style="font-family:monospace">
+            </div>
+            <div class="form-group" style="flex:2;min-width:200px">
+              <label>Full Name(s) <span style="color:var(--red)">*</span></label>
+              <input type="text" name="full_name" required value="<?= e($editing['full_name']??'') ?>" placeholder="Surname, Other Names">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:2;min-width:180px">
+              <label>Rank <span style="color:var(--red)">*</span></label>
+              <select name="rank" required>
+                <option value="">— select rank —</option>
+                <?php foreach ($ranks as $r): ?>
+                <option value="<?= $r ?>" <?= ($editing['rank']??'')===$r?'selected':'' ?>><?= $r ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:120px;max-width:150px">
+              <label>Gender <span style="color:var(--red)">*</span></label>
+              <select name="gender">
+                <option value="M" <?= ($editing['gender']??'')==='M'?'selected':'' ?>>Male</option>
+                <option value="F" <?= ($editing['gender']??'')==='F'?'selected':'' ?>>Female</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 2: Assignment -->
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Posting &amp; Assignment
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1;min-width:180px">
+              <label>Directorate</label>
+              <select name="directorate">
+                <option value="">— select directorate —</option>
+                <?php foreach ($directorates as $d): ?><option value="<?= $d ?>" <?= ($editing['directorate']??'')===$d?'selected':'' ?>><?= $d ?></option><?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1;min-width:180px">
+              <label>Functional Unit</label>
+              <input type="text" name="unit" value="<?= e($editing['unit']??'') ?>" list="units-list" placeholder="e.g. General Duty">
+              <datalist id="units-list"><?php foreach ($units as $u): ?><option value="<?= $u ?>"><?php endforeach; ?></datalist>
+            </div>
+          </div>
+          <?php if ($canPickPost): ?>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Assigned Post <span style="color:var(--red)">*</span></label>
+              <select name="post_id" required>
+                <option value="">— select post —</option>
+                <?php foreach ($posts as $pt): ?>
+                  <option value="<?= $pt['id'] ?>" <?= ($editing['post_id']??0)==$pt['id']?'selected':'' ?>><?= e("{$pt['reg']} › {$pt['div']} › {$pt['sta']} › {$pt['name']}") ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <?php else: ?>
+            <input type="hidden" name="post_id" value="<?= (int)$user['post_id'] ?>">
+            <div style="font-size:12px;color:var(--muted);background:var(--navy-100);padding:8px 12px;border-radius:7px">
+              <strong>Post:</strong> Automatically assigned to your current post.
+            </div>
+          <?php endif; ?>
+        </div>
+
+        <!-- SECTION 3: Contact & Photo -->
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.63 3.38 2 2 0 0 1 3.6 1.2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.06 6.06l1.69-1.69a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            Contact &amp; Photo
+          </div>
+          <div class="form-row" style="margin-bottom:16px">
+            <div class="form-group" style="flex:2;min-width:180px">
+              <label>Email Address</label>
+              <input type="email" name="email" value="<?= e($editing['email']??'') ?>" placeholder="officer@upf.go.ug">
+            </div>
+            <div class="form-group" style="min-width:150px">
+              <label>Phone Number</label>
+              <input type="tel" name="phone" value="<?= e($editing['phone']??'') ?>" placeholder="+256 700 000000">
+            </div>
+          </div>
+          <!-- Photo upload with preview -->
+          <div>
+            <label style="display:block;margin-bottom:8px">Profile Photo (optional)</label>
+            <div class="photo-upload-wrap">
+              <div class="photo-preview" id="photo-preview-box">
+                <?php if (!empty($editing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$editing['photo_path'])): ?>
+                  <img src="/uploads/photos/<?= e($editing['photo_path']) ?>" id="photo-preview-img" alt="Current photo">
+                <?php else: ?>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" width="28" height="28" id="photo-preview-placeholder"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                  <img id="photo-preview-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover">
+                <?php endif; ?>
+              </div>
+              <div style="flex:1">
+                <label for="photo-input" style="display:inline-flex;align-items:center;gap:7px;padding:9px 16px;background:var(--navy-50);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:var(--navy-700);text-transform:none;letter-spacing:0;transition:background .12s">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  Choose Photo
+                </label>
+                <input type="file" id="photo-input" name="photo" accept="image/jpeg,image/png,image/webp" style="display:none">
+                <div id="photo-filename" style="font-size:11px;color:var(--muted);margin-top:6px">JPG, PNG or WebP — max 5MB</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </form>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-icon bi-gold bi-lg" type="submit" form="personnel-form" style="gap:8px;padding:0 20px;width:auto;font-size:13px;font-weight:600">
+        <?= ICO_SAVE ?> <span><?= $editing ? 'Save Changes' : 'Add Personnel' ?></span>
+      </button>
+      <button class="btn-icon bi-secondary bi-lg" id="btn-close-modal-foot" type="button" style="gap:8px;padding:0 16px;width:auto;font-size:13px">
+        <?= ICO_CANCEL ?> <span>Cancel</span>
+      </button>
+      <?php if ($editing): ?>
+      <div style="flex:1;text-align:right;font-size:12px;color:var(--muted)">
+        Editing: <strong style="color:var(--navy-800)"><?= e($editing['full_name']) ?></strong>
+      </div>
+      <?php endif; ?>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════ SCRIPTS ════════════════════════════ -->
 <script>
-// Auto-open the form panel if we arrived via ?edit=
-document.getElementById('panel-form').style.display='block';
-document.querySelector('[data-panel="panel-form"]').setAttribute('data-panel-open','1');
+(function(){
+  var modal = document.getElementById('personnel-modal');
+  var openBtn = document.getElementById('btn-open-modal');
+  var closeBtns = [document.getElementById('btn-close-modal'), document.getElementById('btn-close-modal-foot')];
+
+  function openModal(){ modal.classList.add('open'); document.body.style.overflow='hidden'; }
+  function closeModal(){ modal.classList.remove('open'); document.body.style.overflow=''; }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtns.forEach(function(b){ if(b) b.addEventListener('click', closeModal); });
+  modal.addEventListener('click', function(e){ if(e.target===modal) closeModal(); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
+
+  <?php if ($editing || isset($_GET['add'])): ?>
+  openModal();
+  <?php endif; ?>
+
+  // Photo preview
+  var photoInput = document.getElementById('photo-input');
+  var previewImg = document.getElementById('photo-preview-img');
+  var placeholder = document.getElementById('photo-preview-placeholder');
+  var fileLabel = document.getElementById('photo-filename');
+  if(photoInput) {
+    photoInput.addEventListener('change', function(){
+      var file = this.files[0];
+      if(!file) return;
+      fileLabel.textContent = file.name;
+      var reader = new FileReader();
+      reader.onload = function(e){
+        previewImg.src = e.target.result;
+        previewImg.style.display = 'block';
+        if(placeholder) placeholder.style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Bulk CSV drop zone
+  var dropZone = document.getElementById('bulk-drop-zone');
+  var bulkFile = document.getElementById('bulk-file');
+  var bulkName = document.getElementById('bulk-file-name');
+  if(dropZone && bulkFile){
+    bulkFile.addEventListener('change', function(){
+      if(this.files[0]){ bulkName.textContent = this.files[0].name; bulkName.style.display='block'; }
+    });
+    dropZone.addEventListener('dragover', function(e){ e.preventDefault(); this.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', function(){ this.classList.remove('drag-over'); });
+    dropZone.addEventListener('drop', function(e){
+      e.preventDefault(); this.classList.remove('drag-over');
+      var f = e.dataTransfer.files[0];
+      if(f){ bulkFile.files = e.dataTransfer.files; bulkName.textContent = f.name; bulkName.style.display='block'; }
+    });
+  }
+})();
 </script>
-<?php endif; ?>
+
 <?php include __DIR__ . '/../includes/footer.php'; ?>
