@@ -214,6 +214,33 @@ function migrate(PDO $pdo): void {
         if (!in_array('phone', $uCols)) $pdo->exec("ALTER TABLE users ADD COLUMN phone TEXT");
         $pdo->exec("PRAGMA user_version = 5");
     }
+
+    if ($v < 6) {
+        // v6: settings store + communications log
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT
+            );
+            CREATE TABLE IF NOT EXISTS communications (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject          TEXT NOT NULL,
+                body             TEXT NOT NULL,
+                sender_id        INTEGER REFERENCES users(id),
+                recipient_type   TEXT NOT NULL DEFAULT 'all',
+                recipient_id     INTEGER,
+                recipient_label  TEXT,
+                channel          TEXT NOT NULL DEFAULT 'email',
+                sent_at          TEXT NOT NULL,
+                status           TEXT NOT NULL DEFAULT 'pending',
+                total_recipients INTEGER DEFAULT 0,
+                delivered        INTEGER DEFAULT 0,
+                failed           INTEGER DEFAULT 0,
+                error_log        TEXT
+            );
+        ");
+        $pdo->exec("PRAGMA user_version = 6");
+    }
 }
 
 function _migrate_v2(PDO $pdo): void {
