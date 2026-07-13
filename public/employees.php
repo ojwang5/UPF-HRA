@@ -53,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'create') {
                 $pdo->prepare("INSERT INTO employees (service_no,full_name,gender,rank,directorate,unit,region_id,division_id,station_id,post_id,email,phone,photo_path) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
                     ->execute([$sno,$name,$gender,$rank,$dir,$unit,$ch['region_id'],$ch['division_id'],$ch['station_id'],$post_id,$email,$phone,$photo]);
+                log_activity('Add Personnel', 'employee', "{$rank} {$name}", (int)$pdo->lastInsertId(), "Service No: {$sno}");
                 flash('msg','Personnel record created successfully.');
             } else {
                 $id = (int)$_POST['id'];
@@ -63,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare("UPDATE employees SET service_no=?,full_name=?,gender=?,rank=?,directorate=?,unit=?,region_id=?,division_id=?,station_id=?,post_id=?,email=?,phone=? WHERE id=?")
                         ->execute([$sno,$name,$gender,$rank,$dir,$unit,$ch['region_id'],$ch['division_id'],$ch['station_id'],$post_id,$email,$phone,$id]);
                 }
+                log_activity('Edit Personnel', 'employee', "{$rank} {$name}", $id);
                 flash('msg','Record updated successfully.');
             }
         } catch (\PDOException $ex) {
@@ -74,7 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($action === 'delete') {
         $id = (int)$_POST['id'];
+        $emp = $pdo->prepare("SELECT full_name, rank FROM employees WHERE id=? AND $scopeW");
+        $emp->execute(array_merge([$id], $scopeP)); $empRow = $emp->fetch();
         $pdo->prepare("DELETE FROM employees WHERE id=? AND $scopeW")->execute(array_merge([$id], $scopeP));
+        if ($empRow) log_activity('Remove Personnel', 'employee', ($empRow['rank'].' '.$empRow['full_name']), $id);
         flash('msg','Personnel record removed.');
     }
 
@@ -91,6 +96,7 @@ if ($search !== '') {
     array_push($params, $s, $s, $s, $s, $s);
 }
 
+$rankOrderExpr = rank_order_sql();
 $stmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.gender, e.rank, e.directorate, e.unit,
                               e.email, e.phone, e.photo_path,
                               rg.name AS region_name, dv.name AS division_name,
@@ -102,7 +108,7 @@ $stmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.gender, e.rank,
                        LEFT JOIN stations  st ON st.id=e.station_id
                        LEFT JOIN posts     pt ON pt.id=e.post_id
                        WHERE $where
-                       ORDER BY rg.name, dv.name, st.name, pt.name, e.full_name");
+                       ORDER BY $rankOrderExpr, e.full_name");
 $stmt->execute($params);
 $employees = $stmt->fetchAll();
 
@@ -139,7 +145,7 @@ if ($canPickPost) {
     $posts = $pdo->query($psql." ORDER BY reg,div,sta,p.name")->fetchAll();
 }
 
-$ranks = ['Constable','Special Police Constable','Corporal','Sergeant','Staff Sergeant','Inspector','Assistant Superintendent','Superintendent','Senior Superintendent','Commissioner','Assistant Inspector General','Deputy Inspector General','Inspector General'];
+$ranks = UPF_RANKS;
 $directorates = ['Operations','Criminal Investigations','Special Branch','Traffic','Fire Brigade','Marine','Administration','Finance','Human Resource','Training','Logistics','Media','Legal','ICT','Other'];
 $units = ['General Duty','Flying Squad','Anti-Stock Theft','Anti-Terrorism','Border Security','K9 Unit','Rapid Response','VIP Protection','Community Policing','Other'];
 

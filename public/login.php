@@ -3,7 +3,15 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (login(trim($_POST['username']??''), $_POST['password']??'')) { header('Location:/'); exit; }
+    $username = trim($_POST['username'] ?? '');
+    if (login($username, $_POST['password'] ?? '')) {
+        log_activity('Login', 'user', $username, 0, 'Successful login');
+        header('Location:/'); exit;
+    }
+    try {
+        db()->prepare("INSERT INTO activity_log (user_name,action,entity_type,entity_label,details,ip_address,created_at) VALUES (?,?,?,?,?,?,datetime('now','localtime'))")
+            ->execute([$username, 'Failed Login', 'user', $username, 'Invalid credentials', $_SERVER['REMOTE_ADDR'] ?? null]);
+    } catch (\Throwable $e) {}
     $error = 'Invalid username or password.';
 }
 if (current_user()) { header('Location:/'); exit; }

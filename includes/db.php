@@ -241,6 +241,25 @@ function migrate(PDO $pdo): void {
         ");
         $pdo->exec("PRAGMA user_version = 6");
     }
+
+    if ($v < 7) {
+        // v7: activity log table
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER REFERENCES users(id),
+                user_name    TEXT,
+                action       TEXT NOT NULL,
+                entity_type  TEXT,
+                entity_id    INTEGER,
+                entity_label TEXT,
+                details      TEXT,
+                ip_address   TEXT,
+                created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+        ");
+        $pdo->exec("PRAGMA user_version = 7");
+    }
 }
 
 function _migrate_v2(PDO $pdo): void {

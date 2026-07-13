@@ -24,6 +24,40 @@ const ICO_GEN    = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="cur
 const ICO_BELL   = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
 const ICO_OK_ALL = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/><polyline points="20 12 9 23 4 18"/></svg>';
 
+/* ─── UPF Rank seniority (highest first) ─── */
+const UPF_RANKS = [
+    'IGP','DIGP','CJS','AIGP','SCP','CP','ACP','SSP','SP','ASP',
+    'IP','AIP','HCM','HC','S/SGT','SGT','CPL','L/CPL','PC','PPC','SPC','CIVILIAN',
+];
+
+/** Returns a SQL CASE expression for ORDER BY rank seniority (alias defaults to 'e') */
+function rank_order_sql(string $col = 'e.rank'): string {
+    $cases = '';
+    foreach (UPF_RANKS as $i => $r) {
+        $esc = str_replace("'", "''", $r);
+        $cases .= "WHEN '{$esc}' THEN " . ($i + 1) . " ";
+    }
+    return "CASE {$col} {$cases}ELSE 99 END";
+}
+
+/** Log a user action to the activity_log table — never throws */
+function log_activity(string $action, string $entityType = '', string $entityLabel = '', int $entityId = 0, string $details = ''): void {
+    try {
+        $u = current_user();
+        db()->prepare("INSERT INTO activity_log (user_id,user_name,action,entity_type,entity_id,entity_label,details,ip_address,created_at) VALUES (?,?,?,?,?,?,?,?,datetime('now','localtime'))")
+            ->execute([
+                $u ? (int)$u['id'] : null,
+                $u ? $u['full_name'] : 'System',
+                $action,
+                $entityType  ?: null,
+                $entityId    ?: null,
+                $entityLabel ?: null,
+                $details     ?: null,
+                $_SERVER['REMOTE_ADDR'] ?? null,
+            ]);
+    } catch (\Throwable $e) { /* silent — never break the app */ }
+}
+
 const ALL_STATUSES = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted'];
 const STATUS_LABELS = [
     'present'      => 'Present',

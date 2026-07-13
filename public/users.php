@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?)")
                 ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $email ?: null, $phone ?: null]);
+            log_activity('Add User', 'user', "{$fname} ({$uname})", (int)$pdo->lastInsertId(), "Role: ".role_label($role));
             flash('msg', 'Account created for '.$fname.'.');
         } catch (\PDOException $e) {
             flash('err', str_contains($e->getMessage(),'UNIQUE') ? "Username '{$uname}' is already taken." : 'Could not create: '.$e->getMessage());
@@ -53,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($t && can_manage_user($user, $t)) {
             $pdo->prepare("UPDATE users SET full_name=?, email=?, phone=? WHERE id=?")
                 ->execute([$fname ?: $t['full_name'], $email ?: null, $phone ?: null, $id]);
+            log_activity('Edit User', 'user', $t['full_name'], $id);
             flash('msg', 'Account updated.');
         }
 
@@ -62,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $t  = $pdo->query("SELECT * FROM users WHERE id=$id")->fetch();
         if ($t && can_manage_user($user, $t) && strlen($pw) >= 4) {
             $pdo->prepare("UPDATE users SET password_hash=? WHERE id=?")->execute([password_hash($pw, PASSWORD_DEFAULT), $id]);
+            log_activity('Reset Password', 'user', $t['full_name'], $id);
             flash('msg', 'Password reset successfully.');
         } else {
             flash('err', 'Password must be at least 4 characters.');
@@ -72,6 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $t  = $pdo->query("SELECT * FROM users WHERE id=$id")->fetch();
         if ($t && can_manage_user($user, $t) && $id !== (int)$user['id']) {
             $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
+            log_activity('Delete User', 'user', $t['full_name'], $id);
             flash('msg', 'Account removed.');
         }
     }
