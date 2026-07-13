@@ -91,6 +91,7 @@ if ($format === 'excel') {
 
 /* ── PDF (print-ready HTML) ── */
 $logoB64 = 'data:image/jpeg;base64,' . base64_encode(file_get_contents(__DIR__ . '/assets/logo.jpg'));
+$reportScope = user_scope_label($user);
 ?><!doctype html>
 <html lang="en">
 <head>
@@ -98,69 +99,101 @@ $logoB64 = 'data:image/jpeg;base64,' . base64_encode(file_get_contents(__DIR__ .
 <title><?= htmlspecialchars($title) ?></title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff}
-.cover{display:flex;align-items:center;gap:20px;padding:20px 20px 16px;border-bottom:3px solid #d4a017;margin-bottom:16px;background:linear-gradient(135deg,#1f3559 0%,#15243d 100%);color:#fff}
-.cover-logo{width:70px;height:70px;border-radius:50%;border:2px solid #d4a017;object-fit:cover;flex-shrink:0;background:#fff;padding:2px}
-.cover-text{flex:1}
-.cover-text .org{font-size:16px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}
-.cover-text .sys{font-size:11px;opacity:.85;margin-top:2px;letter-spacing:.5px}
-.cover-text .motto{font-size:9px;font-style:italic;color:#d4a017;letter-spacing:3px;margin-top:4px}
-.cover-meta{text-align:right;font-size:10px;opacity:.8;line-height:1.6}
-.cover-meta strong{color:#d4a017;font-size:12px;display:block;margin-bottom:4px}
-table{width:100%;border-collapse:collapse;margin-bottom:20px}
-th{background:#1f3559;color:#fff;padding:7px 9px;font-size:10px;text-align:left;letter-spacing:.5px;text-transform:uppercase}
-td{padding:5px 9px;border-bottom:1px solid #e5e9f0;font-size:10px}
-tr:nth-child(even) td{background:#f8f9fc}
-.summary{font-size:11px;color:#555;margin-bottom:12px;padding:8px 20px;background:#f8f9fc;border-left:3px solid #1f3559}
-.print-btn{display:inline-block;margin-left:12px;padding:4px 12px;background:#1f3559;color:#fff;border:none;border-radius:5px;font-size:11px;cursor:pointer;text-decoration:none}
-.footer-bar{text-align:center;font-size:9px;color:#aaa;padding:14px 20px;border-top:1px solid #e5e9f0;margin-top:10px}
+body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:18px 24px}
+
+/* ── Official UPF Header ── */
+.upf-header{border-bottom:2.5px solid #111;padding-bottom:10px;margin-bottom:0}
+.upf-main-title{text-align:center;font-size:14px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px}
+.upf-identity{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px}
+.upf-contact{font-size:9.5px;line-height:1.75}
+.upf-logo-wrap{text-align:center}
+.upf-logo-wrap img{width:72px;height:72px;object-fit:contain}
+.upf-address{text-align:right;font-size:9.5px;line-height:1.75}
+.upf-report-label{text-align:center;margin-top:10px;padding:6px 0;border-top:1px solid #111;border-bottom:2px solid #111}
+.upf-report-label .rpt-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.upf-report-label .rpt-meta{font-size:10px;margin-top:2px}
+
+/* ── Table ── */
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:9.5px}
+th{background:#1a2236;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a2236}
+td{border:1px solid #c8cfd8;padding:4px 8px}
+tr:nth-child(even) td{background:#f5f7fa}
+
+/* ── Controls & footer ── */
+.report-meta{font-size:9.5px;color:#555;margin:8px 0 12px;line-height:1.6}
+.no-print-bar{margin-top:18px;display:flex;gap:10px;align-items:center}
+.btn-print{padding:8px 18px;background:#1a2236;color:#fff;border:0;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600}
+.page-footer{margin-top:22px;border-top:1px solid #ccc;padding-top:6px;text-align:center;font-size:8.5px;color:#888}
+
 @media print{
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .no-print{display:none !important}
-  .cover{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{padding:10px 14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .no-print{display:none!important}
 }
 </style>
 </head>
 <body>
-<div class="cover">
-  <img src="<?= $logoB64 ?>" alt="UPF Logo" class="cover-logo">
-  <div class="cover-text">
-    <div class="org">Uganda Police Force</div>
-    <div class="sys">MDD Management System — Personnel Register</div>
-    <div class="motto">Protect &amp; Serve</div>
+
+<!-- ═══ Official UPF Header ═══ -->
+<div class="upf-header">
+  <div class="upf-main-title">UGANDA POLICE FORCE-(UPF)</div>
+  <div class="upf-identity">
+    <div class="upf-contact">
+      Telegram: "GENPOL"<br>
+      Telephone: 0414-233814/0414-250613<br>
+      Fax: (0414)-255630<br>
+      E-mail: upf@upf.go.ug<br>
+      Website: www.upf.go.ug
+    </div>
+    <div class="upf-logo-wrap">
+      <img src="<?= $logoB64 ?>" alt="UPF Crest">
+    </div>
+    <div class="upf-address">
+      Plot 1-3/5 Naguru Area<br>
+      Police Headquarters<br>
+      P.O. Box 7055 Kampala, Uganda<br>
+      www.upf.go.ug
+    </div>
   </div>
-  <div class="cover-meta">
-    <strong><?= htmlspecialchars(user_scope_label($user)) ?></strong>
-    Generated: <?= date('j F Y') ?><br>
-    <?= date('H:i') ?> hrs &nbsp;·&nbsp; <?= htmlspecialchars($user['full_name']) ?><br>
-    <?= htmlspecialchars(role_label($user['role'])) ?>
-    <?php if ($search): ?><br>Filter: "<?= htmlspecialchars($search) ?>"<?php endif; ?>
+  <div class="upf-report-label">
+    <div class="rpt-title">Nominal-Role Report for MDD<?= $reportScope && $reportScope !== 'HQ' ? ' — '.htmlspecialchars($reportScope) : '' ?></div>
+    <div class="rpt-meta">Generated on: <?= date('j/F/Y') ?><?php if ($search): ?> &nbsp;|&nbsp; Filter: "<?= htmlspecialchars($search) ?>"<?php endif; ?></div>
   </div>
 </div>
 
-<div class="summary no-print" style="padding:8px 20px 10px;display:flex;align-items:center;gap:10px">
-  <strong><?= count($rows) ?></strong> personnel record(s)
-  <a href="javascript:window.print()" class="print-btn">🖨 Print / Save as PDF</a>
+<div class="report-meta">
+  Generated by: <strong><?= htmlspecialchars($user['full_name']) ?></strong> (<?= htmlspecialchars(role_label($user['role'])) ?>)
+  &nbsp;·&nbsp; Printed: <?= date('j F Y, H:i') ?> hrs
+  &nbsp;·&nbsp; Total records: <strong><?= count($rows) ?></strong>
 </div>
 
-<div style="padding:0 10px">
 <table>
   <thead><tr>
-    <?php foreach ($selectedCols as $col): ?><th><?= htmlspecialchars($allColDefs[$col]) ?></th><?php endforeach; ?>
+    <th>#</th>
+    <?php foreach ($selectedCols as $col): ?>
+    <th><?= htmlspecialchars($allColDefs[$col]) ?></th>
+    <?php endforeach; ?>
   </tr></thead>
   <tbody>
-    <?php foreach ($rows as $r): ?>
+    <?php foreach ($rows as $i => $r): ?>
     <tr>
+      <td><?= $i + 1 ?></td>
       <?php foreach ($selectedCols as $col): ?>
       <td><?= htmlspecialchars($r[$col] ?? '') ?></td>
       <?php endforeach; ?>
     </tr>
     <?php endforeach; ?>
     <?php if (!$rows): ?>
-    <tr><td colspan="<?= count($selectedCols) ?>" style="text-align:center;padding:20px;color:#888">No records found.</td></tr>
+    <tr><td colspan="<?= count($selectedCols) + 1 ?>" style="text-align:center;padding:20px;color:#888">No records found.</td></tr>
     <?php endif; ?>
   </tbody>
 </table>
+
+<div class="page-footer">
+  Uganda Police Force — MDD Management System &nbsp;·&nbsp; <?= date('Y') ?> &nbsp;·&nbsp; PROTECT &amp; SERVE
+</div>
+
+<div class="no-print no-print-bar">
+  <button class="btn-print" onclick="window.print()">🖨 Print / Save as PDF</button>
 </div>
 
 <script>window.onload=function(){ if(window.location.search.includes('autoprint')) window.print(); }</script>
