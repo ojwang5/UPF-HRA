@@ -92,6 +92,14 @@ function action_icon(string $action): string {
     };
 }
 
+// Handle purge — MUST be before any output (before include header.php)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['purge']) && is_superadmin($user)) {
+    $pdo->exec("DELETE FROM activity_log");
+    log_activity('Purge Activity Log', 'system', 'All logs', 0, 'Admin purged all activity logs');
+    flash('msg', 'Activity log cleared.');
+    header('Location:/activity-log.php'); exit;
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -112,16 +120,7 @@ include __DIR__ . '/../includes/header.php';
   <?php endif; ?>
 </div>
 
-<?php
-// Handle purge
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['purge']) && is_superadmin($user)) {
-    $pdo->exec("DELETE FROM activity_log");
-    log_activity('Purge Activity Log', 'system', 'All logs', 0, 'Admin purged all activity logs');
-    flash('msg', 'Activity log cleared.');
-    header('Location:/activity-log.php'); exit;
-}
-if ($m = flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif;
-?>
+<?php if ($m = flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 
 <!-- ════ Stats Row ════ -->
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px">

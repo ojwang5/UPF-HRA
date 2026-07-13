@@ -260,6 +260,49 @@ function migrate(PDO $pdo): void {
         ");
         $pdo->exec("PRAGMA user_version = 7");
     }
+
+    if ($v < 8) {
+        // v8: directorates & units tables
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS directorates (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                code        TEXT NOT NULL UNIQUE,
+                description TEXT,
+                active      INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS units (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                directorate_id  INTEGER NOT NULL REFERENCES directorates(id),
+                name            TEXT NOT NULL,
+                code            TEXT NOT NULL UNIQUE,
+                description     TEXT,
+                active          INTEGER NOT NULL DEFAULT 1
+            );
+        ");
+        // Seed default directorates
+        $dirs = [
+            ['Operations','OPS'],['Criminal Investigations','CID'],['Special Branch','SB'],
+            ['Traffic','TRF'],['Fire Brigade','FIRE'],['Marine','MARINE'],
+            ['Administration','ADMIN'],['Finance','FIN'],['Human Resource','HR'],
+            ['Training','TRN'],['Logistics','LOG'],['Media','MEDIA'],
+            ['Legal','LEGAL'],['ICT','ICT'],['Other','OTHER'],
+        ];
+        $dStmt = $pdo->prepare("INSERT OR IGNORE INTO directorates (name,code) VALUES (?,?)");
+        foreach ($dirs as [$dn,$dc]) $dStmt->execute([$dn,$dc]);
+        // Seed default units under Operations
+        $opsId = (int)$pdo->query("SELECT id FROM directorates WHERE code='OPS'")->fetchColumn();
+        if ($opsId) {
+            $units = [
+                ['General Duty','GD'],['Flying Squad','FS'],['Anti-Stock Theft','AST'],
+                ['Anti-Terrorism','ATC'],['Border Security','BS'],['K9 Unit','K9'],
+                ['Rapid Response','RR'],['VIP Protection','VIP'],['Community Policing','CP'],
+            ];
+            $uStmt = $pdo->prepare("INSERT OR IGNORE INTO units (directorate_id,name,code) VALUES (?,?,?)");
+            foreach ($units as [$un,$uc]) $uStmt->execute([$opsId,$un,$uc]);
+        }
+        $pdo->exec("PRAGMA user_version = 8");
+    }
 }
 
 function _migrate_v2(PDO $pdo): void {

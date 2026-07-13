@@ -146,8 +146,13 @@ if ($canPickPost) {
 }
 
 $ranks = UPF_RANKS;
-$directorates = ['Operations','Criminal Investigations','Special Branch','Traffic','Fire Brigade','Marine','Administration','Finance','Human Resource','Training','Logistics','Media','Legal','ICT','Other'];
-$units = ['General Duty','Flying Squad','Anti-Stock Theft','Anti-Terrorism','Border Security','K9 Unit','Rapid Response','VIP Protection','Community Policing','Other'];
+try {
+    $directorates = $pdo->query("SELECT name FROM directorates WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+    $dirUnits     = $pdo->query("SELECT u.name, d.name AS dir_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.active=1 ORDER BY d.name, u.name")->fetchAll();
+} catch (\Throwable $e) {
+    $directorates = ['Operations','Criminal Investigations','Special Branch','Traffic','Fire Brigade','Marine','Administration','Finance','Human Resource','Training','Logistics','Media','Legal','ICT','Other'];
+    $dirUnits     = [];
+}
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -456,7 +461,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-group" style="flex:1;min-width:180px">
               <label>Functional Unit</label>
               <input type="text" name="unit" value="<?= e($editing['unit']??'') ?>" list="units-list" placeholder="e.g. General Duty">
-              <datalist id="units-list"><?php foreach ($units as $u): ?><option value="<?= $u ?>"><?php endforeach; ?></datalist>
+              <datalist id="units-list"><?php foreach ($dirUnits as $u): ?><option value="<?= e($u['name']) ?>"><?php endforeach; ?></datalist>
             </div>
           </div>
           <?php if ($canPickPost): ?>

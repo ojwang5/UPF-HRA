@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 $user = require_login();
-$pdo = db();
+$pdo  = db();
 
 /* ── CSV Template download ── */
 if (isset($_GET['tpl'])) {
@@ -10,36 +10,54 @@ if (isset($_GET['tpl'])) {
     header('Content-Disposition: attachment; filename="personnel_import_template.csv"');
     $out = fopen('php://output', 'w');
     fputcsv($out, ['service_no','full_name','rank','gender','directorate','unit','email','phone','post_id']);
-    fputcsv($out, ['UPF-00001','EXAMPLE OFFICER A','Constable','M','Operations','General Duty','officer@upf.go.ug','+256700000000','1']);
-    fputcsv($out, ['UPF-00002','EXAMPLE OFFICER B','Sergeant','F','Criminal Investigations','Flying Squad','','','1']);
+    fputcsv($out, ['UPF-00001','SURNAME FIRSTNAME','SGT','M','Operations','General Duty','officer@upf.go.ug','+256700000000','1']);
+    fputcsv($out, ['UPF-00002','SURNAME FIRSTNAME B','CPL','F','Criminal Investigations','','','','1']);
     fclose($out);
     exit;
 }
 
-/* ── Post list for display ── */
+/* ── Reference data ── */
 $posts = $pdo->query("SELECT p.id, p.name, s.name AS sta, d.name AS div, r.name AS reg FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id JOIN regions r ON r.id=d.region_id ORDER BY reg,div,sta,p.name")->fetchAll();
 $postMap = [];
 foreach ($posts as $p) $postMap[$p['id']] = "{$p['reg']} › {$p['div']} › {$p['sta']} › {$p['name']}";
 
-$results = [];
-$imported = 0;
-$errors   = 0;
+// Fetch valid directorates from DB; fall back gracefully if table not yet migrated
+try {
+    $validDirs  = $pdo->query("SELECT name FROM directorates ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+    $validUnits = $pdo->query("SELECT name FROM units ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+} catch (\Throwable $e) {
+    $validDirs  = ['Operations','Criminal Investigations','Special Branch','Traffic','Fire Brigade','Marine','Administration','Finance','Human Resource','Training','Logistics','Media','Legal','ICT','Other'];
+    $validUnits = [];
+}
 
-$validRanks = ['Constable','Special Police Constable','Corporal','Sergeant','Staff Sergeant','Inspector','Assistant Superintendent','Superintendent','Senior Superintendent','Commissioner','Assistant Inspector General','Deputy Inspector General','Inspector General'];
-$validDirs  = ['Operations','Criminal Investigations','Special Branch','Traffic','Fire Brigade','Marine','Administration','Finance','Human Resource','Training','Logistics','Media','Legal','ICT','Other'];
+$validRanks = UPF_RANKS;
 
 /* ── Process upload ── */
+$results    = [];
+$imported   = 0;
+$updated    = 0;
+$skipped    = 0;
+$errors     = 0;
+$dryRun     = false;
+$onConflict = 'skip'; // skip | update | abort
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])) {
+    $onConflict = $_POST['on_conflict'] ?? 'skip';
+    $dryRun     = !empty($_POST['dry_run']);
     $f = $_FILES['csv_file'];
+
     if ($f['error'] !== UPLOAD_ERR_OK) {
         $results[] = ['err', 'File upload failed (error code '.$f['error'].')'];
     } else {
-        $handle = fopen($f['tmp_name'], 'r');
+        $handle  = fopen($f['tmp_name'], 'r');
         $headers = fgetcsv($handle); // skip header row
-        $row = 1;
+        $rowData = [];
+
+        // First pass: parse & validate ALL rows
+        $rowNum = 1;
         while (($data = fgetcsv($handle)) !== false) {
-            $row++;
-            if (count($data) < 3) continue; // skip blank lines
+            $rowNum++;
+            if (count(array_filter($data)) === 0) continue; // blank row
 
             $sno    = trim($data[0] ?? '');
             $name   = trim($data[1] ?? '');
@@ -50,115 +68,259 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
             $email  = trim($data[6] ?? '');
             $phone  = trim($data[7] ?? '');
             $postId = (int)trim($data[8] ?? '0');
+            $rowErrs = [];
 
-            // Validation
-            if ($sno === '' || $name === '' || $rank === '') {
-                $results[] = ['err', "Row $row: service_no, full_name and rank are required (got: '{$sno}', '{$name}', '{$rank}')"];
-                $errors++; continue;
+            // Required fields
+            if ($sno === '')   $rowErrs[] = 'service_no is required';
+            if ($name === '')  $rowErrs[] = 'full_name is required';
+            if ($rank === '')  $rowErrs[] = 'rank is required';
+
+            // Rank validation
+            if ($rank !== '' && !in_array($rank, $validRanks, true)) {
+                $rowErrs[] = "Unknown rank '{$rank}' — must be one of: ".implode(', ', $validRanks);
             }
+
+            // Gender
             if (!in_array($gender, ['M','F'])) $gender = 'M';
-            if (!in_array($rank, $validRanks)) {
-                $results[] = ['err', "Row $row [{$sno}]: Unknown rank '{$rank}'. Use one of: ".implode(', ', $validRanks)];
-                $errors++; continue;
+
+            // Email format
+            if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $rowErrs[] = "Invalid email '{$email}'";
             }
-            if ($dir !== '' && !in_array($dir, $validDirs)) {
-                $results[] = ['warn', "Row $row [{$sno}]: Unknown directorate '{$dir}' — saved as-is."];
-            }
+
+            // Post validation
             if (!$postId || !isset($postMap[$postId])) {
-                $results[] = ['err', "Row $row [{$sno}]: post_id '{$data[8]}' not found. Check the post list below."];
-                $errors++; continue;
+                $rowErrs[] = "post_id '{$data[8]}' not found in the system";
             }
 
-            // Resolve hierarchy
-            $chain = $pdo->prepare("SELECT s.division_id, d.region_id, s.id AS station_id FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id WHERE p.id=?");
-            $chain->execute([$postId]);
-            $ch = $chain->fetch();
-
-            try {
-                $pdo->prepare("INSERT INTO employees (service_no,full_name,gender,rank,directorate,unit,region_id,division_id,station_id,post_id,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$sno,$name,$gender,$rank,$dir,$unit,$ch['region_id'],$ch['division_id'],$ch['station_id'],$postId,$email,$phone]);
-                $results[] = ['ok', "Row $row: <strong>".htmlspecialchars($name)."</strong> ({$sno}) imported successfully → {$postMap[$postId]}"];
-                $imported++;
-            } catch (\PDOException $ex) {
-                $msg = (str_contains($ex->getMessage(),'UNIQUE') && str_contains($ex->getMessage(),'service_no'))
-                    ? "Force/File number '{$sno}' already exists — skipped."
-                    : $ex->getMessage();
-                $results[] = ['err', "Row $row [{$sno}]: {$msg}"];
-                $errors++;
+            // Directorate (warn only)
+            $dirWarn = '';
+            if ($dir !== '' && !in_array($dir, $validDirs, true)) {
+                $dirWarn = "Directorate '{$dir}' not in system — will be saved as entered.";
             }
+
+            // Check for duplicate service_no
+            $existing = null;
+            if ($sno !== '') {
+                $eStmt = $pdo->prepare("SELECT id, full_name, rank FROM employees WHERE service_no=?");
+                $eStmt->execute([$sno]);
+                $existing = $eStmt->fetch() ?: null;
+            }
+
+            $rowData[] = compact('rowNum','sno','name','rank','gender','dir','unit','email','phone','postId','rowErrs','dirWarn','existing');
         }
         fclose($handle);
+
+        // Abort-on-duplicate check
+        $aborted = false;
+        if ($onConflict === 'abort') {
+            $dupRows = array_filter($rowData, fn($r) => $r['existing'] !== null && empty($r['rowErrs']));
+            if ($dupRows) {
+                foreach ($dupRows as $r) {
+                    $results[] = ['err', "Row {$r['rowNum']} [{$r['sno']}]: Duplicate — <strong>{$r['existing']['full_name']}</strong> already exists. Import aborted."];
+                }
+                $errors  = count($dupRows);
+                $aborted = true;
+            }
+        }
+
+        // Second pass: execute (skip if aborted)
+        foreach ($aborted ? [] : $rowData as $r) {
+            if (!empty($r['rowErrs'])) {
+                $results[] = ['err', "Row {$r['rowNum']} [<strong>{$r['sno']}</strong>]: ".implode('; ', $r['rowErrs'])];
+                $errors++; continue;
+            }
+
+            if ($r['dirWarn']) {
+                $results[] = ['warn', "Row {$r['rowNum']} [{$r['sno']}]: {$r['dirWarn']}"];
+            }
+
+            $chain = $pdo->prepare("SELECT s.division_id, d.region_id, s.id AS station_id FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id WHERE p.id=?");
+            $chain->execute([$r['postId']]);
+            $ch = $chain->fetch();
+            if (!$ch) {
+                $results[] = ['err', "Row {$r['rowNum']} [{$r['sno']}]: Could not resolve post hierarchy."];
+                $errors++; continue;
+            }
+
+            if ($r['existing']) {
+                // Duplicate: apply on_conflict strategy
+                if ($onConflict === 'skip') {
+                    $results[] = ['warn', "Row {$r['rowNum']} [<strong>{$r['sno']}</strong>]: Duplicate — <strong>{$r['existing']['full_name']}</strong> already exists → skipped."];
+                    $skipped++; continue;
+                } elseif ($onConflict === 'update') {
+                    if (!$dryRun) {
+                        $pdo->prepare("UPDATE employees SET full_name=?,gender=?,rank=?,directorate=?,unit=?,region_id=?,division_id=?,station_id=?,post_id=?,email=?,phone=? WHERE id=?")
+                            ->execute([$r['name'],$r['gender'],$r['rank'],$r['dir'],$r['unit'],$ch['region_id'],$ch['division_id'],$ch['station_id'],$r['postId'],$r['email'],$r['phone'],$r['existing']['id']]);
+                        log_activity('Bulk Update Personnel', 'employee', "{$r['rank']} {$r['name']}", $r['existing']['id'], "via CSV import");
+                    }
+                    $results[] = ['updated', "Row {$r['rowNum']} [<strong>{$r['sno']}</strong>]: Updated → <strong>{$r['name']}</strong> ({$r['rank']}) @ {$postMap[$r['postId']]}".($dryRun?' <em>[dry run]</em>':'')];
+                    $updated++; continue;
+                }
+            }
+
+            // Insert new
+            if (!$dryRun) {
+                try {
+                    $pdo->prepare("INSERT INTO employees (service_no,full_name,gender,rank,directorate,unit,region_id,division_id,station_id,post_id,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+                        ->execute([$r['sno'],$r['name'],$r['gender'],$r['rank'],$r['dir'],$r['unit'],$ch['region_id'],$ch['division_id'],$ch['station_id'],$r['postId'],$r['email'],$r['phone']]);
+                    log_activity('Bulk Import Personnel', 'employee', "{$r['rank']} {$r['name']}", (int)$pdo->lastInsertId(), "via CSV import");
+                } catch (\PDOException $ex) {
+                    $results[] = ['err', "Row {$r['rowNum']} [{$r['sno']}]: DB error — ".$ex->getMessage()];
+                    $errors++; continue;
+                }
+            }
+            $results[] = ['ok', "Row {$r['rowNum']} [<strong>{$r['sno']}</strong>]: <strong>{$r['name']}</strong> ({$r['rank']}) → {$postMap[$r['postId']]}".($dryRun?' <em>[dry run]</em>':'')];
+            $imported++;
+        }
     }
 }
 
-$page_title = 'Bulk Import Results';
+render:
+$page_title = 'Bulk Import — Personnel';
 include __DIR__ . '/../includes/header.php';
 ?>
+
 <div class="page-header">
   <div>
-    <h1>Bulk Import Results</h1>
-    <div class="desc">CSV personnel import</div>
+    <h1>Bulk Import — Personnel</h1>
+    <div class="desc">Upload a CSV file to add or update multiple personnel records at once</div>
   </div>
-  <a href="/employees.php" class="btn-icon bi-secondary" style="gap:6px;padding:0 14px;width:auto;font-size:12px;font-weight:600">
-    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-    Back to Personnel
-  </a>
+  <div class="action-bar">
+    <a href="/bulk-import.php?tpl=1" class="btn-icon bi-secondary" style="gap:6px;padding:0 14px;width:auto;font-size:12px">
+      <?= ICO_DL ?> <span>Download Template</span>
+    </a>
+    <a href="/employees.php" class="btn-icon bi-secondary" style="gap:6px;padding:0 14px;width:auto;font-size:12px">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to Personnel
+    </a>
+  </div>
 </div>
 
-<?php if ($results): ?>
-<div class="card" style="margin-bottom:16px">
-  <div class="chr">
-    <h3>Import Summary</h3>
-    <div style="display:flex;gap:10px">
-      <span style="background:#dcfce7;color:#166534;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700"><?= $imported ?> imported</span>
-      <?php if ($errors): ?><span style="background:#fee2e2;color:#991b1b;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700"><?= $errors ?> failed</span><?php endif; ?>
+<!-- Upload form -->
+<div class="card" style="margin-bottom:20px">
+  <div class="chr"><h3>Upload CSV File</h3></div>
+  <form method="post" enctype="multipart/form-data">
+    <div class="form-row" style="align-items:flex-end;flex-wrap:wrap;gap:14px">
+
+      <div class="form-group" style="flex:3;min-width:260px">
+        <label>CSV File <span style="color:var(--red)">*</span></label>
+        <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      </div>
+
+      <div class="form-group" style="min-width:220px">
+        <label>On Duplicate Service No</label>
+        <select name="on_conflict">
+          <option value="skip">Skip duplicate rows</option>
+          <option value="update">Update existing record</option>
+          <option value="abort">Abort entire import</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="min-width:160px;display:flex;flex-direction:column">
+        <label>Mode</label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;color:var(--text);margin-top:8px">
+          <input type="checkbox" name="dry_run" value="1">
+          Dry run (preview only — no changes saved)
+        </label>
+      </div>
+
+      <div class="form-group" style="flex:0;display:flex;flex-direction:column">
+        <label>&nbsp;</label>
+        <button class="btn-icon bi-gold bi-lg" type="submit" style="gap:8px;padding:0 18px;width:auto;font-size:13px;font-weight:700">
+          <?= ICO_DL ?> <span>Upload &amp; Process</span>
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- CSV column guide -->
+  <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px">CSV Column Reference</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <?php foreach ([
+        'service_no'=>'Required · unique force/file no',
+        'full_name'  =>'Required · Surname Firstname',
+        'rank'       =>'Required · e.g. SGT, CPL, IP',
+        'gender'     =>'M or F',
+        'directorate'=>'e.g. Operations',
+        'unit'       =>'e.g. Flying Squad',
+        'email'      =>'Optional',
+        'phone'      =>'Optional',
+        'post_id'    =>'Required · numeric ID from table below',
+      ] as $col=>$hint): ?>
+      <div style="background:var(--navy-50);border-radius:6px;padding:5px 10px;font-size:11px">
+        <code style="font-weight:700;color:var(--primary)"><?= $col ?></code>
+        <span style="color:var(--muted);margin-left:4px"><?= $hint ?></span>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <div style="margin-top:10px;font-size:12px;background:var(--navy-50);padding:8px 12px;border-radius:8px;color:var(--muted)">
+      <strong style="color:var(--navy-700)">Valid Ranks (in seniority order):</strong>
+      <?= implode(', ', array_map(fn($r) => "<code>{$r}</code>", $validRanks)) ?>
     </div>
   </div>
-  <div style="max-height:400px;overflow-y:auto">
-    <?php foreach ($results as [$type, $msg]): ?>
-    <div class="import-result import-<?= $type === 'ok' ? 'ok' : 'err' ?>">
-      <?php if ($type === 'ok'): ?>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>
-      <?php else: ?>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      <?php endif; ?>
-      <?= $msg ?>
+</div>
+
+<!-- Results -->
+<?php if ($results || ($_SERVER['REQUEST_METHOD']==='POST' && !empty($_FILES['csv_file']['name']))): ?>
+<div class="card" style="margin-bottom:20px">
+  <div class="chr">
+    <h3>Import <?= $dryRun ? '<span style="color:var(--amber)">[DRY RUN — no changes saved]</span>' : 'Results' ?></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <?php if ($imported>0): ?><span style="background:#dcfce7;color:#166534;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700"><?= $imported ?> <?= $dryRun?'would import':'imported' ?></span><?php endif; ?>
+      <?php if ($updated>0): ?><span style="background:#dbeafe;color:#1e40af;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700"><?= $updated ?> <?= $dryRun?'would update':'updated' ?></span><?php endif; ?>
+      <?php if ($skipped>0): ?><span style="background:#fef3c7;color:#92400e;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700"><?= $skipped ?> skipped</span><?php endif; ?>
+      <?php if ($errors>0): ?><span style="background:#fee2e2;color:#991b1b;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700"><?= $errors ?> errors</span><?php endif; ?>
+    </div>
+  </div>
+  <?php if (!$results): ?>
+    <div style="text-align:center;padding:20px;color:var(--muted)">No data rows found in the uploaded file.</div>
+  <?php else: ?>
+  <div style="max-height:500px;overflow-y:auto">
+    <?php foreach ($results as [$type, $msg]):
+      [$bg,$tc,$ico] = match($type) {
+        'ok'      => ['#dcfce7','#166534','✓'],
+        'updated' => ['#dbeafe','#1e40af','↻'],
+        'warn'    => ['#fef9c3','#854d0e','⚠'],
+        default   => ['#fee2e2','#991b1b','✗'],
+      };
+    ?>
+    <div style="display:flex;align-items:baseline;gap:8px;padding:6px 14px;border-bottom:1px solid <?= $bg ?>;background:<?= $bg ?>20">
+      <span style="flex-shrink:0;font-weight:700;color:<?= $tc ?>;font-size:13px"><?= $ico ?></span>
+      <span style="font-size:12px;color:<?= $tc ?>"><?= $msg ?></span>
     </div>
     <?php endforeach; ?>
   </div>
-  <?php if ($imported > 0): ?>
-  <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+  <?php if ($imported>0 && !$dryRun): ?>
+  <div style="padding:14px;border-top:1px solid var(--border)">
     <a href="/employees.php" class="btn-icon bi-primary bi-lg" style="gap:8px;padding:0 18px;width:auto;font-size:12px;font-weight:600;text-decoration:none">
-      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      View All Personnel
+      <?= ICO_SAVE ?> View All Personnel
     </a>
   </div>
   <?php endif; ?>
+  <?php endif; ?>
 </div>
-<?php elseif ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
-<div class="alert alert-error">No data rows found in the uploaded file. Make sure it is a valid CSV with a header row.</div>
 <?php endif; ?>
 
 <!-- Post reference table -->
 <div class="card">
-  <div class="chr"><h3>Available Posts (for post_id column)</h3></div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>post_id</th><th>Post Name</th><th>Station</th><th>Division</th><th>Region</th></tr></thead>
-      <tbody>
-        <?php foreach ($posts as $p): ?>
-        <tr>
-          <td style="font-family:monospace;font-weight:700;color:var(--primary)"><?= $p['id'] ?></td>
-          <td><?= e($p['name']) ?></td>
-          <td style="font-size:12px;color:var(--muted)"><?= e($p['sta']) ?></td>
-          <td style="font-size:12px;color:var(--muted)"><?= e($p['div']) ?></td>
-          <td style="font-size:12px;color:var(--muted)"><?= e($p['reg']) ?></td>
-        </tr>
-        <?php endforeach; ?>
-        <?php if (!$posts): ?><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No posts configured yet.</td></tr><?php endif; ?>
-      </tbody>
-    </table>
-  </div>
+  <div class="chr"><h3>Post Reference — use these IDs in the <code>post_id</code> column</h3></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>post_id</th><th>Post</th><th>Station</th><th>Division</th><th>Region</th></tr></thead>
+    <tbody>
+      <?php foreach ($posts as $p): ?>
+      <tr>
+        <td style="font-family:monospace;font-weight:700;color:var(--primary)"><?= $p['id'] ?></td>
+        <td><?= e($p['name']) ?></td>
+        <td class="muted" style="font-size:12px"><?= e($p['sta']) ?></td>
+        <td class="muted" style="font-size:12px"><?= e($p['div']) ?></td>
+        <td class="muted" style="font-size:12px"><?= e($p['reg']) ?></td>
+      </tr>
+      <?php endforeach; ?>
+      <?php if (!$posts): ?><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No posts configured.</td></tr><?php endif; ?>
+    </tbody>
+  </table></div>
 </div>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
