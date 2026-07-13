@@ -5,10 +5,15 @@ $user = require_login();
 $pdo  = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
 
-$format = $_POST['format'] ?? $_GET['format'] ?? 'csv';
-$search = trim($_POST['q'] ?? $_GET['q'] ?? '');
+$format        = $_POST['format'] ?? $_GET['format'] ?? 'csv';
+$search        = trim($_POST['q'] ?? $_GET['q'] ?? '');
 $requestedCols = $_POST['cols'] ?? $_GET['cols'] ?? null;
+$statusFilter  = $_GET['status'] ?? $_POST['status'] ?? '';   // e.g. present, awol, sick …
+$dateFilter    = $_GET['date']   ?? $_POST['date']   ?? date('Y-m-d');
+$validStatuses = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','unrecorded'];
+if ($statusFilter !== '' && !in_array($statusFilter, $validStatuses, true)) $statusFilter = '';
 
+/* ── Column definitions ── */
 $allColDefs = [
   'service_no'    => 'File/Force No',
   'rank'          => 'Rank',
@@ -23,35 +28,75 @@ $allColDefs = [
   'email'         => 'Email',
   'phone'         => 'Phone',
 ];
+// When filtering by status, inject a status column automatically
+if ($statusFilter !== '') {
+    $allColDefs = ['service_no' => 'File/Force No', 'rank' => 'Rank', 'full_name' => 'Full Name',
+                   'gender' => 'Gender', 'ds_status' => 'Status', 'ds_notes' => 'Notes',
+                   'directorate' => 'Directorate', 'unit' => 'Unit',
+                   'station_name' => 'Station', 'post_name' => 'Post',
+                   'email' => 'Email', 'phone' => 'Phone'];
+}
 
 $selectedCols = is_array($requestedCols)
     ? array_filter($requestedCols, fn($c) => isset($allColDefs[$c]))
     : array_keys($allColDefs);
 if (empty($selectedCols)) $selectedCols = array_keys($allColDefs);
 
-// Build query
+/* ── Build query ── */
 $where  = "e.active=1 AND $scopeW";
 $params = $scopeP;
+
+if ($statusFilter === 'unrecorded') {
+    // Employees with NO record on that date
+    $where .= " AND NOT EXISTS (SELECT 1 FROM daily_status ds WHERE ds.employee_id=e.id AND ds.date=?)";
+    $params[] = $dateFilter;
+    $dsSelect  = "NULL AS ds_status, NULL AS ds_notes";
+    $dsJoin    = "";
+} elseif ($statusFilter !== '') {
+    // Employees with a specific status on that date
+    $where    .= " AND ds.status=?";
+    $params[]  = $statusFilter;
+    $dsSelect  = "ds.status AS ds_status, ds.notes AS ds_notes";
+    $dsJoin    = "INNER JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?";
+    array_unshift($params, $dateFilter);   // date goes before scope params in JOIN
+    // Re-build: date first, then scope
+    $params = array_merge([$dateFilter], $scopeP, [$statusFilter]);
+} else {
+    $dsSelect = "";
+    $dsJoin   = "";
+}
+
 if ($search !== '') {
     $where .= ' AND (e.full_name LIKE ? OR e.service_no LIKE ? OR e.rank LIKE ? OR e.directorate LIKE ?)';
     $s = "%$search%";
     array_push($params, $s, $s, $s, $s);
 }
 
-$stmt = $pdo->prepare("SELECT e.service_no, e.rank, e.full_name, e.gender, e.directorate, e.unit,
-                              e.email, e.phone,
-                              rg.name AS region_name, dv.name AS division_name,
-                              st.name AS station_name, pt.name AS post_name
-                       FROM employees e
-                       LEFT JOIN regions   rg ON rg.id=e.region_id
-                       LEFT JOIN divisions dv ON dv.id=e.division_id
-                       LEFT JOIN stations  st ON st.id=e.station_id
-                       LEFT JOIN posts     pt ON pt.id=e.post_id
-                       WHERE $where ORDER BY rg.name, dv.name, st.name, pt.name, e.full_name");
+$extraSel = $dsSelect ? ", $dsSelect" : "";
+$sql = "SELECT e.service_no, e.rank, e.full_name, e.gender, e.directorate, e.unit,
+               e.email, e.phone,
+               rg.name AS region_name, dv.name AS division_name,
+               st.name AS station_name, pt.name AS post_name
+               $extraSel
+        FROM employees e
+        $dsJoin
+        LEFT JOIN regions   rg ON rg.id=e.region_id
+        LEFT JOIN divisions dv ON dv.id=e.division_id
+        LEFT JOIN stations  st ON st.id=e.station_id
+        LEFT JOIN posts     pt ON pt.id=e.post_id
+        WHERE $where
+        ORDER BY rg.name, dv.name, st.name, pt.name, e.full_name";
+$stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
-$title = 'UPF Personnel Export — '.date('Y-m-d');
+/* ── Human-readable labels for title ── */
+$statusLabels = ['present'=>'Present','awol'=>'AWOL','leave'=>'On Leave','sick'=>'Sick',
+                 'suspended'=>'Suspended','disciplinary'=>'Under Disciplinary','on_duty'=>'On Duty',
+                 'on_course'=>'On Course','deserted'=>'Deserted','unrecorded'=>'Unrecorded'];
+$statusLabel = $statusFilter !== '' ? ($statusLabels[$statusFilter] ?? ucfirst($statusFilter)) : 'All Personnel';
+$dateFmt     = date('Y-m-d', strtotime($dateFilter));
+$title       = 'UPF Personnel — '.$statusLabel.' — '.$dateFmt;
 
 /* ── CSV ── */
 if ($format === 'csv') {
@@ -155,7 +200,7 @@ tr:nth-child(even) td{background:#f5f7fa}
     </div>
   </div>
   <div class="upf-report-label">
-    <div class="rpt-title">Nominal-Role Report for MDD<?= $reportScope && $reportScope !== 'HQ' ? ' — '.htmlspecialchars($reportScope) : '' ?></div>
+    <div class="rpt-title">HUMAN RESOURCE MANAGEMENT SYSTEM<?= $reportScope && $reportScope !== 'HQ' ? ' — '.htmlspecialchars($reportScope) : '' ?></div>
     <div class="rpt-meta">Generated on: <?= date('j/F/Y') ?><?php if ($search): ?> &nbsp;|&nbsp; Filter: "<?= htmlspecialchars($search) ?>"<?php endif; ?></div>
   </div>
 </div>
@@ -189,7 +234,7 @@ tr:nth-child(even) td{background:#f5f7fa}
 </table>
 
 <div class="page-footer">
-  Uganda Police Force — MDD Management System &nbsp;·&nbsp; <?= date('Y') ?> &nbsp;·&nbsp; PROTECT &amp; SERVE
+  Uganda Police Force — Human Resoure Management System &nbsp;·&nbsp; <?= date('Y') ?> &nbsp;·&nbsp; PROTECT &amp; SERVE
 </div>
 
 <div class="no-print no-print-bar">
