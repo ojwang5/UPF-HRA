@@ -1,0 +1,47 @@
+[Mon Jul 13 16:24:47 2026] PHP 8.2.23 Development Server (http://0.0.0.0:5000) started
+[Mon Jul 13 16:24:48 2026] 127.0.0.1:48698 Accepted
+[Mon Jul 13 16:24:48 2026] 127.0.0.1:48698 Closing
+[Mon Jul 13 16:24:49 2026] 127.0.0.1:48704 Accepted
+[Mon Jul 13 16:24:49 2026] 127.0.0.1:48704 [200]: GET /assets/style.css
+[Mon Jul 13 16:24:49 2026] 127.0.0.1:48704 Closing
+[Mon Jul 13 16:24:49 2026] 127.0.0.1:48720 Accepted
+[Mon Jul 13 16:24:49 2026] 127.0.0.1:48720 [200]: GET /assets/logo.jpg
+[Mon Jul 13 16:24:49 2026] 127.0.0.1:48720 Closing
+[Mon Jul 13 16:24:52 2026] 127.0.0.1:48736 Accepted
+[Mon Jul 13 16:24:52 2026] 127.0.0.1:48736 Closing
+[Mon Jul 13 16:24:53 2026] 127.0.0.1:48744 Accepted
+[Mon Jul 13 16:24:53 2026] 127.0.0.1:48744 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54388 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54388 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54398 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54398 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54404 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54404 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54410 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54410 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54412 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54412 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54426 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54426 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54440 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54440 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54444 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54444 Closing
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54452 Accepted
+[Mon Jul 13 16:25:00 2026] 127.0.0.1:54452 Closing
+[Mon Jul 13 16:25:09 2026] 127.0.0.1:36056 Accepted
+[Mon Jul 13 16:25:09 2026] 127.0.0.1:36056 Closing
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36072 Accepted
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36072 Closing
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36084 Accepted
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36084 Closing
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36098 Accepted
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36106 Accepted
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36098 [200]: GET /assets/style.css
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36106 [200]: GET /assets/logo.jpg
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36098 Closing
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36106 Closing
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36116 Accepted
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36116 Closing
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36120 Accepted
+[Mon Jul 13 16:25:15 2026] 127.0.0.1:36120 Closing

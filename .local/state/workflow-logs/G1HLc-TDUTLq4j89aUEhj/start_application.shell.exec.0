@@ -1,0 +1,117 @@
+[Wed Jul 22 16:22:17 2026] PHP 8.2.23 Development Server (http://0.0.0.0:5000) started
+[Wed Jul 22 16:22:23 2026] 127.0.0.1:57620 Accepted
+[Wed Jul 22 16:22:23 2026] 127.0.0.1:57620 Closing
+[Wed Jul 22 16:22:24 2026] 127.0.0.1:57626 Accepted
+[Wed Jul 22 16:22:24 2026] 127.0.0.1:57626 Closing
+[Wed Jul 22 16:22:25 2026] 127.0.0.1:53406 Accepted
+[Wed Jul 22 16:22:25 2026] 127.0.0.1:53406 [200]: GET /assets/style.css
+[Wed Jul 22 16:22:25 2026] 127.0.0.1:53406 Closing
+[Wed Jul 22 16:22:25 2026] 127.0.0.1:53414 Accepted
+[Wed Jul 22 16:22:25 2026] 127.0.0.1:53414 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:22:25 2026] 127.0.0.1:53414 Closing
+[Wed Jul 22 16:22:37 2026] 127.0.0.1:59002 Accepted
+[Wed Jul 22 16:22:37 2026] 127.0.0.1:59002 Closing
+[Wed Jul 22 16:22:37 2026] 127.0.0.1:59010 Accepted
+[Wed Jul 22 16:22:37 2026] 127.0.0.1:59010 Closing
+[Wed Jul 22 16:22:38 2026] 127.0.0.1:59014 Accepted
+[Wed Jul 22 16:22:38 2026] 127.0.0.1:59014 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:22:38 2026] 127.0.0.1:59014 Closing
+[Wed Jul 22 16:22:38 2026] 127.0.0.1:59030 Accepted
+[Wed Jul 22 16:22:38 2026] 127.0.0.1:59030 [200]: GET /assets/style.css
+[Wed Jul 22 16:22:38 2026] 127.0.0.1:59030 Closing
+[Wed Jul 22 16:23:03 2026] 127.0.0.1:33508 Accepted
+[Wed Jul 22 16:23:03 2026] 127.0.0.1:33508 Closing
+[Wed Jul 22 16:23:05 2026] 127.0.0.1:42224 Accepted
+[Wed Jul 22 16:23:05 2026] 127.0.0.1:42238 Accepted
+[Wed Jul 22 16:23:05 2026] 127.0.0.1:42224 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:23:05 2026] 127.0.0.1:42238 [200]: GET /assets/style.css
+[Wed Jul 22 16:23:05 2026] 127.0.0.1:42224 Closing
+[Wed Jul 22 16:23:05 2026] 127.0.0.1:42238 Closing
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37848 Accepted
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37848 Closing
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37850 Accepted
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37850 [200]: GET /assets/style.css
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37850 Closing
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37862 Accepted
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37862 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:23:40 2026] 127.0.0.1:37862 Closing
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48934 Accepted
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48934 Closing
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48938 Accepted
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48954 Accepted
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48938 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48954 [200]: GET /assets/style.css
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48938 Closing
+[Wed Jul 22 16:23:56 2026] 127.0.0.1:48954 Closing
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49294 Accepted
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49294 Closing
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49300 Accepted
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49312 Accepted
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49300 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49312 [200]: GET /assets/style.css
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49300 Closing
+[Wed Jul 22 16:27:24 2026] 127.0.0.1:49312 Closing
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46534 Accepted
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46534 Closing
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46538 Accepted
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46538 [200]: GET /assets/style.css
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46538 Closing
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46552 Accepted
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46552 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:27:29 2026] 127.0.0.1:46552 Closing
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41702 Accepted
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41702 Closing
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41704 Accepted
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41704 [200]: GET /assets/style.css
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41704 Closing
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41718 Accepted
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41718 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:28:23 2026] 127.0.0.1:41718 Closing
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42750 Accepted
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42750 Closing
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42756 Accepted
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42756 [200]: GET /assets/style.css
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42756 Closing
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42766 Accepted
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42766 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:28:28 2026] 127.0.0.1:42766 Closing
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39346 Accepted
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39346 Closing
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39362 Accepted
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39362 [200]: GET /assets/style.css
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39362 Closing
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39364 Accepted
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39364 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:34:11 2026] 127.0.0.1:39364 Closing
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57736 Accepted
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57736 Closing
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57744 Accepted
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57744 [200]: GET /assets/style.css
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57744 Closing
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57754 Accepted
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57754 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:34:43 2026] 127.0.0.1:57754 Closing
+[Wed Jul 22 16:34:50 2026] 127.0.0.1:33434 Accepted
+[Wed Jul 22 16:34:50 2026] 127.0.0.1:33434 Closing
+[Wed Jul 22 16:34:51 2026] 127.0.0.1:33442 Accepted
+[Wed Jul 22 16:34:51 2026] 127.0.0.1:33442 [200]: GET /assets/style.css
+[Wed Jul 22 16:34:51 2026] 127.0.0.1:33444 Accepted
+[Wed Jul 22 16:34:51 2026] 127.0.0.1:33442 Closing
+[Wed Jul 22 16:34:51 2026] 127.0.0.1:33444 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:34:51 2026] 127.0.0.1:33444 Closing
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53032 Accepted
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53032 Closing
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53034 Accepted
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53042 Accepted
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53034 [200]: GET /assets/style.css
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53042 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53034 Closing
+[Wed Jul 22 16:35:22 2026] 127.0.0.1:53042 Closing
+[Wed Jul 22 16:35:36 2026] 127.0.0.1:50600 Accepted
+[Wed Jul 22 16:35:36 2026] 127.0.0.1:50600 Closing
+[Wed Jul 22 16:35:37 2026] 127.0.0.1:50606 Accepted
+[Wed Jul 22 16:35:37 2026] 127.0.0.1:50616 Accepted
+[Wed Jul 22 16:35:37 2026] 127.0.0.1:50606 [200]: GET /assets/logo.jpg
+[Wed Jul 22 16:35:37 2026] 127.0.0.1:50616 [200]: GET /assets/style.css
+[Wed Jul 22 16:35:37 2026] 127.0.0.1:50606 Closing
+[Wed Jul 22 16:35:37 2026] 127.0.0.1:50616 Closing
