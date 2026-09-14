@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $opts=['created_by'=>$user['id']];
             if ($aud==='region') $opts['target_region_id']=(int)$_POST['region_id'];
             elseif ($aud==='role') $opts['target_role']=$_POST['target_role']??'officer';
+            elseif ($aud==='directorate') $opts['target_directorate_id']=(int)$_POST['directorate_id'];
             notify($title,$msg,$aud,$opts);
             flash('msg','Notification sent.');
         }
@@ -25,7 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $notifs = notifications_for($user, false, 100);
-$regions = is_superadmin($user) ? $pdo->query("SELECT * FROM regions ORDER BY name")->fetchAll() : [];
+$regions   = is_superadmin($user) ? $pdo->query("SELECT * FROM regions ORDER BY name")->fetchAll() : [];
+$directorates = is_superadmin($user) ? $pdo->query("SELECT * FROM directorates WHERE active=1 ORDER BY name")->fetchAll() : [];
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -42,10 +44,11 @@ include __DIR__ . '/../includes/header.php';
           <div class="form-row">
             <div class="form-group" style="flex:2"><label>Title</label><input type="text" name="title" required></div>
             <div class="form-group"><label>Audience</label>
-              <select name="audience" id="aud-sel" onchange="var v=this.value;document.getElementById('br-fld').style.display=v==='region'?'':'none';document.getElementById('rl-fld').style.display=v==='role'?'':'none'">
+              <select name="audience" id="aud-sel" onchange="var v=this.value;document.getElementById('br-fld').style.display=v==='region'?'':'none';document.getElementById('rl-fld').style.display=v==='role'?'':'none';document.getElementById('dr-fld').style.display=v==='directorate'?'':'none'">
                 <option value="all">All users</option>
                 <option value="region">A Region</option>
                 <option value="role">A Role</option>
+                <option value="directorate">A Directorate</option>
               </select>
             </div>
             <div class="form-group" id="br-fld" style="display:none"><label>Region</label>
@@ -55,6 +58,9 @@ include __DIR__ . '/../includes/header.php';
               <select name="target_role">
                 <?php foreach (array_keys(ROLE_LABELS) as $r): ?><option value="<?= $r ?>"><?= e(role_label($r)) ?></option><?php endforeach; ?>
               </select>
+            </div>
+            <div class="form-group" id="dr-fld" style="display:none"><label>Directorate</label>
+              <select name="directorate_id"><?php foreach ($directorates as $d): ?><option value="<?= $d['id'] ?>"><?= e($d['name']) ?></option><?php endforeach; ?></select>
             </div>
           </div>
           <div class="form-row">

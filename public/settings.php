@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/mailer.php';
 require_once __DIR__ . '/../includes/sms.php';
-$user = require_min_rank('regional_commander');
+$user = require_role(['superadmin']);
 $page = 'settings';
 $page_title = 'System Settings';
 $pdo = db();

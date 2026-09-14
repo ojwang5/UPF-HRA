@@ -72,9 +72,10 @@ function init_schema(PDO $pdo): void {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
             date TEXT NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','suspended','disciplinary','on_duty','on_course')),
+            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed')),
             notes TEXT,
             recorded_by INTEGER REFERENCES users(id),
+            auto_status INTEGER NOT NULL DEFAULT 0,
             UNIQUE(employee_id, date)
         );
         CREATE TABLE IF NOT EXISTS reports (
@@ -302,6 +303,206 @@ function migrate(PDO $pdo): void {
             foreach ($units as [$un,$uc]) $uStmt->execute([$opsId,$un,$uc]);
         }
         $pdo->exec("PRAGMA user_version = 8");
+    }
+
+    if ($v < 9) {
+        _migrate_v9($pdo);
+    }
+
+    if ($v < 10) {
+        _migrate_v10($pdo);
+    }
+}
+
+/* ─── v10: transfer reporting workflow + directorate-targeted notifications ─── */
+function _migrate_v10(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        // User accounts may be attached to a directorate so directorate-level
+        // notifications (e.g. transfer alerts) can reach the right personnel.
+        $uCols = array_column($pdo->query("PRAGMA table_info(users)")->fetchAll(), 'name');
+        if (!in_array('directorate_id', $uCols, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN directorate_id INTEGER REFERENCES directorates(id)");
+        }
+
+        // Transfers: track whether the transferred officer reported for duty at
+        // the new place of work (keeps an accurate personnel transfer record).
+        $tCols = array_column($pdo->query("PRAGMA table_info(transfers)")->fetchAll(), 'name');
+        if (!in_array('report_status', $tCols, true)) {
+            $pdo->exec("ALTER TABLE transfers ADD COLUMN report_status TEXT NOT NULL DEFAULT 'pending' CHECK(report_status IN ('pending','reported'))");
+            $pdo->exec("ALTER TABLE transfers ADD COLUMN reported_by   INTEGER REFERENCES users(id)");
+            $pdo->exec("ALTER TABLE transfers ADD COLUMN reported_at   TEXT");
+            $pdo->exec("ALTER TABLE transfers ADD COLUMN report_notes  TEXT");
+        }
+
+        // Notifications: allow targeting an entire directorate / unit.
+        $nCols = array_column($pdo->query("PRAGMA table_info(notifications)")->fetchAll(), 'name');
+        if (!in_array('target_directorate_id', $nCols, true)) {
+            $pdo->exec("ALTER TABLE notifications ADD COLUMN target_directorate_id INTEGER REFERENCES directorates(id)");
+        }
+
+        $pdo->exec("PRAGMA user_version = 10");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
+}
+
+/* ─── v9: assignments, courses, discipline, undeployed, transfers, leave adjustments ─── */
+function _migrate_v9(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        // Annual leave entitlement per employee
+        $empCols = array_column($pdo->query("PRAGMA table_info(employees)")->fetchAll(), 'name');
+        if (!in_array('annual_leave_days', $empCols)) {
+            $pdo->exec("ALTER TABLE employees ADD COLUMN annual_leave_days INTEGER NOT NULL DEFAULT 30");
+        }
+
+        // Extend daily_status CHECK to include special_assignment + undeployed
+        $pdo->exec("CREATE TABLE IF NOT EXISTS daily_status_v9 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            date TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed')),
+            notes TEXT,
+            recorded_by INTEGER REFERENCES users(id),
+            auto_status INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(employee_id, date)
+        )");
+        $dsColsV4 = array_column($pdo->query("PRAGMA table_info(daily_status)")->fetchAll(), 'name');
+        $hasAuto  = in_array('auto_status', $dsColsV4, true);
+        if ($hasAuto) {
+            $pdo->exec("INSERT OR IGNORE INTO daily_status_v9 (id,employee_id,date,status,notes,recorded_by,auto_status)
+                        SELECT id,employee_id,date,status,notes,recorded_by,auto_status FROM daily_status");
+        } else {
+            $pdo->exec("INSERT OR IGNORE INTO daily_status_v9 (id,employee_id,date,status,notes,recorded_by,auto_status)
+                        SELECT id,employee_id,date,status,notes,recorded_by,0 FROM daily_status");
+        }
+        $pdo->exec("DROP TABLE daily_status");
+        $pdo->exec("ALTER TABLE daily_status_v9 RENAME TO daily_status");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_daily_status_date ON daily_status(date)");
+
+        // Special assignments (officers detached on special duty)
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS special_assignments (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id  INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                title        TEXT NOT NULL,
+                nature       TEXT,
+                place        TEXT,
+                start_date   TEXT NOT NULL,
+                end_date     TEXT,
+                status       TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','cancelled')),
+                notes        TEXT,
+                created_by   INTEGER REFERENCES users(id),
+                created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                ended_at     TEXT,
+                end_remarks  TEXT
+            )
+        ");
+
+        // On-course records (training management)
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS on_courses (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id     INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                course_name     TEXT NOT NULL,
+                course_nature   TEXT NOT NULL DEFAULT 'Professional',
+                school          TEXT,
+                place           TEXT,
+                start_date      TEXT NOT NULL,
+                end_date        TEXT NOT NULL,
+                duration_days   INTEGER,
+                sponsor         TEXT,
+                status          TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','withdrawn')),
+                notes           TEXT,
+                created_by      INTEGER REFERENCES users(id),
+                created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                completed_at    TEXT
+            )
+        ");
+
+        // Suspension & disciplinary case management
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS discipline_cases (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id    INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                case_type      TEXT NOT NULL CHECK(case_type IN ('suspension','disciplinary')),
+                case_ref       TEXT,
+                offence        TEXT NOT NULL,
+                start_date     TEXT NOT NULL,
+                end_date       TEXT,
+                status         TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed','reinstated')),
+                outcome        TEXT,
+                notes          TEXT,
+                created_by     INTEGER REFERENCES users(id),
+                created_at     TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                closed_at      TEXT
+            )
+        ");
+
+        // Undeployed personnel (on strength but not deployed)
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS undeployments (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id    INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                reason         TEXT NOT NULL,
+                start_date     TEXT NOT NULL,
+                end_date       TEXT,
+                status         TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','redeployed')),
+                notes          TEXT,
+                created_by     INTEGER REFERENCES users(id),
+                created_at     TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                redeployed_at  TEXT
+            )
+        ");
+
+        // Transfer management — hierarchy (region/division/station/post) or directorate/unit
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS transfers (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id         INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                transfer_scope      TEXT NOT NULL DEFAULT 'hierarchy' CHECK(transfer_scope IN ('hierarchy','directorate')),
+                from_region_id      INTEGER, from_division_id INTEGER, from_station_id INTEGER, from_post_id INTEGER,
+                to_region_id        INTEGER REFERENCES regions(id),
+                to_division_id      INTEGER REFERENCES divisions(id),
+                to_station_id       INTEGER REFERENCES stations(id),
+                to_post_id          INTEGER REFERENCES posts(id),
+                from_directorate_id INTEGER REFERENCES directorates(id),
+                from_unit_id        INTEGER REFERENCES units(id),
+                to_directorate_id   INTEGER REFERENCES directorates(id),
+                to_unit_id          INTEGER REFERENCES units(id),
+                reason              TEXT,
+                transfer_date       TEXT NOT NULL,
+                effective_date      TEXT NOT NULL,
+                status              TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','executed','cancelled')),
+                requested_by        INTEGER REFERENCES users(id),
+                requested_at        TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                reviewed_by         INTEGER REFERENCES users(id),
+                reviewed_at         TEXT,
+                review_notes        TEXT,
+                executed_by         INTEGER REFERENCES users(id),
+                executed_at         TEXT
+            )
+        ");
+
+        // Leave adjustments (+ credit / − deduct days against entitlement)
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS leave_adjustments (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id  INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                days         INTEGER NOT NULL,
+                reason       TEXT NOT NULL,
+                created_by   INTEGER REFERENCES users(id),
+                created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            )
+        ");
+        $pdo->exec("PRAGMA user_version = 9");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
     }
 }
 

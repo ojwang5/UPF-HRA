@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $role  = $_POST['role']     ?? 'officer';
         $email = trim($_POST['email'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
+        $dirId = isset($_POST['directorate_id']) && $_POST['directorate_id'] !== '' ? (int)$_POST['directorate_id'] : null;
 
         if (!in_array($role, creatable_roles($user), true)) {
             flash('err','You cannot assign that role.'); header('Location:/users.php'); exit;
@@ -37,8 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pid = $pid ?: ($user['post_id']     ? (int)$user['post_id']     : null);
         }
         try {
-            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?)")
-                ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $email ?: null, $phone ?: null]);
+            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,email,phone,directorate_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+                ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $email ?: null, $phone ?: null, $dirId]);
             log_activity('Add User', 'user', "{$fname} ({$uname})", (int)$pdo->lastInsertId(), "Role: ".role_label($role));
             flash('msg', 'Account created for '.$fname.'.');
         } catch (\PDOException $e) {
@@ -85,12 +86,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 /* ── Fetch ── */
 $viewId  = isset($_GET['view']) ? (int)$_GET['view'] : 0;
-$users = $pdo->query("SELECT u.*, rg.name AS region_name, dv.name AS division_name, st.name AS station_name, pt.name AS post_name
+$users = $pdo->query("SELECT u.*, rg.name AS region_name, dv.name AS division_name, st.name AS station_name, pt.name AS post_name, dir.name AS directorate_name
     FROM users u
-    LEFT JOIN regions   rg ON rg.id=u.region_id
-    LEFT JOIN divisions dv ON dv.id=u.division_id
-    LEFT JOIN stations  st ON st.id=u.station_id
-    LEFT JOIN posts     pt ON pt.id=u.post_id
+    LEFT JOIN regions     rg  ON rg.id=u.region_id
+    LEFT JOIN divisions   dv  ON dv.id=u.division_id
+    LEFT JOIN stations    st  ON st.id=u.station_id
+    LEFT JOIN posts       pt  ON pt.id=u.post_id
+    LEFT JOIN directorates dir ON dir.id=u.directorate_id
     ORDER BY u.role, u.full_name")->fetchAll();
 $users = array_filter($users, fn($u) => $u['id'] !== (int)$user['id'] && can_manage_user($user, $u));
 
@@ -99,6 +101,7 @@ $regions   = $pdo->query("SELECT * FROM regions ORDER BY name")->fetchAll();
 $divisions = $pdo->query("SELECT d.*,r.name AS region_name FROM divisions d JOIN regions r ON r.id=d.region_id ORDER BY region_name,d.name")->fetchAll();
 $stations  = $pdo->query("SELECT s.*,d.name AS division_name FROM stations s JOIN divisions d ON d.id=s.division_id ORDER BY division_name,s.name")->fetchAll();
 $posts     = $pdo->query("SELECT p.*,s.name AS station_name FROM posts p JOIN stations s ON s.id=p.station_id ORDER BY station_name,p.name")->fetchAll();
+$directorates = $pdo->query("SELECT * FROM directorates WHERE active=1 ORDER BY name")->fetchAll();
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -151,6 +154,7 @@ include __DIR__ . '/../includes/header.php';
           <td style="font-size:12px;white-space:nowrap"><?= e($u['phone'] ?? '—') ?></td>
           <td style="font-size:12px;color:var(--muted)">
             <?= implode(' › ', array_filter([e($u['region_name']??''), e($u['division_name']??''), e($u['station_name']??''), e($u['post_name']??'')])) ?: '—' ?>
+            <?php if ($u['directorate_name']): ?><div style="font-size:11px;margin-top:2px"><span class="badge badge-leave"><?= e($u['directorate_name']) ?></span></div><?php endif; ?>
           </td>
           <td>
             <div style="display:flex;gap:4px;justify-content:center;flex-wrap:nowrap">
@@ -260,6 +264,15 @@ include __DIR__ . '/../includes/header.php';
               <div class="form-group" style="min-width:160px">
                 <label>Phone Number</label>
                 <input type="tel" name="phone" placeholder="+256 700 000000">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label>Directorate (receives transfer alerts)</label>
+                <select name="directorate_id">
+                  <option value="">— none —</option>
+                  <?php foreach ($directorates as $d): ?><option value="<?= $d['id'] ?>"><?= e($d['name']) ?></option><?php endforeach; ?>
+                </select>
               </div>
             </div>
           </div>

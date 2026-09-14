@@ -8,6 +8,7 @@ $pdo = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
 
 $date = $_GET['date'] ?? date('Y-m-d');
+$autoCount = valid_date($date) ? run_auto_status($pdo, $date, $user) : 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date = $_POST['date'] ?? date('Y-m-d');

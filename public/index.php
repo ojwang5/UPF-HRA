@@ -10,6 +10,8 @@ $pdo = db();
 $date   = $_GET['date']   ?? date('Y-m-d');
 $detail = $_GET['detail'] ?? ''; // status to drill into
 
+if (valid_date($date)) { run_auto_status($pdo, $date, $user); }
+
 $rows = hierarchy_summary($pdo, $date, $user);
 $tot  = sum_totals($rows);
 
@@ -204,6 +206,89 @@ $cards = [
   </div>
 </div>
 
+<!-- Status Distribution Charts -->
+<?php
+$chartData = [
+    ['present',      'Present',      '#22c55e'],
+    ['on_duty',      'On Duty',      '#0891b2'],
+    ['on_leave',     'On Leave',     '#3b82f6'],
+    ['sick',         'Sick',         '#f59e0b'],
+    ['on_course',    'On Course',    '#059669'],
+    ['awol',         'AWOL',         '#ef4444'],
+    ['suspended',    'Suspended',    '#7c3aed'],
+    ['disciplinary', 'Disciplinary', '#dc2626'],
+    ['deserted',     'Deserted',     '#be185d'],
+    ['unrecorded',   'Unrecorded',   '#94a3b8'],
+];
+$cht = [];
+$chartTotal = 0;
+foreach ($chartData as [$ck, $cl, $cc]) { $v = $tot[$ck] ?? 0; $chartTotal += $v; }
+$pieSegs = [];
+$acc = 0; // cumulative percent for SVG arcs
+$R = 42; $C = 2 * M_PI * $R; $cx = 60; $cy = 52;
+foreach ($chartData as [$ck, $cl, $cc]) {
+    $v = $tot[$ck] ?? 0;
+    $pct = $chartTotal > 0 ? ($v / $chartTotal * 100) : 0;
+    $pctShow = $chartTotal > 0 ? round($pct) : 0;
+    // Bar width relative to largest bar
+    $barW = $v;
+    $cht[] = ['label'=>$cl,'val'=>$v,'pct'=>$pctShow,'color'=>$cc,'rawPct'=>$pct];
+    if ($chartTotal > 0 && $v > 0) {
+        $segLen = $pct / 100 * $C;
+        $dash = max($segLen - 0.8, 0.3);
+        $rot = $acc / 100 * 360;
+        $pieSegs[] = "<circle r=\"$R\" cx=\"$cx\" cy=\"$cy\" fill=\"none\" stroke=\"$cc\" stroke-width=\"13\" stroke-dasharray=\"$dash ".($C-$dash)."\" stroke-dashoffset=\"".(-$rot/360*$C- ($C*0.25))."\" />";
+        $acc += $pct;
+    }
+}
+?>
+<div class="card" style="margin-top:4px">
+  <div class="chr">
+    <h3>Status Distribution — <?= e(date('j F Y', strtotime($date))) ?></h3>
+    <div class="action-bar">
+      <a class="btn-icon bi-secondary bi-sm" href="/export-charts.php?format=csv&date=<?= e($date) ?>" title="Export CSV"><?= ICO_DL ?></a>
+      <a class="btn-icon bi-secondary bi-sm" href="/export-charts.php?format=print&date=<?= e($date) ?>" target="_blank" title="Print / PDF"><?= ICO_PRINT ?></a>
+    </div>
+  </div>
+  <div class="charts-grid">
+    <!-- Bar chart -->
+    <div class="chart-box bar-box">
+      <div class="chart-title"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg> Distribution by Status</div>
+      <div class="hbar-list">
+        <?php $maxBar = $chartTotal > 0 ? $chartTotal : 1; foreach ($cht as $b):
+          $w = $b['val'] > 0 ? max(2, round($b['val'] / $maxBar * 100)) : 0; ?>
+        <div class="hbar-row">
+          <div class="hbar-label"><?= e($b['label']) ?> <span class="hbar-num"><?= $b['val'] ?></span></div>
+          <div class="hbar-track"><div class="hbar-fill" style="width:<?= $w ?>%;background:<?= $b['color'] ?>"></div></div>
+          <div class="hbar-pct"><?= $b['pct'] ?>%</div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <!-- Pie chart -->
+    <div class="chart-box pie-box">
+      <div class="chart-title"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg> Percentage Share</div>
+      <div class="pie-wrap">
+        <svg viewBox="0 0 120 120" width="150" height="150" <?= $chartTotal>0 ? '' : 'data-empty="1"' ?>>
+          <circle r="<?= $R ?>" cx="<?= $cx ?>" cy="<?= $cy ?>" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="13" />
+          <?php if ($chartTotal > 0): foreach ($pieSegs as $ps) echo $ps; ?>
+          <text x="60" y="56" text-anchor="middle" style="font-size:11px;font-weight:700;fill:currentColor"><?= $chartTotal ?></text>
+          <text x="60" y="68" text-anchor="middle" style="font-size:5px;fill:var(--muted)">TOTAL</text>
+          <?php else: ?>
+          <text x="60" y="56" text-anchor="middle" style="font-size:9px;fill:var(--muted)">No data</text>
+          <?php endif; ?>
+        </svg>
+        <div class="pie-legend">
+          <?php foreach ($cht as $b): if ($b['val']<=0) continue; ?>
+          <div class="lg-item"><span class="lg-dot" style="background:<?= $b['color'] ?>"></span><?= e($b['label']) ?><span class="lg-val"><?= $b['val'] ?> · <?= $b['pct'] ?>%</span></div>
+          <?php endforeach; ?>
+          <?php if ($chartTotal<=0): ?><div class="muted" style="padding:8px 0">No status data for this date.</div><?php endif; ?>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Per-unit breakdown -->
 <?php if (!empty($rows)): ?>
 <div class="card" style="margin-top:4px">
@@ -250,6 +335,57 @@ $cards = [
 </div>
 <?php endif; ?>
 
+<!-- Regional / unit strength comparison graph -->
+<?php if (count($rows) > 1):
+  $maxTotal = 0; $maxPres = 0;
+  foreach ($rows as $r) { $maxTotal = max($maxTotal, (int)$r['total']); $maxPres = max($maxPres, (int)$r['present']); }
+  $cmpTitle = match($user['role']) {
+    'superadmin'         => 'Regional Strength Comparison',
+    'regional_commander' => 'Division Strength Comparison — '.e($user['region_name']??''),
+    'division_commander' => 'Station Strength Comparison — '.e($user['division_name']??''),
+    default              => 'Post Strength Comparison — '.e($user['station_name']??''),
+  };
+?>
+<div class="card" style="margin-top:4px">
+  <div class="chr">
+    <h3><?= $cmpTitle ?> — <?= e(date('j F Y', strtotime($date))) ?></h3>
+    <div class="action-bar">
+      <a class="btn-icon bi-secondary bi-sm" href="/export-charts.php?format=csv&date=<?= e($date) ?>" title="Export CSV"><?= ICO_DL ?></a>
+      <a class="btn-icon bi-secondary bi-sm" href="/export-charts.php?format=print&date=<?= e($date) ?>" target="_blank" title="Print / PDF"><?= ICO_PRINT ?></a>
+    </div>
+  </div>
+  <div class="cmp-legend">
+    <span><i style="background:#22c55e"></i> Present</span>
+    <span><i style="background:var(--navy-500, #334155)"></i> Total strength</span>
+    <span><i style="background:var(--gold)"></i> Attendance rate</span>
+  </div>
+  <div class="table-wrap">
+    <div class="cmp-list">
+      <?php foreach ($rows as $r): $att = (int)$r['total'] ? round((int)$r['present'] / (int)$r['total'] * 100) : 0; ?>
+      <div class="cmp-item">
+        <div class="cmp-head">
+          <div class="cmp-name"><?= e($r['unit_name']) ?></div>
+          <div class="cmp-nums"><?= (int)$r['present'] ?> present · <?= (int)$r['total'] ?> total · <strong><?= $att ?>%</strong></div>
+        </div>
+        <div class="cmp-bars">
+          <div class="cmp-row">
+            <span class="cmp-row-label">Present</span>
+            <div class="cmp-track"><div class="cmp-fill" style="width:<?= $maxPres ? round((int)$r['present'] / $maxPres * 100) : 0 ?>%;background:#22c55e"></div></div>
+            <span class="cmp-row-val"><?= (int)$r['present'] ?></span>
+          </div>
+          <div class="cmp-row">
+            <span class="cmp-row-label">Total</span>
+            <div class="cmp-track"><div class="cmp-fill" style="width:<?= $maxTotal ? round((int)$r['total'] / $maxTotal * 100) : 0 ?>%;background:var(--navy-500, #334155)"></div></div>
+            <span class="cmp-row-val"><?= (int)$r['total'] ?></span>
+          </div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <style>
 /* Dashboard stat cards */
 .dash-stats{margin-bottom:12px}
@@ -261,6 +397,39 @@ $cards = [
 .stat-pct{font-size:10px;color:var(--muted);margin-top:4px}
 .stat .hint{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.3}
 .stat-deserted{background:#fff0f8;border-color:#fce7f3}
+/* Status distribution charts */
+.charts-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;align-items:stretch}
+@media(max-width:900px){.charts-grid{grid-template-columns:1fr}}
+.chart-title{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy-800);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
+.chart-title .ico{width:15px;height:15px;color:var(--gold)}
+.bar-box{padding-right:20px;border-right:1px solid var(--border)}
+@media(max-width:900px){.bar-box{padding-right:0;border-right:none;border-bottom:1px solid var(--border);padding-bottom:18px}}
+.hbar-list{display:flex;flex-direction:column;gap:9px}
+.hbar-row{display:flex;align-items:center;gap:10px}
+.hbar-label{width:92px;flex-shrink:0;font-size:12px;color:var(--navy-700);display:flex;align-items:center;justify-content:space-between;gap:6px}
+.hbar-num{font-weight:700;font-size:12px;color:var(--navy-800)}
+.hbar-track{flex:1;height:12px;background:rgba(0,0,0,.07);border-radius:6px;overflow:hidden}
+.hbar-fill{height:100%;border-radius:6px;min-width:0;transition:width .5s}
+.hbar-pct{width:38px;flex-shrink:0;text-align:right;font-size:11px;font-weight:600;color:var(--muted)}
+.pie-wrap{display:flex;align-items:center;gap:22px;justify-content:center;flex-wrap:wrap}
+.pie-legend{display:flex;flex-direction:column;gap:6px;min-width:160px}
+.lg-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--navy-700)}
+.lg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.lg-val{margin-left:auto;color:var(--muted);font-size:11px}
+/* Regional strength comparison */
+.cmp-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--navy-700);margin:2px 2px 12px}
+.cmp-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.cmp-list{display:flex;flex-direction:column;gap:14px}
+.cmp-item{border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--navy-50)}
+.cmp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.cmp-name{font-weight:700;color:var(--navy-800);font-size:13px}
+.cmp-nums{font-size:11px;color:var(--muted)}
+.cmp-bars{display:flex;flex-direction:column;gap:6px}
+.cmp-row{display:flex;align-items:center;gap:10px}
+.cmp-row-label{width:62px;flex-shrink:0;font-size:11px;color:var(--muted);text-align:right}
+.cmp-track{flex:1;height:11px;background:rgba(0,0,0,.07);border-radius:6px;overflow:hidden}
+.cmp-fill{height:100%;border-radius:6px;min-width:0;transition:width .5s}
+.cmp-row-val{width:34px;flex-shrink:0;font-weight:700;font-size:12px;color:var(--navy-800);text-align:right}
 /* Summary strip */
 .dash-summary{
   display:flex;flex-wrap:wrap;background:var(--card);

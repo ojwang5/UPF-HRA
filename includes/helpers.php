@@ -58,34 +58,58 @@ function log_activity(string $action, string $entityType = '', string $entityLab
     } catch (\Throwable $e) { /* silent — never break the app */ }
 }
 
-const ALL_STATUSES = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted'];
+const ALL_STATUSES = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed'];
 const STATUS_LABELS = [
-    'present'      => 'Present',
-    'awol'         => 'AWOL',
-    'leave'        => 'On Leave',
-    'sick'         => 'Sick',
-    'suspended'    => 'Suspended',
-    'disciplinary' => 'Disciplinary',
-    'on_duty'      => 'On Duty',
-    'on_course'    => 'On Course',
-    'deserted'     => 'Deserted',
+    'present'           => 'Present',
+    'awol'              => 'AWOL',
+    'leave'             => 'On Leave',
+    'sick'              => 'Sick',
+    'suspended'         => 'Suspended',
+    'disciplinary'      => 'Disciplinary',
+    'on_duty'           => 'On Duty',
+    'on_course'         => 'On Course',
+    'deserted'          => 'Deserted',
+    'special_assignment'=> 'Special Assignment',
+    'undeployed'        => 'Undeployed',
 ];
 const STATUS_BADGE_CLASS = [
-    'present'      => 'badge-present',
-    'awol'         => 'badge-awol',
-    'leave'        => 'badge-leave',
-    'sick'         => 'badge-sick',
-    'suspended'    => 'badge-suspended',
-    'disciplinary' => 'badge-disciplinary',
-    'on_duty'      => 'badge-on_duty',
-    'on_course'    => 'badge-on_course',
-    'deserted'     => 'badge-awol',
+    'present'           => 'badge-present',
+    'awol'              => 'badge-awol',
+    'leave'             => 'badge-leave',
+    'sick'              => 'badge-sick',
+    'suspended'         => 'badge-suspended',
+    'disciplinary'      => 'badge-disciplinary',
+    'on_duty'           => 'badge-on_duty',
+    'on_course'         => 'badge-on_course',
+    'deserted'          => 'badge-deserted',
+    'special_assignment'=> 'badge-special_assignment',
+    'undeployed'        => 'badge-undeployed',
 ];
 
 function status_label(string $s): string { return STATUS_LABELS[$s] ?? ucfirst($s); }
 function status_badge(string $s): string {
     $cls = STATUS_BADGE_CLASS[$s] ?? 'badge';
     return '<span class="badge '.$cls.'">'.e(status_label($s)).'</span>';
+}
+
+/** Badge for a transfer lifecycle status. */
+function transfer_status_badge(string $s): string {
+    [$l,$c] = match($s) {
+        'pending'   => ['Pending','badge-sick'],
+        'approved'  => ['Approved','badge-on_course'],
+        'rejected'  => ['Rejected','badge-awol'],
+        'executed'  => ['Executed','badge-present'],
+        'cancelled' => ['Cancelled','badge-admin'],
+        default     => [ucfirst($s) ?: '—','badge'],
+    };
+    return '<span class="badge '.$c.'">'.e($l).'</span>';
+}
+
+/** Badge showing whether a transferred officer reported at the new workplace. */
+function transfer_report_badge(string $s): string {
+    return $s === 'reported'
+        ? '<span class="badge badge-present">Reported</span>'
+        : '<span class="badge badge-sick">Pending report</span>';
 }
 
 /**
@@ -144,7 +168,9 @@ function hierarchy_summary(PDO $pdo, string $date, array $user): array {
                SUM(CASE WHEN ds.status='disciplinary' THEN 1 ELSE 0 END) AS disciplinary,
                SUM(CASE WHEN ds.status='on_duty'      THEN 1 ELSE 0 END) AS on_duty,
                SUM(CASE WHEN ds.status='on_course'    THEN 1 ELSE 0 END) AS on_course,
-               SUM(CASE WHEN ds.status='deserted'     THEN 1 ELSE 0 END) AS deserted
+               SUM(CASE WHEN ds.status='deserted'     THEN 1 ELSE 0 END) AS deserted,
+               SUM(CASE WHEN ds.status='special_assignment' THEN 1 ELSE 0 END) AS special_assignment,
+               SUM(CASE WHEN ds.status='undeployed'   THEN 1 ELSE 0 END) AS undeployed
         FROM employees e
         {$joinClause}
         LEFT JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
@@ -156,10 +182,10 @@ function hierarchy_summary(PDO $pdo, string $date, array $user): array {
     $stmt->execute(array_merge([$date], $scopeParams));
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
-        foreach (['total','male','female','present','awol','on_leave','sick','suspended','disciplinary','on_duty','on_course','deserted'] as $k) {
+        foreach (['total','male','female','present','awol','on_leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed'] as $k) {
             $r[$k] = (int)($r[$k] ?? 0);
         }
-        $r['unrecorded'] = $r['total'] - ($r['present']+$r['awol']+$r['on_leave']+$r['sick']+$r['suspended']+$r['disciplinary']+$r['on_duty']+$r['on_course']+$r['deserted']);
+        $r['unrecorded'] = $r['total'] - ($r['present']+$r['awol']+$r['on_leave']+$r['sick']+$r['suspended']+$r['disciplinary']+$r['on_duty']+$r['on_course']+$r['deserted']+$r['special_assignment']+$r['undeployed']);
     }
     return $rows;
 }
@@ -178,7 +204,7 @@ function build_hierarchy_joins(string $upTo): string {
 }
 
 function sum_totals(array $rows): array {
-    $t = ['total'=>0,'male'=>0,'female'=>0,'present'=>0,'awol'=>0,'on_leave'=>0,'sick'=>0,'suspended'=>0,'disciplinary'=>0,'on_duty'=>0,'on_course'=>0,'deserted'=>0,'unrecorded'=>0];
+    $t = ['total'=>0,'male'=>0,'female'=>0,'present'=>0,'awol'=>0,'on_leave'=>0,'sick'=>0,'suspended'=>0,'disciplinary'=>0,'on_duty'=>0,'on_course'=>0,'deserted'=>0,'special_assignment'=>0,'undeployed'=>0,'unrecorded'=>0];
     foreach ($rows as $r) foreach ($t as $k=>$_) $t[$k] += ($r[$k] ?? 0);
     return $t;
 }
@@ -198,4 +224,167 @@ function scope_units(PDO $pdo, array $user): array {
         'division_commander' => $pdo->query("SELECT id, name, 'station' AS level FROM stations WHERE division_id={$user['division_id']} ORDER BY name")->fetchAll(),
         default              => $pdo->query("SELECT id, name, 'post' AS level FROM posts WHERE station_id={$user['station_id']} ORDER BY name")->fetchAll(),
     };
+}
+
+/* ═══ Auto status engine ═══════════════════════════════════════════
+ * Derives a personnel's daily status from dated records that cover the
+ * given date: approved leave (day count), on-course (duration),
+ * suspension/disciplinary cases, special assignments and undeployments.
+ * Manual daily-status entries are never overwritten — only rows that
+ * are missing or were previously auto-set are refreshed.               */
+
+const AUTO_STATUS_PRIORITY = ['disciplinary','suspended','on_course','special_assignment','leave','undeployed'];
+
+/** Strict YYYY-MM-DD validation — guards interpolated date literals. */
+function valid_date(string $d): bool {
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) return false;
+    [$y,$m,$day] = array_map('intval', explode('-', $d));
+    return checkdate($m, $day, $y);
+}
+
+/**
+ * Computes the effective auto-derived status for every active employee in scope.
+ * @return array employee_id => status|null  (null when no record covers the date)
+ */
+function derive_auto_statuses(PDO $pdo, string $date, array $scopeEmployees): array {
+    if (!$scopeEmployees || !valid_date($date)) return [];
+    $ids = array_map('intval', array_column($scopeEmployees, 'id'));
+    $in  = implode(',', $ids);
+
+    // Approved leave covering the date (status picked from approved requests only)
+    $leave = [];
+    foreach ($pdo->query("SELECT employee_id FROM leave_requests WHERE status='approved' AND '$date' BETWEEN start_date AND end_date AND employee_id IN ($in)") as $r) {
+        $leave[(int)$r['employee_id']] = true;
+    }
+    $course = [];
+    foreach ($pdo->query("SELECT employee_id FROM on_courses WHERE status='active' AND '$date' BETWEEN start_date AND end_date AND employee_id IN ($in)") as $r) {
+        $course[(int)$r['employee_id']] = true;
+    }
+    $susp = []; $disc = [];
+    foreach ($pdo->query("SELECT employee_id, case_type FROM discipline_cases WHERE status='open' AND '$date' BETWEEN start_date AND COALESCE(end_date,'9999-12-31') AND employee_id IN ($in)") as $r) {
+        if ($r['case_type']==='disciplinary') $disc[(int)$r['employee_id']] = true; else $susp[(int)$r['employee_id']] = true;
+    }
+    $spAsg = [];
+    foreach ($pdo->query("SELECT employee_id FROM special_assignments WHERE status='active' AND '$date' BETWEEN start_date AND COALESCE(end_date,'9999-12-31') AND employee_id IN ($in)") as $r) {
+        $spAsg[(int)$r['employee_id']] = true;
+    }
+    $undep = [];
+    foreach ($pdo->query("SELECT employee_id FROM undeployments WHERE status='active' AND '$date' BETWEEN start_date AND COALESCE(end_date,'9999-12-31') AND employee_id IN ($in)") as $r) {
+        $undep[(int)$r['employee_id']] = true;
+    }
+
+    $out = [];
+    foreach ($ids as $id) {
+        foreach (AUTO_STATUS_PRIORITY as $st) {
+            $hit = match($st) {
+                'disciplinary'       => isset($disc[$id]),
+                'suspended'          => isset($susp[$id]),
+                'on_course'          => isset($course[$id]),
+                'special_assignment' => isset($spAsg[$id]),
+                'leave'              => isset($leave[$id]),
+                'undeployed'         => isset($undep[$id]),
+                default              => false,
+            };
+            if ($hit) { $out[$id] = $st; continue 2; }
+        }
+        $out[$id] = null;
+    }
+    return $out;
+}
+
+/**
+ * Runs the auto engine for a date within the user's scope: writes derived
+ * statuses into daily_status (flagged auto_status=1), removes stale auto rows.
+ * @return int number of rows written/cleared
+ */
+function run_auto_status(PDO $pdo, string $date, array $user): int {
+    [$scopeW, $scopeP] = scope_where($user, 'e');
+    $stmt = $pdo->prepare("SELECT e.id FROM employees e WHERE e.active=1 AND $scopeW");
+    $stmt->execute($scopeP);
+    $emps = $stmt->fetchAll();
+    if (!$emps) return 0;
+
+    $derived = derive_auto_statuses($pdo, $date, $emps);
+
+    // Existing rows for this date
+    $existing = [];
+    foreach ($pdo->query("SELECT id, employee_id, status, auto_status FROM daily_status WHERE date='$date'") as $r) {
+        $existing[(int)$r['employee_id']] = $r;
+    }
+
+    $upsert = $pdo->prepare("INSERT INTO daily_status (employee_id,date,status,auto_status,recorded_by)
+                             VALUES (:eid,:d,:st,1,NULL)
+                             ON CONFLICT(employee_id,date) DO UPDATE SET status=excluded.status, auto_status=1");
+    $clear  = $pdo->prepare("DELETE FROM daily_status WHERE employee_id=? AND date=? AND auto_status=1");
+    $n = 0;
+    foreach ($derived as $eid => $st) {
+        $cur = $existing[$eid] ?? null;
+        if ($cur && !(int)$cur['auto_status']) continue;      // manual entry wins
+        if ($cur && (string)$cur['status'] === (string)$st) continue; // already correct
+        if ($st === null) { $clear->execute([$eid, $date]); $n++; }
+        else { $upsert->execute([':eid'=>$eid, ':d'=>$date, ':st'=>$st]); $n++; }
+    }
+    return $n;
+}
+
+/* ═══ Leave balances & adjustments ══════════════════════════════════ */
+
+/** Days between two inclusive dates. */
+function leave_days_between(string $start, string $end): int {
+    $s = strtotime($start); $e = strtotime($end);
+    if ($s === false || $e === false || $e < $s) return 0;
+    return (int)floor(($e - $s) / 86400) + 1;
+}
+
+/**
+ * Leave ledger for one or all employees (current year by default).
+ * Returns [employee_id => ['entitlement'=>n,'adjust'=>n,'taken'=>n,'pending'=>n,'remaining'=>n]]
+ */
+function leave_balances(PDO $pdo, array $employeeIds, ?string $year = null): array {
+    $year  = $year ?? date('Y');
+    $yStart = $year.'-01-01';
+    $yEnd   = $year.'-12-31';
+
+    $out = [];
+    foreach ($employeeIds as $id) {
+        $out[(int)$id] = ['entitlement'=>0,'adjust'=>0,'taken'=>0,'pending'=>0,'remaining'=>0];
+    }
+    if (!$out) return $out;
+
+    $in = implode(',', array_map('intval', array_keys($out)));
+
+    foreach ($pdo->query("SELECT id, annual_leave_days FROM employees WHERE id IN ($in)") as $r) {
+        $out[(int)$r['id']]['entitlement'] = (int)($r['annual_leave_days'] ?? 30);
+    }
+    foreach ($pdo->query("SELECT employee_id, SUM(days) d FROM leave_adjustments WHERE employee_id IN ($in) GROUP BY employee_id") as $r) {
+        $out[(int)$r['employee_id']]['adjust'] = (int)$r['d'];
+    }
+    // Taken: approved leaves overlapping the year — count days falling inside the year
+    foreach ($pdo->query("SELECT employee_id, start_date, end_date FROM leave_requests WHERE status='approved' AND employee_id IN ($in) AND start_date <= '$yEnd' AND end_date >= '$yStart'") as $r) {
+        $from = max($r['start_date'], $yStart);
+        $to   = min($r['end_date'], $yEnd);
+        $out[(int)$r['employee_id']]['taken'] += leave_days_between($from, $to);
+    }
+    foreach ($pdo->query("SELECT employee_id, start_date, end_date FROM leave_requests WHERE status='pending' AND employee_id IN ($in) AND start_date <= '$yEnd' AND end_date >= '$yStart'") as $r) {
+        $from = max($r['start_date'], $yStart);
+        $to   = min($r['end_date'], $yEnd);
+        $out[(int)$r['employee_id']]['pending'] += leave_days_between($from, $to);
+    }
+    foreach ($out as &$b) {
+        $b['remaining'] = $b['entitlement'] + $b['adjust'] - $b['taken'];
+    }
+    return $out;
+}
+
+/**
+ * Whether a user role is allowed to approve a leave request of the given type.
+ * Regular leave: station commander and above (rank >= 3).
+ * Study leave: reserved for regional commander and above (rank >= 5).
+ */
+function can_approve_leave(array $user, string $leaveType = 'Annual'): bool {
+    $type = strtolower(trim($leaveType));
+    if ($type === 'study') {
+        return role_rank($user['role']) >= role_rank('regional_commander');
+    }
+    return role_rank($user['role']) >= role_rank('station_commander');
 }

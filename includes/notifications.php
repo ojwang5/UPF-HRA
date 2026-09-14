@@ -5,8 +5,8 @@ require_once __DIR__ . '/auth.php';
 
 function notify(string $title, string $message, string $audience, array $opts = []): int {
     $stmt = db()->prepare("INSERT INTO notifications
-        (title, message, link, kind, audience, target_user_id, target_role, target_region_id, created_by, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)");
+        (title, message, link, kind, audience, target_user_id, target_role, target_region_id, target_directorate_id, created_by, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)");
     $stmt->execute([
         $title, $message,
         $opts['link'] ?? null,
@@ -15,6 +15,7 @@ function notify(string $title, string $message, string $audience, array $opts = 
         $opts['target_user_id'] ?? null,
         $opts['target_role'] ?? null,
         $opts['target_region_id'] ?? null,
+        $opts['target_directorate_id'] ?? null,
         $opts['created_by'] ?? null,
         date('c'),
     ]);
@@ -25,6 +26,7 @@ function notifications_for(array $user, bool $unreadOnly = false, int $limit = 8
     $uid  = (int)$user['id'];
     $role = $user['role'];
     $rid  = $user['region_id'] ? (int)$user['region_id'] : -1;
+    $udir = $user['directorate_id'] ? (int)$user['directorate_id'] : -1;
 
     $sql = "SELECT n.*, u.full_name AS sender, r.read_at AS read_at_user
             FROM notifications n
@@ -35,11 +37,12 @@ function notifications_for(array $user, bool $unreadOnly = false, int $limit = 8
                 OR (n.audience='user' AND n.target_user_id=:uid)
                 OR (n.audience='role' AND n.target_role=:role)
                 OR (n.audience='region' AND n.target_region_id=:rid)
+                OR (n.audience='directorate' AND n.target_directorate_id=:udir)
             )";
     if ($unreadOnly) $sql .= " AND r.read_at IS NULL";
     $sql .= " ORDER BY n.created_at DESC LIMIT ".(int)$limit;
     $stmt = db()->prepare($sql);
-    $stmt->execute([':uid'=>$uid,':role'=>$role,':rid'=>$rid]);
+    $stmt->execute([':uid'=>$uid,':role'=>$role,':rid'=>$rid,':udir'=>$udir]);
     return $stmt->fetchAll();
 }
 
@@ -64,4 +67,9 @@ function notify_superadmins(string $title, string $msg, array $opts = []): void 
 
 function notify_region(int $regionId, string $title, string $msg, array $opts = []): void {
     notify($title, $msg, 'region', array_merge($opts, ['target_region_id'=>$regionId]));
+}
+
+/** Notify every user account attached to a directorate (transfer alerts, etc). */
+function notify_directorate(int $directorateId, string $title, string $msg, array $opts = []): void {
+    notify($title, $msg, 'directorate', array_merge($opts, ['target_directorate_id'=>$directorateId]));
 }

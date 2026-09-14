@@ -123,10 +123,38 @@ if ($editId) {
 
 $viewId  = isset($_GET['view']) ? (int)$_GET['view'] : 0;
 $viewing = null;
+$transferHistory = [];
 if ($viewId) {
     $s = $pdo->prepare("SELECT e.*, rg.name AS region_name, dv.name AS division_name, st.name AS station_name, pt.name AS post_name FROM employees e LEFT JOIN regions rg ON rg.id=e.region_id LEFT JOIN divisions dv ON dv.id=e.division_id LEFT JOIN stations st ON st.id=e.station_id LEFT JOIN posts pt ON pt.id=e.post_id WHERE e.id=? AND $scopeW");
     $s->execute(array_merge([$viewId], $scopeP));
     $viewing = $s->fetch() ?: null;
+    if ($viewing) {
+        // Personnel transfer records from one place to another
+        $tx = $pdo->prepare(
+            "SELECT t.*,
+                    fr.name AS from_region, fdv.name AS from_division, fst.name AS from_station, fpt.name AS from_post,
+                    tr.name AS to_region, tdv.name AS to_division, tst.name AS to_station, tpt.name AS to_post,
+                    fd.name AS from_dir, fu.name AS from_unit, td.name AS to_dir, tu.name AS to_unit
+             FROM transfers t
+             LEFT JOIN regions   fr  ON fr.id=t.from_region_id
+             LEFT JOIN divisions fdv ON fdv.id=t.from_division_id
+             LEFT JOIN stations  fst ON fst.id=t.from_station_id
+             LEFT JOIN posts     fpt ON fpt.id=t.from_post_id
+             LEFT JOIN regions   tr  ON tr.id=t.to_region_id
+             LEFT JOIN divisions tdv ON tdv.id=t.to_division_id
+             LEFT JOIN stations  tst ON tst.id=t.to_station_id
+             LEFT JOIN posts     tpt ON tpt.id=t.to_post_id
+             LEFT JOIN directorates fd ON fd.id=t.from_directorate_id
+             LEFT JOIN units     fu  ON fu.id=t.from_unit_id
+             LEFT JOIN directorates td ON td.id=t.to_directorate_id
+             LEFT JOIN units     tu  ON tu.id=t.to_unit_id
+             WHERE t.employee_id=?
+             ORDER BY t.requested_at DESC
+             LIMIT 12"
+        );
+        $tx->execute([$viewId]);
+        $transferHistory = $tx->fetchAll();
+    }
 }
 
 /* ── Posts list ── */
@@ -295,6 +323,42 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <?php endforeach; ?>
   </div>
+  <?php if ($transferHistory): ?>
+  <div style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:var(--gold)"><path d="M3 12h18"/><path d="M15 6l6 6-6 6"/><path d="M9 6l-6 6 6 6"/></svg>
+      <h4 style="margin:0;font-size:13px;color:var(--navy-800)">Transfer &amp; Posting History</h4>
+      <span class="badge badge-admin"><?= count($transferHistory) ?></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Date</th><th>From</th><th>To</th><th>Reason</th><th>Status</th><th>Reported</th>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($transferHistory as $th):
+            if ($th['transfer_scope']==='hierarchy') {
+              $thf = trim(($th['from_region']??'').' › '.($th['from_division']??'').' › '.($th['from_station']??'').' › '.($th['from_post']??''),' › ')?: '—';
+              $tht = trim(($th['to_region']??'').' › '.($th['to_division']??'').' › '.($th['to_station']??'').' › '.($th['to_post']??''),' › ')?: '—';
+            } else {
+              $thf = trim(($th['from_dir']??'—').' › '.($th['from_unit']??'—'),' ›')?: '—';
+              $tht = trim(($th['to_dir']??'—').' › '.($th['to_unit']??'—'),' ›')?: '—';
+            }
+          ?>
+          <tr>
+            <td style="white-space:nowrap;font-size:12px"><?= e(date('j M y', strtotime($th['effective_date']))) ?></td>
+            <td style="font-size:12px;max-width:170px"><?= e($thf) ?></td>
+            <td style="font-size:12px;max-width:170px"><strong><?= e($tht) ?></strong></td>
+            <td style="font-size:12px;max-width:150px"><?= e($th['reason']??'—') ?></td>
+            <td><?= transfer_status_badge($th['status']) ?></td>
+            <td><?= transfer_report_badge($th['report_status'] ?? 'pending') ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <?php endif; ?>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span style="font-size:12px;margin-left:4px">Edit</span></a>
     <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>?')">

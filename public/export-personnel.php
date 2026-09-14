@@ -200,7 +200,7 @@ tr:nth-child(even) td{background:#f5f7fa}
     </div>
   </div>
   <div class="upf-report-label">
-    <div class="rpt-title">HUMAN RESOURCE MANAGEMENT SYSTEM<?= $reportScope && $reportScope !== 'HQ' ? ' — '.htmlspecialchars($reportScope) : '' ?></div>
+    <div class="rpt-title">HUMAN RESOURCE ADMINISTRATION MANAGEMENT SYSTEM<?= $reportScope && $reportScope !== 'HQ' ? ' — '.htmlspecialchars($reportScope) : '' ?></div>
     <div class="rpt-meta">Generated on: <?= date('j/F/Y') ?><?php if ($search): ?> &nbsp;|&nbsp; Filter: "<?= htmlspecialchars($search) ?>"<?php endif; ?></div>
   </div>
 </div>

@@ -19,6 +19,60 @@
   --shadow-md: 0 4px 14px rgba(15,23,42,.08);
 }
 *{box-sizing:border-box}
+
+/* ===== Light theme (explicit) ===== */
+:root[data-theme='light']{
+  --bg:#f1f4f9; --card:#ffffff; --border:#e5e9f0;
+  --text:#1a2236; --muted:#64748b;
+  --navy-50:#eef2f9; --navy-100:#dbe3f1; --navy-200:#b3c4de;
+  --navy-500:#3a5a8f; --navy-600:#2c4775; --navy-700:#1f3559;
+  --navy-800:#15243d; --navy-900:#0d1629;
+}
+
+/* ===== Dark theme ===== */
+:root[data-theme='dark']{
+  --navy-50:#1a2130; --navy-100:#232c3e; --navy-200:#334052;
+  --navy-500:#6482b8; --navy-600:#7a97c9; --navy-700:#a5b9dc;
+  --navy-800:#cdd9ec; --navy-900:#e6ecf6;
+  --primary:hsl(212 30% 74%);
+  --primary-700:hsl(212 28% 82%);
+  --bg:#0f1420; --card:#171e2e; --border:#2a3346;
+  --text:#e7ecf5; --muted:#9aa7bd;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:0 4px 14px rgba(0,0,0,.45);
+  --gold:#e6b93d; --gold-soft:#6b5a20;
+  --green:#4ade80; --green-soft:#122b1c;
+  --red:#f87171; --red-soft:#3b1a1a;
+  --amber:#fbbf24; --amber-soft:#3a2e12;
+  --purple:#a78bfa; --purple-soft:#271b3d;
+}
+:root[data-theme='dark'] .topbar{background:linear-gradient(135deg,#141b2b 0%,#1b2436 100%);border-bottom:3px solid var(--gold)}
+:root[data-theme='dark'] .sidebar{background:linear-gradient(180deg,#121826 0%,#0c1119 100%)}
+:root[data-theme='dark'] body{background:var(--bg);color:var(--text)}
+:root[data-theme='dark'] .footer{background:#131a29;border-top:1px solid var(--border)}
+:root[data-theme='dark'] .stat{background:var(--card)}
+:root[data-theme='dark'] .stat .value{color:var(--text)}
+:root[data-theme='dark'] table, :root[data-theme='dark'] .table-wrap{background:var(--card)}
+:root[data-theme='dark'] th{background:var(--navy-100);color:var(--navy-900)}
+:root[data-theme='dark'] tbody tr:hover td{background:#1d2536}
+:root[data-theme='dark'] input[type=text],:root[data-theme='dark'] input[type=password],:root[data-theme='dark'] input[type=date],:root[data-theme='dark'] input[type=tel],:root[data-theme='dark'] input[type=email],:root[data-theme='dark'] input[type=number],:root[data-theme='dark'] select,:root[data-theme='dark'] textarea{background:#111827;color:var(--text);border-color:#2a3346}
+:root[data-theme='dark'] .bi-secondary{background:var(--navy-100);color:var(--navy-900);border-color:var(--border)}
+:root[data-theme='dark'] .badge-admin{background:var(--navy-100);color:var(--navy-900)}
+:root[data-theme='dark'] .login-card{background:#171e2e}
+:root[data-theme='dark'] .branch-card{background:var(--card)}
+:root[data-theme='dark'] .modal-drawer{background:#171e2e}
+:root[data-theme='dark'] .modal-foot{background:#131a29}
+:root[data-theme='dark'] .modal-section{background:var(--navy-100)}
+:root[data-theme='dark'] .drop-zone{background:#111827}
+:root[data-theme='dark'] .dropdown-wrap,.dropdown{background:var(--card);color:var(--text)}
+
+/* Theme toggle icon visibility */
+.ico-theme{width:18px;height:18px}
+.theme-sun{display:none}
+.theme-moon{display:block}
+:root[data-theme='dark'] .theme-sun{display:block}
+:root[data-theme='dark'] .theme-moon{display:none}
+
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;font-size:14px;line-height:1.5}
 a{color:var(--primary);text-decoration:none}
 a:hover{text-decoration:underline}
