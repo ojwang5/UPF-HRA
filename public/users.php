@@ -18,12 +18,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
         $dirId = isset($_POST['directorate_id']) && $_POST['directorate_id'] !== '' ? (int)$_POST['directorate_id'] : null;
+        $unitId = isset($_POST['unit_id']) && $_POST['unit_id'] !== '' ? (int)$_POST['unit_id'] : null;
 
         if (!in_array($role, creatable_roles($user), true)) {
             flash('err','You cannot assign that role.'); header('Location:/users.php'); exit;
         }
         if ($uname===''||$fname===''||strlen($pw)<4) {
             flash('err','Username, full name, and password (min 4 chars) are required.'); header('Location:/users.php'); exit;
+        }
+
+        // Functional command accounts must be anchored to a directorate (and unit).
+        $functional = in_array($role, ['directorate_commander','unit_commander'], true);
+        if ($functional) {
+            if (!is_superadmin($user)) {
+                $dirId  = (int)$user['directorate_id'] ?: $dirId;
+                $unitId = ($role === 'unit_commander') ? ((int)$user['unit_id'] ?: $unitId) : null;
+            }
+            if (!$dirId) { flash('err','A directorate is required for functional command accounts.'); header('Location:/users.php'); exit; }
+            if ($unitId) {
+                $ownDir = (int)$pdo->query("SELECT directorate_id FROM units WHERE id=$unitId")->fetchColumn();
+                if ((int)$ownDir !== (int)$dirId) $unitId = null;
+            }
+            if ($role === 'unit_commander' && !$unitId) { flash('err','A unit under the selected directorate is required for unit commander accounts.'); header('Location:/users.php'); exit; }
         }
 
         $rid=$did=$sid=$pid=null;
@@ -38,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pid = $pid ?: ($user['post_id']     ? (int)$user['post_id']     : null);
         }
         try {
-            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,email,phone,directorate_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-                ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $email ?: null, $phone ?: null, $dirId]);
+            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,email,phone,directorate_id,unit_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+                ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $email ?: null, $phone ?: null, $dirId, $unitId]);
             log_activity('Add User', 'user', "{$fname} ({$uname})", (int)$pdo->lastInsertId(), "Role: ".role_label($role));
             flash('msg', 'Account created for '.$fname.'.');
         } catch (\PDOException $e) {
@@ -75,9 +91,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)$_POST['id'];
         $t  = $pdo->query("SELECT * FROM users WHERE id=$id")->fetch();
         if ($t && can_manage_user($user, $t) && $id !== (int)$user['id']) {
-            $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
+            try {
+                $pdo->beginTransaction();
+                // Null out every FK that points at this user so the DELETE won't
+                // trip FOREIGN KEY constraint failures (activity_log, reports,
+                // leave_requests, daily_status, notifications, transfers, ...).
+                $tables = $pdo->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($tables as $tbl) {
+                    if ($tbl === 'users') continue;
+                    foreach ($pdo->query("PRAGMA foreign_key_list(\"{$tbl}\")") as $fk) {
+                        if (strcasecmp($fk['table'], 'users') !== 0) continue;
+                        $col = $fk['from'];
+                        $pdo->prepare("UPDATE \"{$tbl}\" SET \"{$col}\"=NULL WHERE \"{$col}\"=?")->execute([$id]);
+                    }
+                }
+                $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
+                $pdo->commit();
+            } catch (\Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                flash('err', 'Could not delete account: '.$e->getMessage());
+                header('Location:/users.php'); exit;
+            }
             log_activity('Delete User', 'user', $t['full_name'], $id);
             flash('msg', 'Account removed.');
+        } else {
+            flash('err', 'You cannot delete this account.');
         }
     }
 
@@ -86,13 +124,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 /* ── Fetch ── */
 $viewId  = isset($_GET['view']) ? (int)$_GET['view'] : 0;
-$users = $pdo->query("SELECT u.*, rg.name AS region_name, dv.name AS division_name, st.name AS station_name, pt.name AS post_name, dir.name AS directorate_name
+$users = $pdo->query("SELECT u.*, rg.name AS region_name, dv.name AS division_name, st.name AS station_name, pt.name AS post_name, dir.name AS directorate_name, un.name AS unit_name
     FROM users u
     LEFT JOIN regions     rg  ON rg.id=u.region_id
     LEFT JOIN divisions   dv  ON dv.id=u.division_id
     LEFT JOIN stations    st  ON st.id=u.station_id
     LEFT JOIN posts       pt  ON pt.id=u.post_id
     LEFT JOIN directorates dir ON dir.id=u.directorate_id
+    LEFT JOIN units       un  ON un.id=u.unit_id
     ORDER BY u.role, u.full_name")->fetchAll();
 $users = array_filter($users, fn($u) => $u['id'] !== (int)$user['id'] && can_manage_user($user, $u));
 
@@ -102,6 +141,7 @@ $divisions = $pdo->query("SELECT d.*,r.name AS region_name FROM divisions d JOIN
 $stations  = $pdo->query("SELECT s.*,d.name AS division_name FROM stations s JOIN divisions d ON d.id=s.division_id ORDER BY division_name,s.name")->fetchAll();
 $posts     = $pdo->query("SELECT p.*,s.name AS station_name FROM posts p JOIN stations s ON s.id=p.station_id ORDER BY station_name,p.name")->fetchAll();
 $directorates = $pdo->query("SELECT * FROM directorates WHERE active=1 ORDER BY name")->fetchAll();
+$units = $pdo->query("SELECT u.id, u.directorate_id, u.name, d.name AS dir_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.active=1 ORDER BY d.name, u.name")->fetchAll();
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -154,7 +194,7 @@ include __DIR__ . '/../includes/header.php';
           <td style="font-size:12px;white-space:nowrap"><?= e($u['phone'] ?? '—') ?></td>
           <td style="font-size:12px;color:var(--muted)">
             <?= implode(' › ', array_filter([e($u['region_name']??''), e($u['division_name']??''), e($u['station_name']??''), e($u['post_name']??'')])) ?: '—' ?>
-            <?php if ($u['directorate_name']): ?><div style="font-size:11px;margin-top:2px"><span class="badge badge-leave"><?= e($u['directorate_name']) ?></span></div><?php endif; ?>
+            <?php if ($u['directorate_name']): ?><div style="font-size:11px;margin-top:2px"><span class="badge badge-leave"><?= e($u['directorate_name']) ?><?= $u['unit_name'] ? ' › '.e($u['unit_name']) : '' ?></span></div><?php endif; ?>
           </td>
           <td>
             <div style="display:flex;gap:4px;justify-content:center;flex-wrap:nowrap">
@@ -268,10 +308,19 @@ include __DIR__ . '/../includes/header.php';
             </div>
             <div class="form-row">
               <div class="form-group" style="flex:1">
-                <label>Directorate (receives transfer alerts)</label>
-                <select name="directorate_id">
+                <label>Directorate / Command</label>
+                <select name="directorate_id" id="dir-sel">
                   <option value="">— none —</option>
                   <?php foreach ($directorates as $d): ?><option value="<?= $d['id'] ?>"><?= e($d['name']) ?></option><?php endforeach; ?>
+                </select>
+              </div>
+              <div class="form-group" style="flex:1" id="f-unit">
+                <label>Unit (functional unit commander)</label>
+                <select name="unit_id" id="unit-sel">
+                  <option value="">— select unit —</option>
+                  <?php foreach ($units as $u): ?>
+                    <option value="<?= $u['id'] ?>" data-dir="<?= (int)$u['directorate_id'] ?>"><?= e($u['dir_name'].' › '.$u['name']) ?></option>
+                  <?php endforeach; ?>
                 </select>
               </div>
             </div>
@@ -407,15 +456,33 @@ include __DIR__ . '/../includes/header.php';
       div: document.getElementById('f-div'),
       sta: document.getElementById('f-sta'),
       pst: document.getElementById('f-pst'),
+      unit: document.getElementById('f-unit'),
     };
-    var show = {reg:1,div:1,sta:1,pst:1};
-    if(r==='superadmin')          show={reg:0,div:0,sta:0,pst:0};
-    else if(r==='regional_commander') show={reg:1,div:0,sta:0,pst:0};
-    else if(r==='division_commander') show={reg:1,div:1,sta:0,pst:0};
-    else if(r==='station_commander')  show={reg:1,div:1,sta:1,pst:0};
+    var show = {reg:1,div:1,sta:1,pst:1,unit:0};
+    if(r==='superadmin')                show={reg:0,div:0,sta:0,pst:0,unit:0};
+    else if(r==='regional_commander')   show={reg:1,div:0,sta:0,pst:0,unit:0};
+    else if(r==='division_commander')   show={reg:1,div:1,sta:0,pst:0,unit:0};
+    else if(r==='station_commander')    show={reg:1,div:1,sta:1,pst:0,unit:0};
+    else if(r==='directorate_commander')show={reg:0,div:0,sta:0,pst:0,unit:0};
+    else if(r==='unit_commander')       show={reg:0,div:0,sta:0,pst:0,unit:1};
     Object.entries(show).forEach(function([k,v]){ if(f[k]) f[k].style.display=v?'':'none'; });
+    if(f.unit && show.unit) filterUnitsByDir();
   }
   window.updateScopeFields = updateScopeFields;
+
+  function filterUnitsByDir(){
+    var dir = document.getElementById('dir-sel')?.value || '';
+    var unitSel = document.getElementById('unit-sel');
+    var first = null;
+    Array.from(unitSel.options).forEach(function(o){
+      var show = o.value === '' || (o.dataset.dir === dir);
+      o.style.display = show ? '' : 'none';
+      if(show && first === null) first = o.value;
+    });
+    if (!Array.from(unitSel.options).some(function(o){ return o.value && o.dataset.dir === dir && o.selected; })) unitSel.value = first || '';
+  }
+  var dirSel = document.getElementById('dir-sel');
+  if(dirSel) dirSel.addEventListener('change', function(){ if(document.getElementById('f-unit').style.display !== 'none') filterUnitsByDir(); });
   updateScopeFields();
 
   // Open edit modal for a specific user

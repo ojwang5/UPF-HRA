@@ -11,13 +11,14 @@ $date   = $_GET['date']   ?? date('Y-m-d');
 $detail = $_GET['detail'] ?? ''; // status to drill into
 
 if (valid_date($date)) { run_auto_status($pdo, $date, $user); }
+run_leave_countdown_notifications($pdo);
 
 $rows = hierarchy_summary($pdo, $date, $user);
 $tot  = sum_totals($rows);
 
 /* ── Detail drill-down: list personnel with this status for the date ── */
 $detailPersonnel = [];
-if ($detail && in_array($detail, ALL_STATUSES, true)) {
+if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')) {
     [$scopeW, $scopeP] = scope_where($user, 'e');
     $dsStatus = ($detail === 'on_leave') ? 'leave' : $detail;
     $stmt = $pdo->prepare(
@@ -127,7 +128,7 @@ $cards = [
 </div>
 
 <!-- Detail Drill-down Panel -->
-<?php if ($detail && in_array($detail, ALL_STATUSES, true)): ?>
+<?php if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')): ?>
 <div id="detail-panel" class="card" style="border-left:4px solid var(--primary);margin-bottom:8px;scroll-margin-top:80px">
   <div class="chr">
     <div>
@@ -135,7 +136,10 @@ $cards = [
       <div class="muted" style="font-size:12px;margin-top:2px"><?= count($detailPersonnel) ?> personnel</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <a class="btn-icon bi-secondary bi-sm" href="/export-personnel.php?format=pdf&detail_status=<?= urlencode($detail) ?>&detail_date=<?= urlencode($date) ?>" target="_blank" title="Print this list"><?= ICO_PRINT ?></a>
+      <?php $exportStatus = ($detail === 'on_leave') ? 'leave' : $detail; ?>
+      <a class="btn-icon bi-secondary bi-sm" href="/export-personnel.php?format=csv&status=<?= urlencode($exportStatus) ?>&date=<?= urlencode($date) ?>" target="_blank" title="Export this list (CSV)"><?= ICO_DL ?></a>
+      <a class="btn-icon bi-secondary bi-sm" href="/export-personnel.php?format=excel&status=<?= urlencode($exportStatus) ?>&date=<?= urlencode($date) ?>" target="_blank" title="Export this list (Excel)"><?= ICO_DL ?></a>
+      <a class="btn-icon bi-secondary bi-sm" href="/export-personnel.php?format=pdf&status=<?= urlencode($exportStatus) ?>&date=<?= urlencode($date) ?>" target="_blank" title="Print this list"><?= ICO_PRINT ?></a>
       <a class="btn-icon bi-secondary bi-sm" href="/?date=<?= urlencode($date) ?>" title="Close"><?= ICO_CANCEL ?></a>
     </div>
   </div>

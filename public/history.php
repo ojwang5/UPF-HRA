@@ -23,11 +23,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 }
 
 $statusFilter = $_GET['status'] ?? '';
+$allowedStatuses = ['pending_superadmin','pending_commander','submitted','reverted','approved','rejected'];
 $addWhere=''; $addP=[];
-if ($statusFilter && in_array($statusFilter,['pending_superadmin','pending_commander','approved','rejected'],true)) {
+if ($statusFilter && in_array($statusFilter, $allowedStatuses, true)) {
     $addWhere=' AND r.status=?'; $addP[]=$statusFilter;
 }
-$reports=$pdo->prepare("SELECT r.*, u.full_name AS generator, rv.full_name AS reviewer FROM reports r LEFT JOIN users u ON u.id=r.generated_by LEFT JOIN users rv ON rv.id=r.reviewed_by WHERE $scopeW $addWhere ORDER BY CASE r.status WHEN 'pending_superadmin' THEN 1 WHEN 'pending_commander' THEN 1 ELSE 2 END, r.generated_at DESC LIMIT 200");
+$reports=$pdo->prepare("SELECT r.*, u.full_name AS generator, rv.full_name AS reviewer FROM reports r LEFT JOIN users u ON u.id=r.generated_by LEFT JOIN users rv ON rv.id=r.reviewed_by WHERE $scopeW $addWhere ORDER BY CASE r.status WHEN 'pending_superadmin' THEN 1 WHEN 'pending_commander' THEN 1 WHEN 'submitted' THEN 1 WHEN 'reverted' THEN 2 ELSE 3 END, r.generated_at DESC LIMIT 200");
 $reports->execute(array_merge($scopeP,$addP));
 $reports=$reports->fetchAll();
 
@@ -38,7 +39,9 @@ if (!empty($_GET['id'])) {
 }
 
 function rep_pill(string $s): string {
-    $map=['pending_superadmin'=>['Pending HQ','badge-sick'],'pending_commander'=>['Pending Cmd','badge-sick'],'approved'=>['Approved','badge-present'],'rejected'=>['Rejected','badge-awol']];
+    $map=['pending_superadmin'=>['Pending HQ','badge-sick'],'pending_commander'=>['Pending Cmd','badge-sick'],
+          'submitted'=>['In Review','badge-on_course'],'reverted'=>['Returned for Correction','badge-awol'],
+          'approved'=>['Approved','badge-present'],'rejected'=>['Rejected','badge-awol']];
     [$l,$c]=$map[$s]??[$s,'badge-admin'];
     return '<span class="badge '.$c.'">'.htmlspecialchars($l).'</span>';
 }
@@ -56,7 +59,7 @@ include __DIR__ . '/../includes/header.php';
           <div class="form-group"><label>Status</label>
             <select name="status">
               <option value="">All</option>
-              <?php foreach(['pending_superadmin'=>'Pending HQ','pending_commander'=>'Pending Cmd','approved'=>'Approved','rejected'=>'Rejected'] as $k=>$v): ?>
+              <?php foreach(['pending_superadmin'=>'Pending HQ','pending_commander'=>'Pending Cmd','submitted'=>'In Review','reverted'=>'Returned for Correction','approved'=>'Approved','rejected'=>'Rejected'] as $k=>$v): ?>
                 <option value="<?= $k ?>" <?= $statusFilter===$k?'selected':'' ?>><?= e($v) ?></option>
               <?php endforeach; ?>
             </select>

@@ -312,6 +312,139 @@ function migrate(PDO $pdo): void {
     if ($v < 10) {
         _migrate_v10($pdo);
     }
+
+    if ($v < 11) {
+        _migrate_v11($pdo);
+    }
+
+    if ($v < 12) {
+        _migrate_v12($pdo);
+    }
+}
+
+/* ─── v12: functional command roles (Directorate / Unit Commander) ─── */
+function _migrate_v12(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        // Users: functional command binds an account to a directorate and optional unit.
+        $uCols = array_column($pdo->query("PRAGMA table_info(users)")->fetchAll(), 'name');
+        if (!in_array('unit_id', $uCols, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN unit_id INTEGER REFERENCES units(id)");
+        }
+
+        // Reports + leave requests: record the functional origin so directorate/unit
+        // commanders can see their own command's reports and leave records.
+        $rCols = array_column($pdo->query("PRAGMA table_info(reports)")->fetchAll(), 'name');
+        if (!in_array('directorate_id', $rCols, true)) {
+            $pdo->exec("ALTER TABLE reports ADD COLUMN directorate_id INTEGER REFERENCES directorates(id)");
+        }
+        if (!in_array('unit_id', $rCols, true)) {
+            $pdo->exec("ALTER TABLE reports ADD COLUMN unit_id INTEGER REFERENCES units(id)");
+        }
+        $lCols = array_column($pdo->query("PRAGMA table_info(leave_requests)")->fetchAll(), 'name');
+        if (!in_array('directorate_id', $lCols, true)) {
+            $pdo->exec("ALTER TABLE leave_requests ADD COLUMN directorate_id INTEGER REFERENCES directorates(id)");
+        }
+        if (!in_array('unit_id', $lCols, true)) {
+            $pdo->exec("ALTER TABLE leave_requests ADD COLUMN unit_id INTEGER REFERENCES units(id)");
+        }
+
+        // Demo functional command accounts (idempotent) + a few demo personnel so
+        // the new roles can see staff on a fresh seed. On real databases we only
+        // create the accounts (guarded by $createdOps) and never reshuffle staff.
+        $opsId    = (int)$pdo->query("SELECT id FROM directorates WHERE code='OPS'")->fetchColumn();
+        $gdId     = $opsId ? (int)$pdo->query("SELECT id FROM units WHERE code='GD'")->fetchColumn() : 0;
+        $dirExists = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE username='dir_ops'")->fetchColumn() > 0;
+        $createdOps = $opsId && !$dirExists;
+        if ($createdOps) {
+            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,directorate_id,unit_id) VALUES (?,?,?,?,?,?)")
+                ->execute(['dir_ops', password_hash('dir123', PASSWORD_DEFAULT), 'Operations Directorate Commander', 'directorate_commander', $opsId, null]);
+            if ($gdId && (int)$pdo->query("SELECT COUNT(*) FROM users WHERE username='unit_gd'")->fetchColumn() === 0) {
+                $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,directorate_id,unit_id) VALUES (?,?,?,?,?,?)")
+                    ->execute(['unit_gd', password_hash('unit123', PASSWORD_DEFAULT), 'General Duty Unit Commander', 'unit_commander', $opsId, $gdId]);
+            }
+            if ((int)$pdo->query("SELECT COUNT(*) FROM employees WHERE directorate='Operations'")->fetchColumn() === 0) {
+                $pdo->exec("UPDATE employees SET directorate='Operations', unit='General Duty' WHERE id IN (SELECT id FROM employees WHERE active=1 ORDER BY service_no LIMIT 8)");
+            }
+        } elseif ((int)$pdo->query("SELECT COUNT(*) FROM users WHERE username='dir_ops'")->fetchColumn() === 0 && $opsId) {
+            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,directorate_id,unit_id) VALUES (?,?,?,?,?,?)")
+                ->execute(['dir_ops', password_hash('dir123', PASSWORD_DEFAULT), 'Operations Directorate Commander', 'directorate_commander', $opsId, null]);
+        }
+
+        $pdo->exec("PRAGMA user_version = 12");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
+}
+
+/* ─── v11: hierarchical report workflow, leave destinations/countdown, course & school registries ─── */
+function _migrate_v11(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        // Reports: track which command level each report currently awaits review at,
+        // how many times it has been re-submitted, and a log of every workflow action.
+        $rCols = array_column($pdo->query("PRAGMA table_info(reports)")->fetchAll(), 'name');
+        if (!in_array('current_level', $rCols, true)) {
+            $pdo->exec("ALTER TABLE reports ADD COLUMN current_level TEXT");
+        }
+        if (!in_array('revision', $rCols, true)) {
+            $pdo->exec("ALTER TABLE reports ADD COLUMN revision INTEGER NOT NULL DEFAULT 0");
+        }
+        // Back-fill: pending reports go to HQ, everything else is settled.
+        $pdo->exec("UPDATE reports SET current_level = CASE status
+                        WHEN 'pending_superadmin' THEN 'hq'
+                        WHEN 'pending_commander'  THEN 'region'
+                        ELSE NULL END
+                    WHERE current_level IS NULL");
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS report_actions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_id   INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+                action      TEXT NOT NULL,
+                from_level  TEXT,
+                to_level    TEXT,
+                user_id     INTEGER REFERENCES users(id),
+                notes       TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_report_actions_report ON report_actions(report_id);
+        ");
+
+        // Leave: record where the officer is going + flag commanders notified on expiry.
+        $lcCols = array_column($pdo->query("PRAGMA table_info(leave_requests)")->fetchAll(), 'name');
+        if (!in_array('destination', $lcCols, true)) {
+            $pdo->exec("ALTER TABLE leave_requests ADD COLUMN destination TEXT");
+        }
+        if (!in_array('expiry_notified', $lcCols, true)) {
+            $pdo->exec("ALTER TABLE leave_requests ADD COLUMN expiry_notified INTEGER NOT NULL DEFAULT 0");
+        }
+
+        // Course + training school registries (managed centrally; on-course rows still store free text).
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS courses (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL UNIQUE,
+                nature        TEXT NOT NULL DEFAULT 'Professional',
+                duration_days INTEGER,
+                created_by    INTEGER REFERENCES users(id),
+                created_at    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE TABLE IF NOT EXISTS training_schools (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                place       TEXT,
+                created_by  INTEGER REFERENCES users(id),
+                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+        ");
+        $pdo->exec("PRAGMA user_version = 11");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
 }
 
 /* ─── v10: transfer reporting workflow + directorate-targeted notifications ─── */

@@ -10,7 +10,8 @@ $search        = trim($_POST['q'] ?? $_GET['q'] ?? '');
 $requestedCols = $_POST['cols'] ?? $_GET['cols'] ?? null;
 $statusFilter  = $_GET['status'] ?? $_POST['status'] ?? '';   // e.g. present, awol, sick …
 $dateFilter    = $_GET['date']   ?? $_POST['date']   ?? date('Y-m-d');
-$validStatuses = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','unrecorded'];
+$validStatuses = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed','unrecorded'];
+if ($statusFilter === 'on_leave') $statusFilter = 'leave'; // dashboard alias
 if ($statusFilter !== '' && !in_array($statusFilter, $validStatuses, true)) $statusFilter = '';
 
 /* ── Column definitions ── */
@@ -93,7 +94,8 @@ $rows = $stmt->fetchAll();
 /* ── Human-readable labels for title ── */
 $statusLabels = ['present'=>'Present','awol'=>'AWOL','leave'=>'On Leave','sick'=>'Sick',
                  'suspended'=>'Suspended','disciplinary'=>'Under Disciplinary','on_duty'=>'On Duty',
-                 'on_course'=>'On Course','deserted'=>'Deserted','unrecorded'=>'Unrecorded'];
+                 'on_course'=>'On Course','deserted'=>'Deserted','special_assignment'=>'Special Assignment',
+                 'undeployed'=>'Undeployed','unrecorded'=>'Unrecorded'];
 $statusLabel = $statusFilter !== '' ? ($statusLabels[$statusFilter] ?? ucfirst($statusFilter)) : 'All Personnel';
 $dateFmt     = date('Y-m-d', strtotime($dateFilter));
 $title       = 'UPF Personnel — '.$statusLabel.' — '.$dateFmt;

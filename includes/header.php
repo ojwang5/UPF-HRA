@@ -34,6 +34,8 @@ $all_nav = [
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>'],
   'hierarchy'    => ['href'=>'/hierarchy.php','label'=>'Structure','min_rank'=>6,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v4m0 0H8a2 2 0 0 0-2 2v1m6-3h4a2 2 0 0 1 2 2v1"/><circle cx="6" cy="17" r="2"/><circle cx="12" cy="17" r="2"/><circle cx="18" cy="17" r="2"/></svg>'],
+  'directorate'  => ['href'=>'/directorate.php','label'=>'My Directorate','roles'=>['directorate_commander','unit_commander'],
+    'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1"/><path d="M14 9h1"/><path d="M9 13h1"/><path d="M14 13h1"/><rect x="8" y="16" width="8" height="5"/></svg>'],
   'notifications'=> ['href'=>'/notifications.php','label'=>'Notifications','min_rank'=>1,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'],
   'activity'      => ['href'=>'/activity-log.php','label'=>'Activity Log','min_rank'=>4,
@@ -47,7 +49,12 @@ $all_nav = [
 $nav_items = [];
 $userRank = role_rank($role);
 foreach ($all_nav as $k => $n) {
-    if ($user && $userRank >= $n['min_rank']) { $n['key']=$k; $nav_items[]=$n; }
+    if (!$user) continue;
+    if (isset($n['roles'])) {
+        if (in_array($role, $n['roles'], true)) { $n['key']=$k; $nav_items[]=$n; }
+    } elseif ($userRank >= $n['min_rank']) {
+        $n['key']=$k; $nav_items[]=$n;
+    }
 }
 $unreadCount = $user ? unread_notification_count($user) : 0;
 ?><!doctype html>

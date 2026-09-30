@@ -127,6 +127,8 @@ function hierarchy_summary(PDO $pdo, string $date, array $user): array {
         'superadmin'         => 'region',
         'regional_commander' => 'division',
         'division_commander' => 'station',
+        'directorate_commander',
+        'unit_commander'     => 'region',
         default              => 'post',
     };
 
@@ -387,4 +389,163 @@ function can_approve_leave(array $user, string $leaveType = 'Annual'): bool {
         return role_rank($user['role']) >= role_rank('regional_commander');
     }
     return role_rank($user['role']) >= role_rank('station_commander');
+}
+
+/* ═══ Hierarchical report workflow ═════════════════════════════════════
+ * Reports flow: post → station → division → region → HQ.
+ * Every report awaiting action at a level shows the reviewer two choices:
+ * "Continue & forward" (+ optional comments) or "Revert for correction".
+ * HQ (superadmin) can approve or revert. The Super Admin may switch the
+ * whole force to direct submission (report_submission_mode = 'direct'),
+ * in which case every generated report jumps straight to HQ.
+ *
+ * current_level stores the level currently reviewing: post|station|division|region|hq.
+ * A reverted report returns to current_level = scope_level (its originator).
+ */
+
+const REPORT_LEVELS = ['post' => 0, 'station' => 1, 'division' => 2, 'region' => 3, 'hq' => 4];
+const REPORT_LEVEL_LABELS = [
+    'post' => 'Post', 'station' => 'Station', 'division' => 'Division',
+    'region' => 'Region', 'hq' => 'HQ / Headquarters',
+];
+
+/** Next (higher) level in the chain. */
+function report_level_next(string $lvl): string {
+    $map = ['post' => 'station', 'station' => 'division', 'division' => 'region', 'region' => 'hq', 'hq' => 'hq'];
+    return $map[$lvl] ?? 'hq';
+}
+
+/** The reporting scope a given role generates (post/station/division/region/directorate/unit/hq). */
+function report_scope_for_user(array $user): string {
+    return match($user['role']) {
+        'superadmin'             => 'hq',
+        'regional_commander'     => 'region',
+        'division_commander'     => 'division',
+        'directorate_commander'  => 'directorate',
+        'unit_commander'         => 'unit',
+        'station_commander'      => 'station',
+        default                  => 'post',
+    };
+}
+
+/** The role that reviews reports sitting at a given level. */
+function report_review_role(string $lvl): string {
+    return match($lvl) {
+        'station'  => 'station_commander',
+        'division' => 'division_commander',
+        'region'   => 'regional_commander',
+        'hq'       => 'superadmin',
+        default    => '',
+    };
+}
+
+/** The command level the acting user manages (for "is this report mine to act on?"). */
+function report_level_for_user(array $user): string {
+    return match($user['role']) {
+        'superadmin'         => 'hq',
+        'regional_commander' => 'region',
+        'division_commander' => 'division',
+        'station_commander'  => 'station',
+        'post_commander'     => 'post',
+        default              => '',
+    };
+}
+
+/** True if the current user is allowed to take action on a given report row. */
+function can_act_on_report(array $user, array $report): bool {
+    $level = report_level_for_user($user);
+    if (!$level || ($report['current_level'] ?? '') !== $level) return false;
+    return match($level) {
+        'hq'       => true,
+        'region'   => (int)($report['region_id']  ?? 0)  === (int)$user['region_id'],
+        'division' => (int)($report['division_id'] ?? 0) === (int)$user['division_id'],
+        'station'  => (int)($report['station_id']  ?? 0) === (int)$user['station_id'],
+        'post'     => (int)($report['post_id']     ?? 0) === (int)$user['post_id'],
+        default    => false,
+    };
+}
+
+/** Compact label for a report's origin unit (from its scope_level). */
+function report_unit_label(PDO $pdo, array $r): string {
+    $scope = $r['scope_level'] ?? 'post';
+    if ($scope === 'force' || $scope === 'hq') return 'Force (HQ)';
+    if ($scope === 'directorate' || $scope === 'unit') {
+        $id  = (int)($r[$scope . '_id'] ?? 0);
+        if (!$id) return '—';
+        $tbl = $scope === 'directorate' ? 'directorates' : 'units';
+        $name = $pdo->query("SELECT name FROM {$tbl} WHERE id={$id}")->fetchColumn();
+        return $name ?: '—';
+    }
+    $col = ['region' => 'rg', 'division' => 'dv', 'station' => 'st', 'post' => 'pt'][$scope] ?? 'pt';
+    $tbl = ['rg' => 'regions', 'dv' => 'divisions', 'st' => 'stations', 'pt' => 'posts'][$col];
+    $id  = (int)($r[$scope . '_id'] ?? 0);
+    if (!$id) return '—';
+    $name = $pdo->query("SELECT name FROM {$tbl} WHERE id={$id}")->fetchColumn();
+    return $name ?: '—';
+}
+
+/** Notifies every user account that reviews a given level for this report's scope. */
+function notify_report_level(PDO $pdo, string $level, array $report, string $title, string $msg, array $opts = []): void {
+    require_once __DIR__ . '/notifications.php';
+    $role = report_review_role($level);
+    if (!$role) return;
+    $sql = "SELECT id, full_name FROM users WHERE role='{$role}'";
+    switch ($level) {
+        case 'station':  $sql .= " AND station_id="  . (int)$report['station_id'];  break;
+        case 'division': $sql .= " AND division_id=" . (int)$report['division_id']; break;
+        case 'region':   $sql .= " AND region_id="   . (int)$report['region_id'];   break;
+        case 'post':     $sql .= " AND post_id="     . (int)$report['post_id'];     break;
+    }
+    foreach ($pdo->query($sql)->fetchAll() as $u) {
+        notify($title, $msg, 'user', array_merge($opts, ['target_user_id' => (int)$u['id']]));
+    }
+}
+
+/* ═══ Leave countdown ═════════════════════════════════════════════════
+ * Counts down the days remaining on an approved leave towards 0 and
+ * notifies commanders once an officer's approved leave is about to end
+ * or has already expired (checked once per request).                  */
+
+/**
+ * Remaining days (0 = end/expired) for an approved leave request today.
+ * Before the leave starts the full issued days are shown.
+ */
+function leave_countdown(array $req): int {
+    $today = date('Y-m-d');
+    if ($today < $req['start_date']) return leave_days_between($req['start_date'], $req['end_date']);
+    if ($today > $req['end_date'])   return 0;
+    return leave_days_between($today, $req['end_date']);
+}
+
+/**
+ * One-shot notifications for approved leave ending within 5 days (or already over).
+ * Marks expiry_notified=1 so commanders are alerted exactly once per request.
+ */
+function run_leave_countdown_notifications(PDO $pdo): void {
+    require_once __DIR__ . '/notifications.php';
+    $today = date('Y-m-d');
+    $soon  = date('Y-m-d', strtotime('+5 days'));
+    $rows = $pdo->query("SELECT lr.*, e.full_name, e.region_id, e.division_id, e.station_id, e.post_id
+                        FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id
+                        WHERE lr.status='approved' AND lr.expiry_notified=0
+                          AND lr.end_date <= '{$soon}'")
+        ->fetchAll();
+    foreach ($rows as $r) {
+        $days = leave_countdown($r);
+        $expired = $today > $r['end_date'];
+        $verb = $expired ? 'has EXPIRED' : ($days <= 2 ? 'ends in '.$days.' day'.($days === 1 ? '' : 's') : 'will end in '.$days.' days');
+        $msg = $r['full_name'].' — approved '.$r['leave_type'].' leave '.$verb." (was due {$r['end_date']}).";
+        // Commanders chain above the officer's post
+        $chain = $pdo->prepare("SELECT id, full_name, role FROM users WHERE role=? AND station_id=?");
+        $chain->execute(['station_commander', (int)$r['station_id']]);
+        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$r['full_name'], $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
+        $chain = $pdo->prepare("SELECT id, full_name, role FROM users WHERE role=? AND division_id=?");
+        $chain->execute(['division_commander', (int)$r['division_id']]);
+        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$r['full_name'], $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
+        $chain = $pdo->prepare("SELECT id, full_name, role FROM users WHERE role=? AND region_id=?");
+        $chain->execute(['regional_commander', (int)$r['region_id']]);
+        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$r['full_name'], $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
+        notify_superadmins('Leave expiring — '.$r['full_name'], $msg, ['kind'=>'leave', 'link'=>'/leave-requests.php']);
+        $pdo->prepare("UPDATE leave_requests SET expiry_notified=1 WHERE id=?")->execute([(int)$r['id']]);
+    }
 }

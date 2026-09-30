@@ -21,6 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action']??'') === 'create_
     $role  = $_POST['role']     ?? 'officer';
     $email = trim($_POST['email'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
+    $dirId  = isset($_POST['directorate_id']) && $_POST['directorate_id'] !== '' ? (int)$_POST['directorate_id'] : null;
+    $unitId = isset($_POST['unit_id']) && $_POST['unit_id'] !== '' ? (int)$_POST['unit_id'] : null;
 
     if (!in_array($role, creatable_roles($user), true)) {
         flash('err','You cannot assign that role.');
@@ -31,6 +33,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action']??'') === 'create_
         $did = $_POST['division_id'] ? (int)$_POST['division_id'] : null;
         $sid = $_POST['station_id']  ? (int)$_POST['station_id']  : null;
         $pid = $_POST['post_id']     ? (int)$_POST['post_id']     : null;
+        $functional = in_array($role, ['directorate_commander','unit_commander'], true);
+        if ($functional) {
+            // Anchor a functional account to the directorate (or unit being viewed).
+            $viewDirId = ($type === 'directorate') ? (int)$entity['id'] : (int)($entity['directorate_id'] ?? 0);
+            $dirId = $dirId ?: ($viewDirId ?: null);
+            if ($role === 'unit_commander' && $type === 'unit' && !$unitId) $unitId = (int)$entity['id'];
+            if ($unitId) {
+                $ownDir = (int)$pdo->query("SELECT directorate_id FROM units WHERE id=$unitId")->fetchColumn();
+                if ((int)$ownDir !== (int)$dirId) $unitId = null;
+            }
+            if (!$dirId || ($role === 'unit_commander' && !$unitId)) {
+                flash('err','Functional command accounts need a directorate and (for unit commanders) a unit.');
+                header("Location:/structure-view.php?type={$type}&id={$id}"); exit;
+            }
+        }
         if (!is_superadmin($user)) {
             $rid = $rid ?: ($user['region_id']   ? (int)$user['region_id']   : null);
             $did = $did ?: ($user['division_id'] ? (int)$user['division_id'] : null);
@@ -38,8 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action']??'') === 'create_
             $pid = $pid ?: ($user['post_id']     ? (int)$user['post_id']     : null);
         }
         try {
-            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?)")
-                ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $email ?: null, $phone ?: null]);
+            $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,directorate_id,unit_id,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+                ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $dirId, $unitId, $email ?: null, $phone ?: null]);
             log_activity('Add User', 'user', "{$fname} ({$uname})", (int)$pdo->lastInsertId(), "Created from {$type} view");
             flash('msg', "Account created for {$fname}.");
         } catch (\PDOException $e) {
@@ -88,6 +105,8 @@ $divisions = $pdo->query("SELECT d.*,r.name AS rname FROM divisions d JOIN regio
 $stations  = $pdo->query("SELECT s.*,d.name AS dname FROM stations s JOIN divisions d ON d.id=s.division_id ORDER BY dname,s.name")->fetchAll();
 $posts     = $pdo->query("SELECT p.*,s.name AS sname FROM posts p JOIN stations s ON s.id=p.station_id ORDER BY sname,p.name")->fetchAll();
 $creatableRoles = creatable_roles($user);
+$directorates = $pdo->query("SELECT * FROM directorates WHERE active=1 ORDER BY name")->fetchAll();
+$units        = $pdo->query("SELECT u.id, u.directorate_id, u.name, d.name AS dir_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.active=1 ORDER BY d.name, u.name")->fetchAll();
 
 // Gender breakdown
 $male   = count(array_filter($personnel, fn($e)=>$e['gender']==='M'));
@@ -242,10 +261,50 @@ dialog::backdrop { background:rgba(0,0,0,.45) }
         <div class="form-group"><label>Phone</label><input type="tel" name="phone"></div>
       </div>
       <div class="form-group"><label>Role <span style="color:var(--red)">*</span></label>
-        <select name="role" required>
+        <select name="role" required id="sv-role-sel" onchange="svToggleScope()">
           <?php foreach ($creatableRoles as $r): ?><option value="<?= $r ?>"><?= role_label($r) ?></option><?php endforeach; ?>
         </select>
       </div>
+      <div id="sv-func-scope" style="display:none">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-top:4px">Functional Command Scope</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group"><label>Directorate</label>
+            <select name="directorate_id" id="sv-dir-sel">
+              <?php foreach ($directorates as $d): ?><option value="<?= $d['id'] ?>" <?= ($type==='directorate' && (int)$d['id']===(int)$entity['id']) ? 'selected':'' ?>><?= e($d['name']) ?></option><?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group" id="sv-unit-fld" style="display:none"><label>Unit</label>
+            <select name="unit_id" id="sv-unit-sel">
+              <option value="">— select unit —</option>
+              <?php foreach ($units as $u): ?><option value="<?= $u['id'] ?>" data-dir="<?= (int)$u['directorate_id'] ?>" <?= ($type==='unit' && (int)$u['id']===(int)$entity['id']) ? 'selected':'' ?>><?= e($u['dir_name'].' › '.$u['name']) ?></option><?php endforeach; ?>
+            </select>
+          </div>
+        </div>
+      </div>
+      <script>
+        function svToggleScope(){
+          var r = document.getElementById('sv-role-sel')?.value || '';
+          var f = document.getElementById('sv-func-scope');
+          var u = document.getElementById('sv-unit-fld');
+          if(f) f.style.display = (r==='directorate_commander' || r==='unit_commander') ? '' : 'none';
+          if(u) u.style.display  = (r==='unit_commander') ? '' : 'none';
+          if(r!=='unit_commander'){ var s=document.getElementById('sv-unit-sel'); if(s) s.value=''; }
+        }
+        var svDir = document.getElementById('sv-dir-sel');
+        if(svDir) svDir.addEventListener('change', function(){
+          var d = svDir.value;
+          var s = document.getElementById('sv-unit-sel');
+          if(!s) return;
+          var first = [];
+          Array.from(s.options).forEach(function(o){
+            var show = o.value==='' || o.dataset.dir === d;
+            o.style.display = show ? '' : 'none';
+            if(show && o.value) first.push(o.value);
+          });
+          s.value = (s.value && Array.from(s.options).some(function(o){return o.value===s.value && o.dataset.dir===d;})) ? s.value : (first[0] || '');
+        });
+        svToggleScope();
+      </script>
       <?php if (is_superadmin($user)): ?>
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)">Geographic Scope</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">

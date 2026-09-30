@@ -11,7 +11,7 @@ $tot  = sum_totals($rows);
 
 if ($type === 'csv') {
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="UPF_MDD_Report_'.$date.'.csv"');
+    header('Content-Disposition: attachment; filename="UPF_HRAS_Report_'.$date.'.csv"');
     $out = fopen('php://output','w');
     fputcsv($out,[APP_ORG]);
     fputcsv($out,[APP_NAME]);
@@ -92,7 +92,7 @@ tr.total-row td{background:#e8ecf2;font-weight:700;border-top:2px solid #1a2236}
     </div>
   </div>
   <div class="upf-report-label">
-    <div class="rpt-title">MDD Attendance Report<?= $reportScope && $reportScope !== 'HQ' ? ' — '.e($reportScope) : '' ?></div>
+    <div class="rpt-title">HRAS Attendance Report<?= $reportScope && $reportScope !== 'HQ' ? ' — '.e($reportScope) : '' ?></div>
     <div class="rpt-meta">Generated on: <?= date('j/F/Y', strtotime($date)) ?> &nbsp;|&nbsp; Date of Returns: <?= date('j F Y', strtotime($date)) ?></div>
   </div>
 </div>
@@ -129,7 +129,7 @@ tr.total-row td{background:#e8ecf2;font-weight:700;border-top:2px solid #1a2236}
 </table>
 
 <div class="page-footer">
-  Uganda Police Force — MDD Management System &nbsp;·&nbsp; <?= date('Y') ?> &nbsp;·&nbsp; PROTECT &amp; SERVE
+  Uganda Police Force — Human Resource Administration System &nbsp;·&nbsp; <?= date('Y') ?> &nbsp;·&nbsp; PROTECT &amp; SERVE
 </div>
 
 <div class="no-print no-print-bar">

@@ -35,34 +35,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dir   = trim($_POST['directorate']?? '');
         $unit  = trim($_POST['unit']       ?? '');
 
-        $post_id = null;
-        if (role_rank($user['role']) >= role_rank('division_commander')) {
-            $post_id = (int)($_POST['post_id'] ?? 0) ?: null;
-        } else {
-            $post_id = (int)$user['post_id'] ?: null;
-        }
-        if (!$post_id) { flash('err','A post assignment is required.'); header('Location:/employees.php'); exit; }
+        $pId = (int)($_POST['post_id']     ?? 0) ?: null;
+        $sId = (int)($_POST['station_id']   ?? 0) ?: null;
+        $dId = (int)($_POST['division_id']  ?? 0) ?: null;
+        $rId = (int)($_POST['region_id']    ?? 0) ?: null;
 
-        $chain = $pdo->prepare("SELECT s.division_id, d.region_id, s.id AS station_id FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id WHERE p.id=?");
-        $chain->execute([$post_id]); $ch = $chain->fetch();
-        if (!$ch) { flash('err','Invalid post selected.'); header('Location:/employees.php'); exit; }
+        // Functional heads may only add/edit personnel within their own
+        // directorate (and unit, for a unit commander).
+        if (in_array($user['role'], ['directorate_commander','unit_commander'], true)) {
+            if (($user['directorate_name'] ?? '') === '') {
+                flash('err','Your account has no directorate scope.'); header('Location:/employees.php'); exit;
+            }
+            $dir = (string)$user['directorate_name'];
+            if ($user['role'] === 'unit_commander') {
+                if (($user['unit_name'] ?? '') === '') {
+                    flash('err','Your account has no unit scope.'); header('Location:/employees.php'); exit;
+                }
+                $unit = (string)$user['unit_name'];
+            }
+        }
+
+        // Posting & assignment is optional, but when a deeper level is picked the
+        // chain above it is derived so the record always stays consistent.
+        if ($pId) {
+            $chain = $pdo->prepare("SELECT s.id AS station_id, s.division_id, d.region_id FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id WHERE p.id=?");
+            $chain->execute([$pId]); $ch = $chain->fetch();
+            if (!$ch) { flash('err', 'Invalid post selected.'); header('Location:/employees.php'); exit; }
+            $sId = (int)$ch['station_id']; $dId = (int)$ch['division_id']; $rId = (int)$ch['region_id'];
+        } elseif ($sId) {
+            $chain = $pdo->prepare("SELECT d.id AS division_id, d.region_id FROM stations s JOIN divisions d ON d.id=s.division_id WHERE s.id=?");
+            $chain->execute([$sId]); $ch = $chain->fetch();
+            if ($ch) { $dId = (int)$ch['division_id']; $rId = (int)$ch['region_id']; }
+        } elseif ($dId) {
+            $rId = (int)$pdo->query("SELECT region_id FROM divisions WHERE id=".(int)$dId)->fetchColumn() ?: null;
+        }
+        // Non-admins may only place personnel at their own command level.
+        if (!is_superadmin($user)) {
+            if (in_array($user['role'], ['directorate_commander','unit_commander'], true)) {
+                // Functional heads manage personnel by directorate/unit, not geography:
+                // they have no posting selects, so never wipe an existing placement.
+                if ($action === 'update') {
+                    $id = (int)$_POST['id'];
+                    $cur = $pdo->prepare("SELECT post_id, station_id, division_id, region_id FROM employees e WHERE e.id=? AND $scopeW");
+                    $cur->execute(array_merge([$id], $scopeP));
+                    $geo = $cur->fetch();
+                    if ($geo) {
+                        if (!$pId) $pId = (int)($geo['post_id']    ?? 0) ?: null;
+                        if (!$sId) $sId = (int)($geo['station_id'] ?? 0) ?: null;
+                        if (!$dId) $dId = (int)($geo['division_id']?? 0) ?: null;
+                        if (!$rId) $rId = (int)($geo['region_id']  ?? 0) ?: null;
+                    }
+                } else {
+                    $pId=$sId=$dId=$rId=null;
+                }
+            } else {
+                $scopeLvl = $user['post_id'] ? 'post' : ($user['station_id'] ? 'station' : ($user['division_id'] ? 'division' : 'region'));
+                $scopeId  = $user['post_id'] ?: $user['station_id'] ?: $user['division_id'] ?: $user['region_id'];
+                $deep = $pId ?? $sId ?? $dId ?? $rId;
+                $ok = match($scopeLvl) {
+                    'region'   => $rId !== null && (int)$rId === (int)$scopeId,
+                    'division' => $dId !== null && (int)$dId === (int)$scopeId,
+                    'station'  => $sId !== null && (int)$sId === (int)$scopeId,
+                    'post'     => $pId !== null && (int)$pId === (int)$scopeId,
+                    default    => false,
+                };
+                if (!$ok) { $pId=$sId=$dId=$rId=null; }
+            }
+        }
 
         $photo = handle_photo_upload();
 
         try {
             if ($action === 'create') {
                 $pdo->prepare("INSERT INTO employees (service_no,full_name,gender,rank,directorate,unit,region_id,division_id,station_id,post_id,email,phone,photo_path) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                    ->execute([$sno,$name,$gender,$rank,$dir,$unit,$ch['region_id'],$ch['division_id'],$ch['station_id'],$post_id,$email,$phone,$photo]);
+                    ->execute([$sno,$name,$gender,$rank,$dir,$unit,$rId,$dId,$sId,$pId,$email,$phone,$photo]);
                 log_activity('Add Personnel', 'employee', "{$rank} {$name}", (int)$pdo->lastInsertId(), "Service No: {$sno}");
                 flash('msg','Personnel record created successfully.');
             } else {
                 $id = (int)$_POST['id'];
                 if ($photo) {
                     $pdo->prepare("UPDATE employees SET service_no=?,full_name=?,gender=?,rank=?,directorate=?,unit=?,region_id=?,division_id=?,station_id=?,post_id=?,email=?,phone=?,photo_path=? WHERE id=?")
-                        ->execute([$sno,$name,$gender,$rank,$dir,$unit,$ch['region_id'],$ch['division_id'],$ch['station_id'],$post_id,$email,$phone,$photo,$id]);
+                        ->execute([$sno,$name,$gender,$rank,$dir,$unit,$rId,$dId,$sId,$pId,$email,$phone,$photo,$id]);
                 } else {
                     $pdo->prepare("UPDATE employees SET service_no=?,full_name=?,gender=?,rank=?,directorate=?,unit=?,region_id=?,division_id=?,station_id=?,post_id=?,email=?,phone=? WHERE id=?")
-                        ->execute([$sno,$name,$gender,$rank,$dir,$unit,$ch['region_id'],$ch['division_id'],$ch['station_id'],$post_id,$email,$phone,$id]);
+                        ->execute([$sno,$name,$gender,$rank,$dir,$unit,$rId,$dId,$sId,$pId,$email,$phone,$id]);
                 }
                 log_activity('Edit Personnel', 'employee', "{$rank} {$name}", $id);
                 flash('msg','Record updated successfully.');
@@ -157,20 +213,33 @@ if ($viewId) {
     }
 }
 
-/* ── Posts list ── */
-$canPickPost = role_rank($user['role']) >= role_rank('division_commander');
-$posts = [];
-if ($canPickPost) {
-    $psql = "SELECT p.id, p.name, s.name AS sta, d.name AS div, rg.name AS reg FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id JOIN regions rg ON rg.id=d.region_id";
-    if (!is_superadmin($user)) {
-        $psql .= " WHERE " . match($user['role']) {
-            'regional_commander' => "d.region_id=".(int)$user['region_id'],
-            'division_commander' => "s.division_id=".(int)$user['division_id'],
-            'station_commander'  => "p.station_id=".(int)$user['station_id'],
-            default              => "p.id=".(int)$user['post_id'],
-        };
-    }
-    $posts = $pdo->query($psql." ORDER BY reg,div,sta,p.name")->fetchAll();
+/* ── Posting & assignment hierarchy (cascading Region › Division › Station › Post) ── */
+// Everything is fetched for superadmin; commanders only see their own command.
+$hier = [
+    'regions'   => $pdo->query("SELECT id, name FROM regions ORDER BY name")->fetchAll(),
+    'divisions' => $pdo->query("SELECT id, region_id, name FROM divisions ORDER BY name")->fetchAll(),
+    'stations'  => $pdo->query("SELECT id, division_id, name FROM stations ORDER BY name")->fetchAll(),
+    'posts'     => $pdo->query("SELECT id, station_id, name FROM posts ORDER BY name")->fetchAll(),
+];
+if (!is_superadmin($user)) {
+    $scoped = match($user['role']) {
+        'regional_commander' => fn(int $rid, int $did, int $sid, int $pId): bool => $rid === (int)$user['region_id'],
+        'division_commander' => fn(int $rid, int $did, int $sid, int $pId): bool => $did === (int)$user['division_id'],
+        'station_commander'  => fn(int $rid, int $did, int $sid, int $pId): bool => $sid === (int)$user['station_id'],
+        default              => fn(int $rid, int $did, int $sid, int $pId): bool => $pId === (int)$user['post_id'],
+    };
+    $divToReg = array_column($hier['divisions'], 'region_id', 'id');
+    $staToDiv = array_column($hier['stations'], 'division_id', 'id');
+    $posToSta = array_column($hier['posts'], 'station_id', 'id');
+    $keepReg = $keepDiv = $keepSta = $keepPos = [];
+    foreach ($hier['posts']    as $p) if ($scoped($divToReg[$staToDiv[$p['station_id']]] ?? 0, $staToDiv[$p['station_id']] ?? 0, $p['station_id'], $p['id'])) $keepPos[$p['id']] = true;
+    foreach ($hier['stations'] as $s) if ($scoped($divToReg[$s['division_id']] ?? 0, $s['division_id'], $s['id'], 0)) $keepSta[$s['id']] = true;
+    foreach ($hier['divisions'] as $d) if ($scoped($d['region_id'], $d['id'], 0, 0)) $keepDiv[$d['id']] = true;
+    foreach ($hier['regions']  as $r) if ($scoped($r['id'], 0, 0, 0)) $keepReg[$r['id']] = true;
+    $hier['regions']   = array_values(array_filter($hier['regions'],   fn($r) => isset($keepReg[$r['id']])));
+    $hier['divisions'] = array_values(array_filter($hier['divisions'], fn($d) => isset($keepDiv[$d['id']])));
+    $hier['stations']  = array_values(array_filter($hier['stations'],  fn($s) => isset($keepSta[$s['id']])));
+    $hier['posts']     = array_values(array_filter($hier['posts'],     fn($p) => isset($keepPos[$p['id']])));
 }
 
 $ranks = UPF_RANKS;
@@ -359,13 +428,15 @@ include __DIR__ . '/../includes/header.php';
     </div>
   </div>
   <?php endif; ?>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span style="font-size:12px;margin-left:4px">Edit</span></a>
-    <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>?')">
-      <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $viewing['id'] ?>">
-      <button class="btn-icon bi-danger" type="submit" title="Delete"><?= ICO_TRASH ?> <span style="font-size:12px;margin-left:4px">Remove</span></button>
-    </form>
-    <form method="post" enctype="multipart/form-data" style="display:flex;align-items:center;gap:6px;background:var(--navy-50);padding:5px 10px;border-radius:8px;border:1px solid var(--border)">
+  <div class="detail-actions">
+    <div class="detail-btn-row">
+      <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span style="font-size:12px;margin-left:4px">Edit</span></a>
+      <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>?')">
+        <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $viewing['id'] ?>">
+        <button class="btn-icon bi-danger" type="submit" title="Delete"><?= ICO_TRASH ?> <span style="font-size:12px;margin-left:4px">Remove</span></button>
+      </form>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="detail-photo-form">
       <input type="hidden" name="action" value="update">
       <input type="hidden" name="id" value="<?= $viewing['id'] ?>">
       <input type="hidden" name="service_no" value="<?= e($viewing['service_no']) ?>">
@@ -375,11 +446,14 @@ include __DIR__ . '/../includes/header.php';
       <input type="hidden" name="directorate" value="<?= e($viewing['directorate']??'') ?>">
       <input type="hidden" name="unit" value="<?= e($viewing['unit']??'') ?>">
       <input type="hidden" name="post_id" value="<?= (int)$viewing['post_id'] ?>">
+      <input type="hidden" name="station_id" value="<?= (int)$viewing['station_id'] ?>">
+      <input type="hidden" name="division_id" value="<?= (int)$viewing['division_id'] ?>">
+      <input type="hidden" name="region_id" value="<?= (int)$viewing['region_id'] ?>">
       <input type="hidden" name="email" value="<?= e($viewing['email']??'') ?>">
       <input type="hidden" name="phone" value="<?= e($viewing['phone']??'') ?>">
-      <label style="font-size:11px;white-space:nowrap">Change Photo:</label>
-      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" style="font-size:11px;max-width:160px">
-      <button class="btn-icon bi-gold bi-sm" type="submit" title="Upload"><?= ICO_SAVE ?></button>
+      <span class="detail-photo-label">Change Photo:</span>
+      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" class="detail-photo-input">
+      <button class="btn-icon bi-gold bi-sm" type="submit" title="Upload"><?= ICO_SAVE ?> <span style="font-size:12px;margin-left:4px">Upload</span></button>
     </form>
   </div>
 </div>
@@ -528,24 +602,75 @@ include __DIR__ . '/../includes/header.php';
               <datalist id="units-list"><?php foreach ($dirUnits as $u): ?><option value="<?= e($u['name']) ?>"><?php endforeach; ?></datalist>
             </div>
           </div>
-          <?php if ($canPickPost): ?>
           <div class="form-row">
-            <div class="form-group">
-              <label>Assigned Post <span style="color:var(--red)">*</span></label>
-              <select name="post_id" required>
-                <option value="">— select post —</option>
-                <?php foreach ($posts as $pt): ?>
-                  <option value="<?= $pt['id'] ?>" <?= ($editing['post_id']??0)==$pt['id']?'selected':'' ?>><?= e("{$pt['reg']} › {$pt['div']} › {$pt['sta']} › {$pt['name']}") ?></option>
-                <?php endforeach; ?>
+            <div class="form-group" style="flex:1;min-width:150px">
+              <label>Region</label>
+              <select name="region_id" id="hier-region" data-cascade="division">
+                <option value="">— region (optional) —</option>
+                <?php foreach ($hier['regions'] as $rg): ?><option value="<?= (int)$rg['id'] ?>" <?= ($editing['region_id']??'')==$rg['id']?'selected':'' ?>><?= e($rg['name']) ?></option><?php endforeach; ?>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1;min-width:150px">
+              <label>Division / District</label>
+              <select name="division_id" id="hier-division" data-cascade="station">
+                <option value="">— division (optional) —</option>
+                <?php foreach ($hier['divisions'] as $dv): ?><option value="<?= (int)$dv['id'] ?>" <?= ($editing['division_id']??'')==$dv['id']?'selected':'' ?>><?= e($dv['name']) ?></option><?php endforeach; ?>
               </select>
             </div>
           </div>
-          <?php else: ?>
-            <input type="hidden" name="post_id" value="<?= (int)$user['post_id'] ?>">
-            <div style="font-size:12px;color:var(--muted);background:var(--navy-100);padding:8px 12px;border-radius:7px">
-              <strong>Post:</strong> Automatically assigned to your current post.
+          <div class="form-row">
+            <div class="form-group" style="flex:1;min-width:150px">
+              <label>Station</label>
+              <select name="station_id" id="hier-station" data-cascade="post">
+                <option value="">— station (optional) —</option>
+                <?php foreach ($hier['stations'] as $st): ?><option value="<?= (int)$st['id'] ?>" <?= ($editing['station_id']??'')==$st['id']?'selected':'' ?>><?= e($st['name']) ?></option><?php endforeach; ?>
+              </select>
             </div>
-          <?php endif; ?>
+            <div class="form-group" style="flex:1;min-width:150px">
+              <label>Post</label>
+              <select name="post_id" id="hier-post">
+                <option value="">— post (optional) —</option>
+                <?php foreach ($hier['posts'] as $po): ?><option value="<?= (int)$po['id'] ?>" <?= ($editing['post_id']??'')==$po['id']?'selected':'' ?>><?= e($po['name']) ?></option><?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);background:var(--navy-100);padding:8px 12px;border-radius:7px">
+            <strong>Placement:</strong> Optional. Picking a post (or station/division) auto-fills the levels above it.
+          </div>
+          <script>
+          (function(){
+            var HIER = <?= json_encode($hier) ?>;
+            var $r = document.getElementById('hier-region'),
+                $d = document.getElementById('hier-division'),
+                $s = document.getElementById('hier-station'),
+                $p = document.getElementById('hier-post');
+            function fill(sel, list) {
+              list = list || [];
+              var label = sel.id.replace('hier-', '');
+              var h = '<option value="">— ' + label + ' (optional) —</option>';
+              list.forEach(function(o){ h += '<option value="'+o.id+'">'+o.name+'</option>'; });
+              sel.innerHTML = h;
+            }
+            function inList(list, id){ return id !== '' && list.some(function(x){ return String(x.id)===id; }); }
+            function build() {
+              var r = String($r.value||''), d = String($d.value||''),
+                  s = String($s.value||''), p = String($p.value||'');
+              var divs = HIER.divisions.filter(function(x){ return !r || String(x.region_id)===r; });
+              fill($d, divs);
+              $d.value = inList(divs, d) ? d : '';
+              d = $d.value;
+              var stas = HIER.stations.filter(function(x){ return !d || String(x.division_id)===d; });
+              fill($s, stas);
+              $s.value = inList(stas, s) ? s : '';
+              s = $s.value;
+              var pos = HIER.posts.filter(function(x){ return !s || String(x.station_id)===s; });
+              fill($p, pos);
+              $p.value = inList(pos, p) ? p : '';
+            }
+            [$r,$d,$s].forEach(function(el){ el.addEventListener('change', build); });
+            if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', build); else build();
+          })();
+          </script>
         </div>
 
         <!-- SECTION 3: Contact & Photo -->

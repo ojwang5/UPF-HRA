@@ -409,6 +409,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 .badge-disciplinary{background:#fee2e2;color:#7f1d1d}
 .badge-on_duty{background:#cffafe;color:#0c4a6e}
 .badge-on_course{background:#d1fae5;color:#065f46}
+.badge-special_assignment{background:#dbeafe;color:#1e40af}
 .badge-admin{background:var(--navy-100);color:var(--navy-800)}
 .badge-deserted{background:#fce7f3;color:#9d174d}
 
@@ -514,3 +515,45 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .modal-body{padding:16px}
   .modal-section{padding:14px}
 }
+
+/* ===== Personnel detail view actions ===== */
+.detail-actions{display:flex;flex-direction:column;gap:10px}
+.detail-actions .detail-btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.detail-photo-form{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;
+  box-sizing:border-box;background:var(--navy-50);
+  padding:10px 12px;border-radius:8px;border:1px solid var(--border);
+}
+.detail-photo-label{font-size:11px;white-space:nowrap;color:var(--navy-700);font-weight:600}
+.detail-photo-input{flex:1;min-width:150px;max-width:280px;font-size:11px}
+@media (max-width:480px){
+  .detail-photo-form{flex-direction:column;align-items:stretch}
+  .detail-photo-input{max-width:none}
+}
+
+/* ===== Collapsible settings tiles (SMTP/SMS) ===== */
+.cfg-tile{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:18px;box-shadow:var(--shadow-sm)}
+.cfg-tile > .cfg-sum{
+  display:flex;align-items:center;gap:12px;padding:20px;cursor:pointer;list-style:none;
+}
+.cfg-tile > .cfg-sum::-webkit-details-marker{display:none}
+.cfg-tile > .cfg-sum:hover{background:var(--navy-50)}
+.cfg-tile > .cfg-body{padding:20px;border-top:1px dashed var(--border)}
+.cfg-tile .cfg-sum h3{margin:0;font-size:15px;color:var(--navy-800);font-weight:600}
+.cfg-chev{width:10px;height:10px;color:var(--muted);flex-shrink:0}
+.cfg-chev::before{
+  content:'';display:block;width:8px;height:8px;
+  border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  transform:rotate(45deg);transition:transform .18s;
+}
+.cfg-tile[open] .cfg-chev::before{transform:rotate(225deg)}
+
+/* ===== Toggle switch (report submission mode) ===== */
+.switch{display:inline-flex;align-items:center;gap:12px;cursor:pointer}
+.switch input{display:none}
+.switch .slider{position:relative;width:46px;height:24px;background:#cbd5e1;border-radius:999px;transition:background .18s;flex-shrink:0}
+.switch .slider::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
+.switch input:checked + .slider{background:#059669}
+.switch input:checked + .slider::after{transform:translateX(22px)}
+.switch .switch-label{font-size:13px;color:var(--navy-800);line-height:1.4}
+.switch .switch-label small{color:var(--muted)}

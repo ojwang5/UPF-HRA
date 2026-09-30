@@ -8,6 +8,9 @@ $page_title = 'Leave Management';
 $pdo = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
 
+// Alert commanders once when approved leave is about to run out / has expired.
+run_leave_countdown_notifications($pdo);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'adjust' && role_rank($user['role']) > role_rank('officer')) {
@@ -38,8 +41,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $emp = $pdo->prepare("SELECT * FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
         $emp->execute(array_merge([$eid], $scopeP)); $e = $emp->fetch();
         if ($e) {
-            $pdo->prepare("INSERT INTO leave_requests (employee_id,post_id,station_id,division_id,region_id,leave_type,start_date,end_date,reason,status,submitted_by,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-                ->execute([$eid,$e['post_id'],$e['station_id'],$e['division_id'],$e['region_id'],$_POST['leave_type']??'Annual',$_POST['start_date'],$_POST['end_date'],$_POST['reason']??'','pending',$user['id'],date('c')]);
+            $dirId  = $e['directorate'] ? (int)$pdo->query("SELECT id FROM directorates WHERE name=".$pdo->quote((string)$e['directorate'])." LIMIT 1")->fetchColumn() : null;
+            $dirId  = $dirId ?: null;
+            $unitId = $e['unit'] ? (int)$pdo->query("SELECT id FROM units WHERE name=".$pdo->quote((string)$e['unit'])." LIMIT 1")->fetchColumn() : null;
+            $unitId = $unitId ?: null;
+            $pdo->prepare("INSERT INTO leave_requests (employee_id,post_id,station_id,division_id,region_id,directorate_id,unit_id,leave_type,start_date,end_date,destination,reason,status,submitted_by,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                ->execute([$eid,$e['post_id'],$e['station_id'],$e['division_id'],$e['region_id'],$dirId,$unitId,$_POST['leave_type']??'Annual',$_POST['start_date'],$_POST['end_date'],trim($_POST['destination']??'')?:null,$_POST['reason']??'','pending',$user['id'],date('c')]);
             notify_superadmins('Leave request submitted',
                 $e['full_name'].' ('.($_POST['leave_type']??'Annual').') — submitted by '.role_label($user['role']),
                 ['created_by'=>$user['id'],'kind'=>'leave']);
@@ -95,6 +102,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-group"><label>Start Date</label><input type="date" name="start_date" required value="<?= date('Y-m-d') ?>"></div>
             <div class="form-group"><label>End Date</label><input type="date" name="end_date" required value="<?= date('Y-m-d') ?>"></div>
             <div class="form-group" style="flex:2"><label>Reason</label><input type="text" name="reason" required></div>
+            <div class="form-group" style="flex:2"><label>Destination (where going)</label><input type="text" name="destination" placeholder="e.g. Kampala / home district"></div>
           </div>
           <div class="action-bar" style="margin-top:10px">
             <button class="btn-icon bi-gold bi-lg" type="submit" title="Submit request"><?= ICO_SEND ?></button>
@@ -230,7 +238,7 @@ $adjRows = $adjRows->fetchAll();
   <div class="chr"><h3>Leave Requests</h3></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Employee</th><th>Region</th><th>Type</th><th>Dates</th><th>Reason</th><th>Status</th><th>Submitted</th><th style="width:80px"></th></tr></thead>
+      <thead><tr><th>Employee</th><th>Region</th><th>Type</th><th>Dates</th><th>Destination</th><th>Remaining</th><th>Reason</th><th>Status</th><th>Submitted</th><th style="width:80px"></th></tr></thead>
       <tbody>
         <?php foreach ($requests as $r): ?>
         <tr id="lr-<?= $r['id'] ?>">
@@ -238,6 +246,19 @@ $adjRows = $adjRows->fetchAll();
           <td><?= e($r['region_name']??'—') ?></td>
           <td><?= e($r['leave_type']) ?></td>
           <td style="white-space:nowrap"><?= e($r['start_date']) ?><br><span class="muted">→ <?= e($r['end_date']) ?></span></td>
+          <td><?= e($r['destination'] ?? '—') ?></td>
+          <td style="white-space:nowrap">
+            <?php if ($r['status']==='approved'):
+              $cd = leave_countdown($r);
+              if (date('Y-m-d') > $r['end_date']) {
+                echo '<span class="badge badge-awol">Expired</span>';
+              } elseif ($cd <= 2) {
+                echo '<span class="badge badge-awol">'.$cd.' day'.($cd===1?'':'s').' left</span>';
+              } else {
+                echo '<span class="badge badge-present">'.$cd.' days left</span>';
+              }
+            else: ?><span class="muted" style="font-size:12px">—</span><?php endif; ?>
+          </td>
           <td><?= e($r['reason']) ?></td>
           <td><?= lr_pill($r['status']) ?>
             <?php if ($r['reviewer']): ?><div class="muted" style="font-size:10px"><?= e($r['reviewer']) ?></div><?php endif; ?>
@@ -262,7 +283,7 @@ $adjRows = $adjRows->fetchAll();
           </td>
         </tr>
         <?php endforeach; ?>
-        <?php if (!$requests): ?><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">No leave requests found.</td></tr><?php endif; ?>
+        <?php if (!$requests): ?><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">No leave requests found.</td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>

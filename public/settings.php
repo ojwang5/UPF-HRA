@@ -33,6 +33,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($keys as $k) save_setting($k, trim($_POST[$k] ?? ''));
         flash('msg', 'SMS settings saved.');
 
+    } elseif ($action === 'save_report_mode') {
+        $mode = ($_POST['report_submission_mode'] ?? '') === 'direct' ? 'direct' : 'hierarchical';
+        save_setting('report_submission_mode', $mode);
+        log_activity('Changed report submission mode', 'setting', $mode);
+        flash('msg', $mode === 'direct' ? 'Reports now go DIRECTLY to HQ for approval.' : 'Reports now flow hierarchically (post → station → division → region → HQ).');
+
     } elseif ($action === 'test_sms') {
         require_once __DIR__ . '/../includes/sms.php';
         $testPhone = trim($_POST['test_phone'] ?? $user['phone'] ?? '');
@@ -55,28 +61,63 @@ include __DIR__ . '/../includes/header.php';
 <div class="page-header">
   <div>
     <h1>System Settings</h1>
-    <div class="desc">Configure email (SMTP) and SMS integration credentials</div>
+    <div class="desc">Report workflow, email (SMTP) and SMS integration configuration</div>
   </div>
 </div>
 
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 <?php if ($m=flash('err')): ?><div class="alert alert-error"><?= e($m) ?></div><?php endif; ?>
 
+<!-- ══════════════════ REPORT SUBMISSION MODE ══════════════════ -->
+<?php $rmode = get_setting('report_submission_mode', 'hierarchical') === 'direct' ? 'direct' : 'hierarchical'; ?>
+<div class="card" style="margin-bottom:20px">
+  <div class="chr">
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Report Submission Mode
+    </h3>
+    <span class="badge" style="<?= $rmode==='direct' ? 'background:#fef3c7;color:#92400e' : 'background:#dcfce7;color:#166534' ?>">
+      <?= $rmode==='direct' ? 'Direct to HQ' : 'Hierarchical (post → station → division → region → HQ)' ?>
+    </span>
+  </div>
+  <p style="margin:0 0 14px;font-size:13px;color:var(--muted);max-width:720px">
+    In <strong>Hierarchical</strong> mode every generated report is reviewed level by level up the command chain
+    (each reviewer forwards or returns it for correction). In <strong>Direct to HQ</strong> mode, generated reports
+    skip the intermediate levels and wait only for the Super Admin's approval.
+  </p>
+  <form method="post">
+    <input type="hidden" name="action" value="save_report_mode">
+    <label class="switch">
+      <input type="checkbox" name="report_submission_mode" value="direct" <?= $rmode==='direct' ? 'checked' : '' ?> onchange="this.form.submit()">
+      <span class="slider"></span>
+      <span class="switch-label">
+        <strong><?= $rmode==='direct' ? 'Direct submission to HQ is ON' : 'Follow the command chain (hierarchical)' ?></strong>
+        <br><small><?= $rmode==='direct' ? 'Reports go straight to HQ for approval.' : 'Reports flow post → station → division → region → HQ.' ?></small>
+      </span>
+    </label>
+    <noscript><button class="btn-icon bi-gold bi-lg" type="submit" style="gap:8px;padding:0 18px;width:auto;font-size:12px;font-weight:600;margin-top:8px"><?= ICO_SAVE ?> <span>Save Mode</span></button></noscript>
+  </form>
+</div>
+
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(540px,100%),1fr));gap:20px">
 
 <!-- ══════════════════ SMTP CARD ══════════════════ -->
-<div class="card">
-  <div class="chr">
-    <h3>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-      Email (SMTP) Configuration
-    </h3>
-    <?php if (smtp_configured()): ?>
-      <span class="badge" style="background:#dcfce7;color:#166534">● Connected</span>
-    <?php else: ?>
-      <span class="badge" style="background:#fef3c7;color:#92400e">● Not Configured</span>
-    <?php endif; ?>
-  </div>
+<details class="cfg-tile" open>
+  <summary class="cfg-sum">
+    <div class="chr" style="flex:1;border:none;padding:0">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Email (SMTP) Configuration
+      </h3>
+      <?php if (smtp_configured()): ?>
+        <span class="badge" style="background:#dcfce7;color:#166534">● Connected</span>
+      <?php else: ?>
+        <span class="badge" style="background:#fef3c7;color:#92400e">● Not Configured</span>
+      <?php endif; ?>
+    </div>
+    <span class="cfg-chev"></span>
+  </summary>
+  <div class="cfg-body">
   <form method="post">
     <input type="hidden" name="action" value="save_smtp">
     <div class="form-row">
@@ -143,21 +184,26 @@ include __DIR__ . '/../includes/header.php';
     <strong style="color:var(--navy-700)">Common providers:</strong>
     <span style="margin-left:8px">Gmail: smtp.gmail.com:587/TLS &nbsp;·&nbsp; Outlook: smtp.office365.com:587/TLS &nbsp;·&nbsp; Yahoo: smtp.mail.yahoo.com:587/TLS &nbsp;·&nbsp; Custom SMTP: use your server details</span>
   </div>
-</div>
+  </div>
+</details>
 
 <!-- ══════════════════ SMS CARD ══════════════════ -->
-<div class="card">
-  <div class="chr">
-    <h3>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      SMS Configuration
-    </h3>
-    <?php if (sms_configured()): ?>
-      <span class="badge" style="background:#dcfce7;color:#166534">● Connected</span>
-    <?php else: ?>
-      <span class="badge" style="background:#fef3c7;color:#92400e">● Not Configured</span>
-    <?php endif; ?>
-  </div>
+<details class="cfg-tile" open>
+  <summary class="cfg-sum">
+    <div class="chr" style="flex:1;border:none;padding:0">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        SMS Configuration
+      </h3>
+      <?php if (sms_configured()): ?>
+        <span class="badge" style="background:#dcfce7;color:#166534">● Connected</span>
+      <?php else: ?>
+        <span class="badge" style="background:#fef3c7;color:#92400e">● Not Configured</span>
+      <?php endif; ?>
+    </div>
+    <span class="cfg-chev"></span>
+  </summary>
+  <div class="cfg-body">
   <form method="post">
     <input type="hidden" name="action" value="save_sms">
     <div class="form-row">
@@ -213,7 +259,8 @@ include __DIR__ . '/../includes/header.php';
     <strong style="color:var(--navy-700)">Africa's Talking:</strong> Use <em>sandbox</em> as username to test for free. Get keys at <strong>africastalking.com</strong>.
     <br><strong style="color:var(--navy-700)">OTP / 2FA:</strong> SMS can be wired to login verification once credentials are set.
   </div>
-</div>
+  </div>
+</details>
 
 </div><!-- end grid -->
 

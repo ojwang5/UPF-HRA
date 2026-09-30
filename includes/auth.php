@@ -4,16 +4,18 @@ require_once __DIR__ . '/db.php';
 
 /* ─── Role meta ─── */
 const ROLE_LABELS = [
-    'superadmin'          => 'Super Admin',
-    'regional_commander'  => 'Regional Commander',
-    'division_commander'  => 'Division Commander',
-    'station_commander'   => 'Station Commander',
-    'post_commander'      => 'Post Commander',
-    'officer'             => 'Field Officer',
+    'superadmin'             => 'Super Admin',
+    'regional_commander'     => 'Regional Commander',
+    'division_commander'     => 'Division Commander',
+    'directorate_commander'  => 'Directorate Commander',
+    'station_commander'      => 'Station Commander',
+    'unit_commander'         => 'Unit Commander',
+    'post_commander'         => 'Post Commander',
+    'officer'                => 'Field Officer',
 ];
 const ROLE_RANKS = [
-    'superadmin' => 6, 'regional_commander' => 5, 'division_commander' => 4,
-    'station_commander' => 3, 'post_commander' => 2, 'officer' => 1,
+    'superadmin' => 6, 'regional_commander' => 5, 'directorate_commander' => 5, 'division_commander' => 4,
+    'station_commander' => 3, 'unit_commander' => 3, 'post_commander' => 2, 'officer' => 1,
 ];
 
 function role_label(string $role): string { return ROLE_LABELS[$role] ?? ucfirst($role); }
@@ -27,12 +29,16 @@ function current_user(): ?array {
                rg.name AS region_name, rg.code AS region_code,
                dv.name AS division_name,
                st.name AS station_name,
-               pt.name AS post_name
+               pt.name AS post_name,
+               dr.name AS directorate_name, dr.code AS directorate_code,
+               un.name AS unit_name, un.code AS unit_code
         FROM users u
         LEFT JOIN regions   rg ON rg.id = u.region_id
         LEFT JOIN divisions dv ON dv.id = u.division_id
         LEFT JOIN stations  st ON st.id = u.station_id
         LEFT JOIN posts     pt ON pt.id = u.post_id
+        LEFT JOIN directorates dr ON dr.id = u.directorate_id
+        LEFT JOIN units     un ON un.id = u.unit_id
         WHERE u.id = ?
     ");
     $stmt->execute([(int)$_SESSION['user_id']]);
@@ -77,6 +83,7 @@ function is_officer(array $u): bool    { return $u['role'] === 'officer'; }
 
 /**
  * Returns [WHERE_clause, params_array] that filters an employees table alias by the user's scope.
+ * Functional roles (directorate/unit commander) match employees' TEXT directorate/unit names.
  * @param string $a  Table alias for employees
  */
 function scope_where(array $user, string $a = 'e'): array {
@@ -87,6 +94,12 @@ function scope_where(array $user, string $a = 'e'): array {
         'station_commander'  => ["{$a}.station_id=?",  [(int)$user['station_id']]],
         'post_commander',
         'officer'            => ["{$a}.post_id=?",     [(int)$user['post_id']]],
+        'directorate_commander' => (($user['directorate_name'] ?? '') !== '')
+            ? ["{$a}.directorate=?", [(string)$user['directorate_name']]]
+            : ['0=1', []],
+        'unit_commander' => ((($user['directorate_name'] ?? '') !== '') && (($user['unit_name'] ?? '') !== ''))
+            ? ["{$a}.directorate=? AND {$a}.unit=?", [(string)$user['directorate_name'], (string)$user['unit_name']]]
+            : ['0=1', []],
         default              => ['0=1', []],
     };
 }
@@ -100,6 +113,8 @@ function scope_where_for(array $user, string $a = 'r'): array {
         'station_commander'  => ["{$a}.station_id=?",  [(int)$user['station_id']]],
         'post_commander',
         'officer'            => ["{$a}.post_id=?",     [(int)$user['post_id']]],
+        'directorate_commander' => ["{$a}.directorate_id=?", [(int)$user['directorate_id']]],
+        'unit_commander'        => ["{$a}.unit_id=?",        [(int)$user['unit_id']]],
         default              => ['0=1', []],
     };
 }
@@ -118,18 +133,23 @@ function user_shares_scope(array $actor, array $target): bool {
         'division_commander' => (int)$actor['division_id'] === (int)$target['division_id'],
         'station_commander'  => (int)$actor['station_id']  === (int)$target['station_id'],
         'post_commander'     => (int)$actor['post_id']     === (int)$target['post_id'],
+        'directorate_commander' => (int)$actor['directorate_id'] === (int)$target['directorate_id'],
+        'unit_commander'     => (int)$actor['unit_id']     === (int)$target['unit_id'],
         default              => false,
     };
 }
 
 /** Roles a given actor is allowed to create. */
 function creatable_roles(array $actor): array {
-    $all = ['superadmin','regional_commander','division_commander','station_commander','post_commander','officer'];
+    $all = ['superadmin','regional_commander','directorate_commander','division_commander','station_commander','unit_commander','post_commander','officer'];
     $rank = role_rank($actor['role']);
     return array_filter($all, fn($r) => role_rank($r) < $rank);
 }
 
 /** Scope display label for topbar */
 function user_scope_label(array $u): string {
+    if (in_array($u['role'] ?? '', ['directorate_commander','unit_commander'], true)) {
+        return $u['unit_name'] ?? $u['directorate_name'] ?? $u['post_name'] ?? $u['station_name'] ?? $u['division_name'] ?? $u['region_name'] ?? 'HQ';
+    }
     return $u['post_name'] ?? $u['station_name'] ?? $u['division_name'] ?? $u['region_name'] ?? 'HQ';
 }

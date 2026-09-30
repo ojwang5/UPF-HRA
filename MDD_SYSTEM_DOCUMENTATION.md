@@ -221,45 +221,50 @@ In addition to geography, UPF is organised into functional directorates:
                 │      SUPER ADMIN       │  Rank 6 — Full system access
                 │  (National HQ)         │
                 └──────────┬─────────────┘
-                           │ can create ▼
-                ┌──────────┴─────────────┐
-                │  REGIONAL COMMANDER    │  Rank 5 — Region scope
-                │  (Regional HQ)         │
-                └──────────┬─────────────┘
-                           │ can create ▼
-                ┌──────────┴─────────────┐
-                │  DIVISION COMMANDER    │  Rank 4 — Division scope
-                └──────────┬─────────────┘
-                           │ can create ▼
-                ┌──────────┴─────────────┐
-                │  STATION COMMANDER     │  Rank 3 — Station scope
-                └──────────┬─────────────┘
-                           │ can create ▼
-                ┌──────────┴─────────────┐
-                │   POST COMMANDER       │  Rank 2 — Post scope
-                └──────────┬─────────────┘
-                           │ can create ▼
-                ┌──────────┴─────────────┐
-                │   FIELD OFFICER        │  Rank 1 — Post scope (read-heavy)
-                └────────────────────────┘
+                   ┌───────┴────────┐
+                   ▼                ▼
+        ┌──────────────┐   ┌──────────────────────┐
+        │ REGIONAL CMD │   │  DIRECTORATE CMD     │  Rank 5 — Directorate scope
+        │ Rank 5       │   │  (Directorate HQ)    │  (personnel by directorate)
+        └──────┬───────┘   └──────────┬───────────┘
+               ▼                      ▼
+        ┌──────────────┐   ┌──────────────────────┐
+        │ DIVISION CMD │   │  UNIT CMD            │  Rank 3 — Unit scope
+        │ Rank 4       │   │  (e.g. GD, FS, K9)   │  (personnel by directorate+unit)
+        └──────┬───────┘   └──────────────────────┘
+               ▼
+        ┌──────────────┐
+        │ STATION CMD  │  Rank 3 — Station scope
+        └──────┬───────┘
+               ▼
+        ┌──────────────┐
+        │  POST CMD    │  Rank 2 — Post scope
+        └──────┬───────┘
+               ▼
+        ┌────────────────┐
+        │  FIELD OFFICER │  Rank 1 — Post scope (read-heavy)
+        └────────────────┘
 ```
+
+Functional roles (Directorate/Unit Commander) were added in database migration **v12**. They manage personnel by **directorate/unit** rather than geography, while still seeing the full Region › Division › Station › Post attachment of every officer under their command (see the **My Directorate** module).
 
 ### Module Access Matrix
 
-| Module | Officer (1) | Post Cmd (2) | Station Cmd (3) | Div Cmd (4) | Regional Cmd (5) | Super Admin (6) |
-|--------|:-----------:|:------------:|:---------------:|:-----------:|:----------------:|:---------------:|
-| Dashboard | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Personnel | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Daily Status | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Leave Requests | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Notifications | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Reports | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| User Accounts | — | ✓ | ✓ | ✓ | ✓ | ✓ |
-| History | — | — | ✓ | ✓ | ✓ | ✓ |
-| Communications | — | — | ✓ | ✓ | ✓ | ✓ |
-| Activity Log | — | — | — | ✓ | ✓ | ✓ |
-| Settings | — | — | — | — | ✓ | ✓ |
-| Structure (Org) | — | — | — | — | — | ✓ |
+| Module | Officer (1) | Post Cmd (2) | Station Cmd (3) | Unit Cmd (3) | Div Cmd (4) | Regional Cmd (5) | Directorate Cmd (5) | Super Admin (6) |
+|--------|:-----------:|:------------:|:---------------:|:-----------:|:-----------:|:----------------:|:-------------------:|:---------------:|
+| Dashboard | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Personnel | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Daily Status | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Leave Requests | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Notifications | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Reports | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| User Accounts | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| History | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Communications | — | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| My Directorate | — | — | — | ✓ | — | — | ✓ | — |
+| Activity Log | — | — | — | — | ✓ | ✓ | — | ✓ |
+| Settings | — | — | — | — | — | ✓ | — | ✓ |
+| Structure (Org) | — | — | — | — | — | — | — | ✓ |
 
 ### Data Scope Rules
 
@@ -271,15 +276,17 @@ Regional Cmd      → sees only their region's data
 Division Cmd      → sees only their division's data
 Station Cmd       → sees only their station's data
 Post Cmd/Officer  → sees only their post's data
+Directorate Cmd   → sees only their directorate's personnel (any region) + their own reports/leave records
+Unit Cmd          → sees only their directorate + unit's personnel (any region) + their own reports/leave records
 ```
 
-**Rule:** A user can only create accounts for roles with a lower rank than their own, and only within their geographic scope.
+**Rule:** A user can only create accounts for roles with a lower rank than their own, and only within their geographic/functional scope. Functional accounts (created by Super Admin) are anchored to a directorate (and an optional unit, for Unit Commanders).
 
 ---
 
 ## 6. Database Schema
 
-The database file is stored at `data/mdd.sqlite`. Migration is handled automatically by `includes/db.php` using `PRAGMA user_version` (currently v8).
+The database file is stored at `data/mdd.sqlite`. Migration is handled automatically by `includes/db.php` using `PRAGMA user_version` (currently v12).
 
 ### Entity Relationship Diagram
 
@@ -1037,6 +1044,8 @@ The following demo accounts are seeded on first run:
 |----------|----------|------|-------|
 | `admin` | `admin123` | Super Admin | National (all) |
 | `rcmd_kla` | `rcmd123` | Regional Commander | Kampala Region |
+| `dir_ops` | `dir123` | Directorate Commander | Operations Directorate |
+| `unit_gd` | `unit123` | Unit Commander | General Duty (Operations) |
 | `dcmd_kcd` | `dcmd123` | Division Commander | Kampala Central Division |
 | `scmd_cps` | `scmd123` | Station Commander | Central Police Station |
 | `pcmd_cps1` | `pcmd123` | Post Commander | CPS Post 1 |
