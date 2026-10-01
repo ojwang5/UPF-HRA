@@ -431,7 +431,7 @@ include __DIR__ . '/../includes/header.php';
             <?php if ($r['status']==='pending' && role_rank($user['role']) > role_rank('post_commander')): ?>
               <details class="form-panel" style="position:relative">
                 <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review"><?= ICO_EYE ?></button></summary>
-                <div class="form-body" style="position:absolute;right:0;top:100%;min-width:250px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+                <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:250px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                   <form method="post" style="display:flex;flex-direction:column;gap:8px">
                     <input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <input type="text" name="notes" placeholder="Review notes (optional)">
@@ -445,7 +445,7 @@ include __DIR__ . '/../includes/header.php';
             <?php elseif (($r['status']==='approved' || $r['status']==='pending') && !$r['executed_at'] && role_rank($user['role']) > role_rank('post_commander')): ?>
               <details class="form-panel" style="position:relative">
                 <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Execute / cancel"><?= ICO_EDIT ?></button></summary>
-                <div class="form-body" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
+                <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
                   <form method="post" style="display:flex;flex-direction:column;gap:8px">
                     <input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <div class="action-bar">
@@ -458,7 +458,7 @@ include __DIR__ . '/../includes/header.php';
             <?php elseif ($r['status']==='executed' && ($r['report_status'] ?? 'pending')==='pending'): ?>
               <details class="form-panel" style="position:relative">
                 <summary><button type="button" class="btn-icon bi-green bi-sm" title="Confirm reporting at new workplace"><?= ICO_OK ?></button></summary>
-                <div class="form-body" style="position:absolute;right:0;top:100%;min-width:230px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
+                <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:230px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
                   <form method="post" style="display:flex;flex-direction:column;gap:8px">
                     <input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <div style="font-size:12px;color:var(--navy-700)">Has <strong><?= e($r['emp_name']) ?></strong> reported at the new place of work?</div>

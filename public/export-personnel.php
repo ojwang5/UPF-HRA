@@ -145,36 +145,139 @@ $reportScope = user_scope_label($user);
 <meta charset="utf-8">
 <title><?= htmlspecialchars($title) ?></title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:18px 24px}
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0
+}
+body{
+  font-family:Arial,sans-serif;
+  font-size:11px;
+  color:#111;
+  background:#fff;
+  padding:18px 24px
+}
 
 /* ── Official UPF Header ── */
-.upf-header{border-bottom:2.5px solid #111;padding-bottom:10px;margin-bottom:0}
-.upf-main-title{text-align:center;font-size:14px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px}
-.upf-identity{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px}
-.upf-contact{font-size:9.5px;line-height:1.75}
-.upf-logo-wrap{text-align:center}
-.upf-logo-wrap img{width:72px;height:72px;object-fit:contain}
-.upf-address{text-align:right;font-size:9.5px;line-height:1.75}
-.upf-report-label{text-align:center;margin-top:10px;padding:6px 0;border-top:1px solid #111;border-bottom:2px solid #111}
-.upf-report-label .rpt-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
-.upf-report-label .rpt-meta{font-size:10px;margin-top:2px}
+.upf-header{
+  border-bottom:2.5px solid #111;
+  padding-bottom:10px;
+  margin-bottom:0
+}
+.upf-main-title{
+  text-align:center;
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:.5px;
+  text-transform:uppercase;
+  margin-bottom:8px
+}
+.upf-identity{
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  gap:10px
+}
+.upf-contact{
+  font-size:9.5px;
+  line-height:1.75
+}
+.upf-logo-wrap{
+  text-align:center
+}
+
+.upf-logo-wrap img{
+  width:72px;
+  height:72px;
+  object-fit:contain
+}
+.upf-address{
+  text-align:right;
+  font-size:9.5px;
+  line-height:1.75
+}
+.upf-report-label{
+  text-align:center;
+  margin-top:10px;
+  padding:6px 0;
+  border-top:1px solid #111;
+  border-bottom:2px solid #111
+}
+.upf-report-label .rpt-title{
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.3px
+}
+.upf-report-label .rpt-meta{
+  font-size:10px;
+  margin-top:2px
+
+}
 
 /* ── Table ── */
-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:9.5px}
-th{background:#1a2236;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a2236}
-td{border:1px solid #c8cfd8;padding:4px 8px}
-tr:nth-child(even) td{background:#f5f7fa}
+table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:14px;
+  font-size:9.5px
+}
+th{
+  background:#1a2236;
+  color:#fff;
+  padding:6px 8px;
+  text-align:left;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.4px;
+  border:1px solid #1a2236
+}
+td{
+  border:1px solid #c8cfd8;
+  padding:4px 8px
+}
+tr:nth-child(even) td{
+  background:#f5f7fa
+}
 
 /* ── Controls & footer ── */
-.report-meta{font-size:9.5px;color:#555;margin:8px 0 12px;line-height:1.6}
-.no-print-bar{margin-top:18px;display:flex;gap:10px;align-items:center}
-.btn-print{padding:8px 18px;background:#1a2236;color:#fff;border:0;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600}
-.page-footer{margin-top:22px;border-top:1px solid #ccc;padding-top:6px;text-align:center;font-size:8.5px;color:#888}
+.report-meta{
+  font-size:9.5px;
+  color:#555;margin:8px 0 12px;
+  line-height:1.6
+}
+.no-print-bar{
+  margin-top:18px;
+  display:flex;
+  gap:10px;
+  align-items:center
+}
+.btn-print{
+  padding:8px 18px;
+  background:#1a2236;
+  color:#fff;border:0;
+  border-radius:5px;
+  font-size:11px;
+  cursor:pointer;
+  font-weight:600
+}
+.page-footer{
+  margin-top:22px;
+  border-top:1px solid #ccc;
+  padding-top:6px;text-align:center;
+  font-size:8.5px;
+  color:#888
+}
 
 @media print{
-  body{padding:10px 14px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .no-print{display:none!important}
+  body{
+    padding:10px 14px;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact
+  }
+  .no-print{
+    display:none!important
+  }
 }
 </style>
 </head>

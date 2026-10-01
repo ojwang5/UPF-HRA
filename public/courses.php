@@ -242,7 +242,7 @@ include __DIR__ . '/../includes/header.php';
             <?php if ($r['status']==='active'): ?>
             <details class="form-panel" style="position:relative">
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Complete / withdraw"><?= ICO_EDIT ?></button></summary>
-              <div class="form-body" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
                 <div class="action-bar">
                   <form method="post"><input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <button class="btn-icon bi-green" name="action" value="complete" title="Mark completed"><?= ICO_OK ?></button>

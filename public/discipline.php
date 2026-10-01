@@ -162,7 +162,7 @@ include __DIR__ . '/../includes/header.php';
             <?php if ($r['status']==='open'): ?>
             <details class="form-panel" style="position:relative">
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Close / reinstate"><?= ICO_EDIT ?></button></summary>
-              <div class="form-body" style="position:absolute;right:0;top:100%;min-width:250px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:250px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
                   <input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <input type="text" name="outcome" placeholder="Outcome (optional)">

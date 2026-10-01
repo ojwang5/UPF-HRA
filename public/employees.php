@@ -310,7 +310,7 @@ include __DIR__ . '/../includes/header.php';
               <?php endforeach; ?>
             </div>
           </div>
-          <button class="btn-icon bi-gold bi-lg" type="submit"><?= ICO_DL ?> <span style="font-size:12px;margin-left:4px">Export</span></button>
+          <button class="btn-icon bi-gold bi-lg" type="submit"><?= ICO_DL ?> <span style="font-size:12px;margin-left:4px;">Export</span></button>
         </form>
       </div>
     </div>

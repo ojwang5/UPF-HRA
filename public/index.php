@@ -400,7 +400,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
 .stat-bar-fill{height:100%;border-radius:3px;transition:width .4s}
 .stat-pct{font-size:10px;color:var(--muted);margin-top:4px}
 .stat .hint{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.3}
-.stat-deserted{background:#fff0f8;border-color:#fce7f3}
+.stat-deserted{border-color:#be185d}
 /* Status distribution charts */
 .charts-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;align-items:stretch}
 @media(max-width:900px){.charts-grid{grid-template-columns:1fr}}

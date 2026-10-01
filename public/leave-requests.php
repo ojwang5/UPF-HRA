@@ -268,7 +268,7 @@ $adjRows = $adjRows->fetchAll();
             <?php if ($r['status']==='pending' && can_approve_leave($user, $r['leave_type'])): ?>
             <details class="form-panel" style="position:relative">
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review request"><?= ICO_EYE ?></button></summary>
-              <div class="form-body" style="position:absolute;right:0;top:100%;min-width:260px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:260px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
                   <input type="hidden" name="action" value="review"><input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <input type="text" name="notes" placeholder="Review notes (optional)">

@@ -373,7 +373,7 @@ include __DIR__ . '/../includes/header.php';
             <a class="btn-icon bi-secondary bi-sm" href="/reports.php?view=<?= (int)$r['id'] ?>" title="View report details"><?= ICO_EYE ?></a>
             <details class="form-panel" style="position:relative;display:inline-block">
               <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Take action"><?= $r['status']==='approved' ? ICO_OK : ICO_SEND ?></button></summary>
-              <div class="form-body" style="position:absolute;right:0;top:100%;min-width:320px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:320px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
                   <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                   <?php if ($isReverted): ?>

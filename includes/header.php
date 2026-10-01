@@ -81,7 +81,8 @@ $unreadCount = $user ? unread_notification_count($user) : 0;
   <div class="topbar-inner">
     <?php if ($user): ?>
     <!-- Hamburger — MOBILE ONLY (hidden on desktop via CSS) -->
-    <button class="hamburger" id="hamburger" aria-label="Open menu" onclick="openDrawer()">
+    <button class="hamburger" id="hamburger" type="button" aria-label="Open menu"
+            aria-controls="sidebar" aria-expanded="false" onclick="openDrawer()">
       <span></span><span></span><span></span>
     </button>
     <?php endif; ?>
@@ -116,24 +117,33 @@ $unreadCount = $user ? unread_notification_count($user) : 0;
 
 <div class="app">
   <!-- Sidebar -->
-  <nav class="sidebar sidebar-wrap" id="sidebar">
+  <nav class="sidebar sidebar-wrap" id="sidebar" aria-label="Main navigation">
     <!-- Desktop collapse toggle arrow inside sidebar -->
-    <button class="sb-collapse-btn" id="sb-collapse-btn" onclick="toggleSidebar()" title="Collapse sidebar">
+    <button class="sb-collapse-btn" id="sb-collapse-btn" type="button" onclick="toggleSidebar()" title="Collapse sidebar" aria-label="Collapse sidebar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
 
+    <!-- Mobile drawer header: identity + close. Must be first so the top of the
+         list is never hidden behind the sticky topbar or below the fold. -->
+    <div class="sb-drawer-head">
+      <img src="/assets/logo.jpg" alt="" class="sb-drawer-logo">
+      <div class="sb-drawer-id">
+        <div class="n"><?= e($user['full_name']) ?></div>
+        <div class="m"><?= e(role_label($role)) ?><?= ($sl=user_scope_label($user))!=='HQ' ? ' · '.e($sl) : '' ?></div>
+      </div>
+      <button class="sb-close-btn" type="button" onclick="closeDrawer()" title="Close menu" aria-label="Close menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
     <div class="nav-label">Menu</div>
     <?php foreach ($nav_items as $n): ?>
-      <a href="<?= $n['href'] ?>" class="<?= $page===$n['key']?'active':'' ?>" title="<?= e($n['label']) ?>">
+      <a href="<?= $n['href'] ?>" class="<?= $page===$n['key']?'active':'' ?>"
+         title="<?= e($n['label']) ?>"<?= $page===$n['key'] ? ' aria-current="page"' : '' ?>>
         <?= $n['icon'] ?><span class="nav-label-text"><?= e($n['label']) ?></span>
         <?php if ($n['key']==='notifications' && $unreadCount>0): ?><span class="nav-badge"><?= $unreadCount ?></span><?php endif; ?>
       </a>
     <?php endforeach; ?>
-
-    <!-- Mobile close button -->
-    <button class="sb-close-btn" onclick="closeDrawer()" title="Close menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
 
     <div class="sb-footer"><span class="nav-label-text"><?= e(role_label($role)) ?> · v2.0</span></div>
   </nav>
@@ -142,40 +152,70 @@ $unreadCount = $user ? unread_notification_count($user) : 0;
 <?php endif; ?>
 
 <script>
+/* ── Sidebar: desktop collapse + mobile drawer ─────────────────────────────
+   The 768 breakpoint lives in exactly one place (matchMedia) so the JS can
+   never drift out of sync with the @media block in style.css. */
 (function(){
-  // Restore sidebar state (desktop only)
-  if(window.innerWidth > 768) {
-    if(localStorage.getItem('sb_collapsed')==='1') {
-      document.getElementById('sidebar')?.classList.add('collapsed');
-      document.getElementById('sb-collapse-btn')?.classList.add('flipped');
-    }
+  var mq = window.matchMedia('(max-width: 768px)');
+  var sb = document.getElementById('sidebar');
+  var btn = document.getElementById('sb-collapse-btn');
+
+  function getCollapsed(){
+    try{ return localStorage.getItem('sb_collapsed')==='1'; }catch(e){ return false; }
   }
+  function applyCollapsed(on){
+    if(!sb) return;
+    sb.classList.toggle('collapsed', on);
+    btn?.classList.toggle('flipped', on);
+  }
+
+  // Restore the saved state, but never on mobile — a collapsed rail has no
+  // place inside the drawer and would hide every label.
+  applyCollapsed(!mq.matches && getCollapsed());
+
+  mq.addEventListener('change', function(e){
+    if(e.matches){ applyCollapsed(false); closeDrawer(); }
+    else { applyCollapsed(getCollapsed()); }
+  });
 })();
 
 function toggleSidebar(){
   var sb = document.getElementById('sidebar');
-  var btn = document.getElementById('sb-collapse-btn');
   if(!sb) return;
   var isCollapsed = sb.classList.toggle('collapsed');
-  btn?.classList.toggle('flipped', isCollapsed);
-  localStorage.setItem('sb_collapsed', isCollapsed ? '1' : '0');
+  document.getElementById('sb-collapse-btn')?.classList.toggle('flipped', isCollapsed);
+  try{ localStorage.setItem('sb_collapsed', isCollapsed ? '1' : '0'); }catch(e){}
 }
 
 function openDrawer(){
-  document.getElementById('sidebar')?.classList.add('open');
+  var sb = document.getElementById('sidebar');
+  if(!sb) return;
+  sb.classList.add('open');
   document.getElementById('drawer-backdrop')?.classList.add('show');
-  document.body.style.overflow='hidden';
+  document.getElementById('hamburger')?.setAttribute('aria-expanded','true');
+  document.body.classList.add('drawer-open');
+  sb.querySelector('.sb-close-btn')?.focus();
 }
 
 function closeDrawer(){
-  document.getElementById('sidebar')?.classList.remove('open');
+  var sb = document.getElementById('sidebar');
+  if(!sb || !sb.classList.contains('open')) return;
+  sb.classList.remove('open');
   document.getElementById('drawer-backdrop')?.classList.remove('show');
-  document.body.style.overflow='';
+  document.getElementById('hamburger')?.setAttribute('aria-expanded','false');
+  document.body.classList.remove('drawer-open');
+  document.getElementById('hamburger')?.focus();
 }
 
-// Close drawer on resize to desktop
-window.addEventListener('resize', function(){
-  if(window.innerWidth > 768) closeDrawer();
+// Tapping any destination closes the drawer (a full page load usually follows,
+// but this also covers in-page nav).
+document.getElementById('sidebar')?.addEventListener('click', function(e){
+  if(e.target.closest('a')) closeDrawer();
+});
+
+// Escape closes the drawer from anywhere.
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') closeDrawer();
 });
 
 // ── Theme switcher: default / light / dark ──

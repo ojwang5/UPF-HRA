@@ -205,7 +205,7 @@ include __DIR__ . '/../includes/header.php';
             <a class="btn-icon bi-secondary bi-sm" href="/special-assignments.php?view=<?= (int)$r['id'] ?>" title="View details"><?= ICO_EYE ?></a>
             <details class="form-panel" style="position:relative;display:inline-block">
               <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Edit assignment"><?= ICO_EDIT ?></button></summary>
-              <div class="form-body" style="position:absolute;right:0;top:100%;min-width:380px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:380px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
                   <input type="hidden" name="action" value="edit">
                   <input type="hidden" name="id" value="<?= $r['id'] ?>">
@@ -248,7 +248,7 @@ include __DIR__ . '/../includes/header.php';
             <?php if ($r['status']==='active'): ?>
             <details class="form-panel" style="position:relative;display:inline-block">
               <summary><button type="button" class="btn-icon bi-green bi-sm" title="End / cancel assignment"><?= ICO_OK ?></button></summary>
-              <div class="form-body" style="position:absolute;right:0;top:100%;min-width:240px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:240px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
                   <input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <input type="text" name="remarks" placeholder="Remarks (optional)">
