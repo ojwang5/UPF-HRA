@@ -689,8 +689,8 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
     display:flex;
     align-items:center;
     justify-content:center;
-    width:34px
-    ;height:34px;
+    width:34px;
+    height:34px;
     padding:0;background:rgba(255,255,255,.1);
     border:none;
     border-radius:8px;
@@ -731,18 +731,16 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
   {width:20px;
     height:20px
   }
-  .sidebar .nav-label{
+.sidebar .nav-label{
     padding:10px 20px 8px
   }
+
+  /* margin-top:auto keeps the version footer pinned to the bottom when the
+     list fits, and behaves as a normal block once the list overflows. */
   .sidebar .sb-footer{
-    padding:18px 20px 0
-  }
-  
-  /* footer shouldn't be pushed off by margin-top:auto when the list overflows */
-  .sidebar .sb-footer{
+    padding:18px 20px 0;
     margin-top:auto
   }
-
 
   /* Content full-width */
   .content{
@@ -751,13 +749,22 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
   }
   
 
-  /* Topbar compact */
+  /* Topbar compact.
+     The brand block used to wrap "UGANDA POLICE FORCE" over 3 lines and the
+     system name over 4, giving a 148px header on a phone. Everything here
+     exists to hold the brand to a single line. */
   .topbar-inner{
-    padding:10px 14px;
-    gap:10px
+    padding:8px 12px;
+    gap:8px
   }
 
   .brand .motto{
+    display:none
+  }
+
+  /* Redundant on a phone — the drawer header carries the user identity and
+     each page's own header carries the context. */
+  .brand .sys{
     display:none
   }
 
@@ -766,19 +773,39 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
   }
 
   .brand .org{
-    font-size:13px;
-    letter-spacing:.8px
+    font-size:12px;
+    letter-spacing:.5px;
+    line-height:1.2;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis
   }
-
 
   .logo{
-    width:42px;
-    height:42px
+    width:38px;
+    height:38px
   }
 
-  .btn.btn-ghost.btn-sm{
-    padding:5px 10px;
-    font-size:11px
+  .hamburger{
+    width:34px;
+    height:34px;
+    padding:7px
+  }
+
+  .bell{
+    width:32px;
+    height:32px
+  }
+
+  .bell svg{
+    width:16px;
+    height:16px
+  }
+
+  .topbar-inner > .btn.btn-ghost.btn-sm{
+    padding:5px 9px;
+    font-size:11px;
+    white-space:nowrap
   }
 
 
@@ -858,6 +885,15 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
     padding:12px 16px;
     flex-wrap:wrap
   }
+}
+
+/* Narrow phones only (measured: the brand needs ~150px, which it first gets at
+   a 412px viewport). Below that "UGANDA POLICE FORCE" ellipsizes to
+   "UGANDA PO…", so drop the wordmark — the crest and the drawer header are
+   enough identification. */
+@media (max-width: 400px){
+  .brand{display:none}
+  .topbar-inner{justify-content:flex-start}
 }
 
 /* Landscape phones: reclaim the vertical space the stacked topbar wastes */
@@ -1072,6 +1108,15 @@ tbody tr:hover td{
   font-size:12px
 }
 
+/* Full-width button. .btn is inline-flex, so text-align can't centre it —
+   justify-content is what actually centres the label. */
+.btn-block{
+  display:flex;
+  width:100%;
+  justify-content:center;
+  text-align:center
+}
+
 /* ===== Icon-only buttons (widget style) ===== */
 .btn-icon{
   width:34px;
@@ -1241,7 +1286,8 @@ tbody tr:hover td{
 }
 
 .stat.is-active{
-  ring:2px solid var(--primary);
+  outline:2px solid var(--primary);
+  outline-offset:2px;
   box-shadow:0 0 0 3px rgba(31,53,89,.2)
 }
 

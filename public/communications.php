@@ -136,7 +136,11 @@ include __DIR__ . '/../includes/header.php';
 
 <?php if ($tab === 'compose'): ?>
 <!-- ══════════════════ COMPOSE ══════════════════ -->
-<div style="display:grid;grid-template-columns:1fr minmax(260px,340px);gap:20px;align-items:start">
+<style>
+  /* minmax(260px,340px) forced a 555px grid on a phone — stack instead. */
+  @media (max-width:900px){.compose-grid{grid-template-columns:1fr !important;gap:16px}}
+</style>
+<div class="compose-grid" style="display:grid;grid-template-columns:1fr minmax(260px,340px);gap:20px;align-items:start">
 
   <!-- Main compose form -->
   <div class="card">

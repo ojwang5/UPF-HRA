@@ -208,6 +208,9 @@ include __DIR__ . '/../includes/header.php';
 ?>
 <style>
   .report-chip{padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+  /* The scope chip carries a 60-char sentence on the division view; let it
+     wrap instead of forcing the whole page header wider than a phone. */
+  @media (max-width:768px){.report-chip{white-space:normal}}
   .chip-hq{background:var(--gold-soft,#fce8b3);color:#8a6500}
   .chip-region{background:#e3e8ff;color:#3b4ea1}
   .chip-division{background:#e6f0ff;color:#1d5fad}

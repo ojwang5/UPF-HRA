@@ -37,7 +37,7 @@ if (current_user()) { header('Location:/'); exit; }
     <label>Password</label>
     <input type="password" name="password" required autocomplete="current-password">
   </div>
-  <button class="btn" style="width:100%" type="submit">Sign in</button>
+  <button class="btn btn-block" type="submit">Sign in</button>
   <details style="margin-top:14px">
     <summary class="muted" style="font-size:11px;text-align:center;cursor:pointer">Demo accounts</summary>
     <table style="font-size:11px;margin-top:8px;width:100%;border-collapse:collapse">
