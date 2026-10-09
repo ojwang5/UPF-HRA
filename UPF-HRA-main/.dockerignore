@@ -1,0 +1,10 @@
+.local/
+.agents/
+.git/
+.gitignore
+.cache/
+.DS_Store
+data/
+Dockerfile
+.dockerignore
+attached_assets/

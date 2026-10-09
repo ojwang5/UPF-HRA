@@ -1,0 +1,53 @@
+MDD Manager App 
+This document outlines the specifications for a simple app designed to help managers organize structured organizations such as brass bands, police units, or military teams. The application focuses on personnel management, daily status reporting, and supervisory role tracking.
+Core Features
+login must be for super admin,branch managers, and users(submit reports to both branch admin and super admin)
+BRANCHES
+The organization has 3 branches 1) kampala headquarters. 2) Rwizi mbarara .3) n.kyoga lira. 
+1. Employee Profile Management (must be given to all employees in all the branches)
+Each employee will have a detailed profile that includes:
+- File Number
+- Full Name
+- Sex i.e. male or female
+- Rank/Position
+- Instrument Played
+- Role (e.g., Musician, Drum Major)
+- Supervisor Type: Officer, NCO, Constable
+- Date of Joining
+- Contact Info (Phone, Email)
+2. Daily Status Tracker
+Daily attendance and activity tracking with the following statuses:
+- Present
+- Sick
+- AWOL (Absent Without Official Leave)
+- Deserted
+- On Leave (Pass, Maternity, Paternity, Study)
+- On Course
+-Summarize the table as giving to total male and female, Awol, absent, pass leave, study leave on course, on suspension, maternity leave and then provide the grand total
+- text area for special report
+Additional options:
+- Remarks per entry
+- Supervisor approval status
+3. Supervisor Role Mapping
+Each employee is assigned to a supervisor. Supervisors can be categorized as:
+- Officers
+- NCOs (Non-Commissioned Officers)
+- Constables
+Managers can view reports and attendance by supervisor categories.
+Additional Features
+- Attendance summary by individual, role, or supervisor
+- daily attendance summary summarizing all status of employees
+- Monthly statistics
+- Export reports as PDF or CSV
+- Notification system for AWOL alerts and attendance reminders
+- Email summaries to management
+- Track training/course attendance
+- Leave balance tracking (display those on leave and their due date)
+- Fully mobile-responsive design for on-the-go access
+- be able to provide history page for tracking the submission of the report.
+Optional Smart Features
+- Auto-flagging repeated AWOL behavior
+- Duty roster generation
+- To-do for generating work schedule
+- AI insights for attendance patterns
+- Offline mode with sync capability

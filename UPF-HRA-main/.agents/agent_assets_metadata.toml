@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "flOMkH8bGNKEl90bfXRRE"
+uri = "file://MDD_SYSTEM_DOCUMENTATION.md"
+type = "text"
+title = "UPF MDD Manager — Full System Documentation"

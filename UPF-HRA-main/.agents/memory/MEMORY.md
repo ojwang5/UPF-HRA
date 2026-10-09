@@ -1,0 +1,1 @@
+- [MDD hierarchy schema](mdd-hierarchy.md) — 4-level police hierarchy (Region→Division→Station→Post); 6 roles; 8 employee statuses; denormalized IDs on employees for simple scoping.
