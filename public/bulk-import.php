@@ -173,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
                     if (!$dryRun) {
                         $pdo->prepare("UPDATE employees SET full_name=?,gender=?,rank=?,directorate=?,unit=?,region_id=?,division_id=?,station_id=?,post_id=?,email=?,phone=? WHERE id=?")
                             ->execute([$r['name'],$r['gender'],$r['rank'],$r['dir'],$r['unit'],$ch['region_id'],$ch['division_id'],$ch['station_id'],$r['postId'],$r['email'],$r['phone'],$r['existing']['id']]);
-                        log_activity('Bulk Update Personnel', 'employee', "{$r['rank']} {$r['name']}", $r['existing']['id'], "via CSV import");
+                        log_activity('Bulk Update Personnel', 'employee', personnel_label(['service_no'=>$r['sno'],'rank'=>$r['rank'],'full_name'=>$r['name']]), $r['existing']['id'], "via CSV import");
                     }
                     $results[] = ['updated', "Row {$r['rowNum']} [<strong>{$r['sno']}</strong>]: Updated → <strong>{$r['name']}</strong> ({$r['rank']}) @ {$postMap[$r['postId']]}".($dryRun?' <em>[dry run]</em>':'')];
                     $updated++; continue;
@@ -185,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
                 try {
                     $pdo->prepare("INSERT INTO employees (service_no,full_name,gender,rank,directorate,unit,region_id,division_id,station_id,post_id,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
                         ->execute([$r['sno'],$r['name'],$r['gender'],$r['rank'],$r['dir'],$r['unit'],$ch['region_id'],$ch['division_id'],$ch['station_id'],$r['postId'],$r['email'],$r['phone']]);
-                    log_activity('Bulk Import Personnel', 'employee', "{$r['rank']} {$r['name']}", (int)$pdo->lastInsertId(), "via CSV import");
+                    log_activity('Bulk Import Personnel', 'employee', personnel_label(['service_no'=>$r['sno'],'rank'=>$r['rank'],'full_name'=>$r['name']]), (int)$pdo->lastInsertId(), "via CSV import");
                 } catch (\PDOException $ex) {
                     $results[] = ['err', "Row {$r['rowNum']} [{$r['sno']}]: DB error — ".$ex->getMessage()];
                     $errors++; continue;

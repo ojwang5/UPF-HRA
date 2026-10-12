@@ -6,8 +6,10 @@ $page = 'assignments';
 $page_title = 'Special Assignments';
 $pdo = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
+$readonly = role_rank($user['role']) < role_rank('station_commander');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($readonly) { flash('err', 'Your role has view-only access to special assignments.'); header('Location: /special-assignments.php'); exit; }
     $action = $_POST['action'] ?? '';
     $id     = (int)($_POST['id'] ?? 0);
 
@@ -22,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$eid, trim($_POST['title']), trim($_POST['nature'] ?? '') ?: null,
                            trim($_POST['place'] ?? '') ?: null, $_POST['start_date'], $endDate,
                            trim($_POST['notes'] ?? '') ?: null, $user['id']]);
-            log_activity('Created special assignment', 'special_assignment', trim($_POST['title']), 0, 'Employee #'.$eid.' from '.$_POST['start_date']);
+            log_activity('Created special assignment', 'special_assignment', trim($_POST['title']), 0, personnel_label_by_id($pdo, $eid).' from '.$_POST['start_date']);
             flash('msg', 'Special assignment recorded.');
         }
     } elseif ($id) {
@@ -113,6 +115,9 @@ include __DIR__ . '/../includes/header.php';
   <div><h1>Special Assignments</h1>
     <div class="desc">Officers detached on special duty · <?= $activeCount ?> active</div></div>
   <div class="action-bar">
+    <a class="btn-icon bi-secondary" href="/records-export.php?module=assignments" title="Export special assignments to CSV"><?= ICO_DL ?></a>
+    <?php if (!$readonly): ?>
+    <a class="btn-icon bi-secondary" href="/records-import.php?module=assignments" title="Bulk import special assignments (CSV)"><?= ICO_GEN ?></a>
     <div class="panel-wrap">
       <button class="btn-icon bi-primary" data-panel="panel-new" title="New special assignment"><?= ICO_PLUS ?></button>
       <div class="panel-drop" id="panel-new" style="min-width:420px">
@@ -148,6 +153,7 @@ include __DIR__ . '/../includes/header.php';
         </form>
       </div>
     </div>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -204,6 +210,7 @@ include __DIR__ . '/../includes/header.php';
           <td><?= sa_pill($r['status']) ?></td>
           <td style="white-space:nowrap">
             <a class="btn-icon bi-secondary bi-sm" href="/special-assignments.php?view=<?= (int)$r['id'] ?>" title="View details"><?= ICO_EYE ?></a>
+            <?php if (!$readonly): ?>
             <details class="form-panel" style="position:relative;display:inline-block">
               <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Edit assignment"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:380px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
@@ -266,6 +273,7 @@ include __DIR__ . '/../includes/header.php';
               <input type="hidden" name="id" value="<?= $r['id'] ?>">
               <button class="btn-icon bi-danger bi-sm" type="submit" title="Delete assignment"><?= ICO_TRASH ?></button>
             </form>
+            <?php endif; ?>
           </td>
         </tr>
         <?php endforeach; ?>

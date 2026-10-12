@@ -320,6 +320,64 @@ function migrate(PDO $pdo): void {
     if ($v < 12) {
         _migrate_v12($pdo);
     }
+
+    if ($v < 13) {
+        _migrate_v13($pdo);
+    }
+}
+
+/* ─── v13: configurable leave types + leave extension workflow ─── */
+function _migrate_v13(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS leave_types (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT NOT NULL UNIQUE,
+                min_role   TEXT NOT NULL DEFAULT 'station_commander',
+                active     INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+        ");
+        // Seed the default leave types only once (on an empty registry).
+        if ((int)$pdo->query("SELECT COUNT(*) FROM leave_types")->fetchColumn() === 0) {
+            $seed = [
+                ['Annual',       'station_commander'],
+                ['Sick',         'station_commander'],
+                ['Compassionate','station_commander'],
+                ['Maternity',    'station_commander'],
+                ['Study',        'regional_commander'],
+                ['Other',        'station_commander'],
+            ];
+            $ins = $pdo->prepare("INSERT OR IGNORE INTO leave_types (name,min_role) VALUES (?,?)");
+            foreach ($seed as [$n,$r]) $ins->execute([$n,$r]);
+        }
+
+        // Leave extensions: a request to push an approved leave's end date later.
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS leave_extensions (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                leave_request_id INTEGER NOT NULL REFERENCES leave_requests(id) ON DELETE CASCADE,
+                employee_id      INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                old_end_date     TEXT NOT NULL,
+                new_end_date     TEXT NOT NULL,
+                reason           TEXT,
+                status           TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+                requested_by     INTEGER REFERENCES users(id),
+                requested_at     TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                reviewed_by      INTEGER REFERENCES users(id),
+                reviewed_at      TEXT,
+                review_notes     TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_leave_ext_leave ON leave_extensions(leave_request_id);
+        ");
+
+        $pdo->exec("PRAGMA user_version = 13");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
 }
 
 /* ─── v12: functional command roles (Directorate / Unit Commander) ─── */

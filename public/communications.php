@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'division' => ($pdo->query("SELECT name FROM divisions WHERE id=$recipId")->fetchColumn() ?: 'Unknown Division') . ' Division',
         'station'  => ($pdo->query("SELECT name FROM stations WHERE id=$recipId")->fetchColumn() ?: 'Unknown Station') . ' Station',
         'post'     => ($pdo->query("SELECT name FROM posts WHERE id=$recipId")->fetchColumn() ?: 'Unknown Post') . ' Post',
-        'employee' => $pdo->query("SELECT full_name FROM employees WHERE id=$recipId")->fetchColumn() ?: 'Individual',
+        'employee' => ($_e = $pdo->query("SELECT service_no, rank, full_name FROM employees WHERE id=$recipId")->fetch()) ? personnel_label($_e) : 'Individual',
         default    => 'Custom',
     };
 
@@ -43,9 +43,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'post':     $empWhere .= " AND e.post_id=?";     $empParams[] = $recipId; break;
         case 'employee': $empWhere .= " AND e.id=?";          $empParams[] = $recipId; break;
     }
-    $stmt = $pdo->prepare("SELECT id, full_name, email, phone FROM employees e WHERE $empWhere");
+    $stmt = $pdo->prepare("SELECT id, service_no, full_name, rank, email, phone FROM employees e WHERE $empWhere");
     $stmt->execute($empParams);
     $recipients = $stmt->fetchAll();
+
+    // Optional: also copy the Region Commander(s) of the target region.
+    if (!empty($_POST['copy_region']) && in_array($recipType, ['division','station','post'], true) && $recipId) {
+        if ($recipType === 'division') {
+            $q = $pdo->prepare("SELECT region_id FROM divisions WHERE id=?"); $q->execute([$recipId]); $regionId = (int)$q->fetchColumn();
+        } elseif ($recipType === 'station') {
+            $q = $pdo->prepare("SELECT d.region_id FROM stations s JOIN divisions d ON d.id=s.division_id WHERE s.id=?"); $q->execute([$recipId]); $regionId = (int)$q->fetchColumn();
+        } else {
+            $q = $pdo->prepare("SELECT d.region_id FROM posts p JOIN stations s ON s.id=p.station_id JOIN divisions d ON d.id=s.division_id WHERE p.id=?"); $q->execute([$recipId]); $regionId = (int)$q->fetchColumn();
+        }
+        if ($regionId) {
+            $rcStmt = $pdo->prepare("SELECT id, full_name, email, phone FROM users WHERE role='regional_commander' AND region_id=?");
+            $rcStmt->execute([$regionId]);
+            $need = $channel === 'email' ? 'email' : 'phone';
+            $added = 0;
+            foreach ($rcStmt->fetchAll() as $rc) {
+                if (empty($rc[$need])) continue;
+                $recipients[] = [
+                    'id'         => -((int)$rc['id']),
+                    'service_no' => '',
+                    'rank'       => '',
+                    'full_name'  => $rc['full_name'].' (Regional Commander copy)',
+                    'email'      => $rc['email'],
+                    'phone'      => $rc['phone'],
+                ];
+                $added++;
+            }
+            if ($added) $recipLabel .= ' + Region Commander copy';
+        }
+    }
 
     // Log the communication first
     $pdo->prepare("INSERT INTO communications (subject,body,sender_id,recipient_type,recipient_id,recipient_label,channel,sent_at,status,total_recipients) VALUES (?,?,?,?,?,?,?,datetime('now'),?,?)")
@@ -74,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $delivered = 0; $failed = 0; $errors = [];
         foreach ($recipients as $emp) {
             $res = send_sms($emp['phone'], $subject . "\n\n" . $body);
-            if ($res['ok']) $delivered++; else { $failed++; $errors[] = ($emp['full_name']).': '.$res['error']; }
+            if ($res['ok']) $delivered++; else { $failed++; $errors[] = personnel_label($emp).': '.$res['error']; }
         }
         $status = ($failed === 0) ? 'sent' : ($delivered === 0 ? 'failed' : 'partial');
         $pdo->prepare("UPDATE communications SET status=?, delivered=?, failed=?, error_log=? WHERE id=?")
@@ -191,6 +221,12 @@ include __DIR__ . '/../includes/header.php';
           <select name="recipient_id" id="recip-sub-select">
             <option value="">— select —</option>
           </select>
+        </div>
+        <div id="copy-region-wrap" class="form-group" style="display:none;margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:600;color:var(--text)">
+            <input type="checkbox" name="copy_region" value="1">
+            Also copy the Region Commander(s) of this region
+          </label>
         </div>
         <!-- Recipient count preview -->
         <div id="recip-count" style="font-size:12px;color:var(--muted);margin-top:8px">
@@ -395,6 +431,9 @@ function updateRecipientField(){
     post: [postsData,'Post'],
     employee: [employeesData,'Employee'],
   };
+
+  var cr = document.getElementById('copy-region-wrap');
+  if(cr) cr.style.display = (type==='division'||type==='station'||type==='post') ? '' : 'none';
 
   if(dataMap[type]){
     sub.style.display = '';

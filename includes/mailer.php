@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/helpers.php';
 
 /* ─── Settings helpers ─── */
 function get_setting(string $key, string $default = ''): string {
@@ -158,10 +159,10 @@ function send_communication(int $commId, array $employees, PDO $pdo): void {
 
     foreach ($employees as $emp) {
         $email = trim($emp['email'] ?? '');
-        if (!$email) { $failed++; $errors[] = ($emp['full_name']??'Unknown').': no email address'; continue; }
+        if (!$email) { $failed++; $errors[] = personnel_label($emp).': no email address'; continue; }
         $result = smtp_send_email($email, $emp['full_name'] ?? '', $comm['subject'], $htmlEmail, $comm['body']);
         if ($result['ok']) { $delivered++; }
-        else { $failed++; $errors[] = ($emp['full_name']??$email).': '.$result['error']; }
+        else { $failed++; $errors[] = personnel_label($emp).': '.$result['error']; }
     }
 
     $status = ($failed === 0) ? 'sent' : ($delivered === 0 ? 'failed' : 'partial');

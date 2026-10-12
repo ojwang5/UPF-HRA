@@ -47,6 +47,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $res = send_sms($testPhone, 'UPF MDD System: SMS integration test successful.');
             $res['ok'] ? flash('msg','Test SMS sent to '.$testPhone.'.') : flash('err','SMS error: '.$res['error']);
         }
+
+    } elseif ($action === 'add_leave_type') {
+        $name = trim($_POST['name'] ?? '');
+        $minRole = $_POST['min_role'] ?? 'station_commander';
+        if (!isset(ROLE_RANKS[$minRole])) $minRole = 'station_commander';
+        if ($name === '') {
+            flash('err', 'Enter a leave type name.');
+        } else {
+            try {
+                $pdo->prepare("INSERT INTO leave_types (name,min_role) VALUES (?,?)")->execute([$name, $minRole]);
+                log_activity('Added leave type', 'setting', $name);
+                flash('msg', 'Leave type "'.$name.'" added.');
+            } catch (\PDOException $ex) {
+                flash('err', 'That leave type already exists.');
+            }
+        }
+
+    } elseif ($action === 'toggle_leave_type') {
+        $id = (int)($_POST['id'] ?? 0);
+        $pdo->prepare("UPDATE leave_types SET active = 1 - active WHERE id=?")->execute([$id]);
+        flash('msg', 'Leave type updated.');
+
+    } elseif ($action === 'delete_leave_type') {
+        $id = (int)($_POST['id'] ?? 0);
+        $pdo->prepare("DELETE FROM leave_types WHERE id=?")->execute([$id]);
+        log_activity('Deleted leave type', 'setting', (string)$id);
+        flash('msg', 'Leave type removed.');
     }
 
     header('Location:/settings.php'); exit;
@@ -263,5 +290,60 @@ include __DIR__ . '/../includes/header.php';
 </details>
 
 </div><!-- end grid -->
+
+<!-- ══════════════════ LEAVE TYPES ══════════════════ -->
+<?php $leaveTypes = leave_types_list($pdo, false); ?>
+<div class="card" style="margin-top:20px">
+  <div class="chr">
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Leave Types
+    </h3>
+    <span class="badge badge-admin"><?= count($leaveTypes) ?></span>
+  </div>
+  <p style="margin:0 0 14px;font-size:13px;color:var(--muted);max-width:760px">
+    Configure the leave types available to personnel and the minimum rank required to approve each type.
+    Approvers of a type must hold the selected rank or higher.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Leave Type</th><th>Minimum Approver Rank</th><th>Status</th><th style="width:120px"></th></tr></thead>
+      <tbody>
+        <?php foreach ($leaveTypes as $lt): ?>
+        <tr>
+          <td><strong><?= e($lt['name']) ?></strong></td>
+          <td><?= e(role_label($lt['min_role'])) ?></td>
+          <td><?= $lt['active'] ? '<span class="badge badge-present">Active</span>' : '<span class="badge badge-awol">Disabled</span>' ?></td>
+          <td style="white-space:nowrap">
+            <form method="post" style="display:inline">
+              <input type="hidden" name="action" value="toggle_leave_type">
+              <input type="hidden" name="id" value="<?= (int)$lt['id'] ?>">
+              <button class="btn-icon bi-secondary bi-sm" title="<?= $lt['active']?'Disable':'Enable' ?>"><?= $lt['active'] ? ICO_CANCEL : ICO_OK ?></button>
+            </form>
+            <form method="post" style="display:inline" onsubmit="return confirm('Remove this leave type?')">
+              <input type="hidden" name="action" value="delete_leave_type">
+              <input type="hidden" name="id" value="<?= (int)$lt['id'] ?>">
+              <button class="btn-icon bi-danger bi-sm" title="Delete"><?= ICO_TRASH ?></button>
+            </form>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        <?php if (!$leaveTypes): ?><tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No leave types configured.</td></tr><?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+  <form method="post" class="form-row" style="margin-top:14px;align-items:flex-end">
+    <input type="hidden" name="action" value="add_leave_type">
+    <div class="form-group" style="flex:2"><label>New Leave Type</label><input type="text" name="name" required placeholder="e.g. Paternity Leave"></div>
+    <div class="form-group" style="flex:2"><label>Minimum Approver Rank</label>
+      <select name="min_role">
+        <?php foreach (['station_commander','division_commander','regional_commander'] as $rv): ?>
+        <option value="<?= $rv ?>"><?= e(role_label($rv)) ?> and above</option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <button class="btn-icon bi-gold" type="submit" title="Add leave type"><?= ICO_PLUS ?></button>
+  </form>
+</div>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

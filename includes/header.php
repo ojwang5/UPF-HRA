@@ -26,7 +26,7 @@ $all_nav = [
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>'],
   'discipline'   => ['href'=>'/discipline.php','label'=>'Suspension / Discipline','min_rank'=>2,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>'],
-  'undeployed'   => ['href'=>'/undeployed.php','label'=>'Undeployed','min_rank'=>2,
+  'undeployed'   => ['href'=>'/undeployed.php','label'=>'Undeployed','min_rank'=>3,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'],
   'history'      => ['href'=>'/history.php','label'=>'History','min_rank'=>3,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 15 15"/></svg>'],
@@ -51,7 +51,10 @@ $userRank = role_rank($role);
 foreach ($all_nav as $k => $n) {
     if (!$user) continue;
     if (isset($n['roles'])) {
-        if (in_array($role, $n['roles'], true)) { $n['key']=$k; $nav_items[]=$n; }
+        if (in_array($role, $n['roles'], true)) {
+            if ($k === 'directorate' && $role === 'unit_commander') { $n['label'] = 'My Unit'; }
+            $n['key']=$k; $nav_items[]=$n;
+        }
     } elseif ($userRank >= $n['min_rank']) {
         $n['key']=$k; $nav_items[]=$n;
     }

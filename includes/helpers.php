@@ -94,6 +94,22 @@ function personnel_label(array $emp, string $sep = ' — '): string {
 }
 
 /**
+ * Looks up a personnel record by id and renders its canonical label
+ * (`File/Force No — RANK Full Name`). Used for audit/activity references.
+ */
+function personnel_label_by_id(PDO $pdo, int $id): string {
+    if ($id <= 0) return '—';
+    try {
+        $st = $pdo->prepare("SELECT service_no, rank, full_name FROM employees WHERE id=?");
+        $st->execute([$id]);
+        $row = $st->fetch();
+        return $row ? personnel_label($row) : '—';
+    } catch (\Throwable $e) {
+        return '—';
+    }
+}
+
+/**
  * Canonical rank list for dropdowns, plus any legacy long-form rank that
  * exists in the data so editing such a record does not silently clear it.
  */
@@ -450,16 +466,40 @@ function leave_balances(PDO $pdo, array $employeeIds, ?string $year = null): arr
 }
 
 /**
+ * Configurable leave types (seeded in migration v13). Falls back gracefully
+ * if the registry is unavailable.
+ */
+function leave_types_list(?PDO $pdo = null, bool $activeOnly = true): array {
+    $pdo = $pdo ?: db();
+    try {
+        $sql = "SELECT * FROM leave_types" . ($activeOnly ? " WHERE active = 1" : "") . " ORDER BY name COLLATE NOCASE";
+        return $pdo->query($sql)->fetchAll();
+    } catch (\Throwable $e) {
+        return [];
+    }
+}
+
+/** Minimum role (name) required to approve a given leave type. */
+function leave_type_min_role(string $leaveType, ?PDO $pdo = null): string {
+    $pdo = $pdo ?: db();
+    try {
+        $st = $pdo->prepare("SELECT min_role FROM leave_types WHERE LOWER(name) = ? LIMIT 1");
+        $st->execute([strtolower(trim($leaveType))]);
+        $r = $st->fetchColumn();
+        if ($r && isset(ROLE_RANKS[$r])) return (string)$r;
+    } catch (\Throwable $e) {
+        // fall through to defaults
+    }
+    return strtolower(trim($leaveType)) === 'study' ? 'regional_commander' : 'station_commander';
+}
+
+/**
  * Whether a user role is allowed to approve a leave request of the given type.
- * Regular leave: station commander and above (rank >= 3).
- * Study leave: reserved for regional commander and above (rank >= 5).
+ * The required rank is configurable per leave type (settings); Study leave
+ * defaults to regional commander and above, all others to station commander.
  */
 function can_approve_leave(array $user, string $leaveType = 'Annual'): bool {
-    $type = strtolower(trim($leaveType));
-    if ($type === 'study') {
-        return role_rank($user['role']) >= role_rank('regional_commander');
-    }
-    return role_rank($user['role']) >= role_rank('station_commander');
+    return role_rank($user['role']) >= role_rank(leave_type_min_role($leaveType));
 }
 
 /* ═══ Hierarchical report workflow ═════════════════════════════════════
@@ -596,27 +636,28 @@ function run_leave_countdown_notifications(PDO $pdo): void {
     require_once __DIR__ . '/notifications.php';
     $today = date('Y-m-d');
     $soon  = date('Y-m-d', strtotime('+5 days'));
-    $rows = $pdo->query("SELECT lr.*, e.full_name, e.region_id, e.division_id, e.station_id, e.post_id
+    $rows = $pdo->query("SELECT lr.*, e.service_no, e.rank, e.full_name, e.region_id, e.division_id, e.station_id, e.post_id
                         FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id
                         WHERE lr.status='approved' AND lr.expiry_notified=0
                           AND lr.end_date <= '{$soon}'")
         ->fetchAll();
     foreach ($rows as $r) {
+        $empLabel = personnel_label($r);
         $days = leave_countdown($r);
         $expired = $today > $r['end_date'];
         $verb = $expired ? 'has EXPIRED' : ($days <= 2 ? 'ends in '.$days.' day'.($days === 1 ? '' : 's') : 'will end in '.$days.' days');
-        $msg = $r['full_name'].' — approved '.$r['leave_type'].' leave '.$verb." (was due {$r['end_date']}).";
+        $msg = $empLabel.' — approved '.$r['leave_type'].' leave '.$verb." (was due {$r['end_date']}).";
         // Commanders chain above the officer's post
         $chain = $pdo->prepare("SELECT id, full_name, role FROM users WHERE role=? AND station_id=?");
         $chain->execute(['station_commander', (int)$r['station_id']]);
-        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$r['full_name'], $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
+        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$empLabel, $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
         $chain = $pdo->prepare("SELECT id, full_name, role FROM users WHERE role=? AND division_id=?");
         $chain->execute(['division_commander', (int)$r['division_id']]);
-        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$r['full_name'], $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
+        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$empLabel, $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
         $chain = $pdo->prepare("SELECT id, full_name, role FROM users WHERE role=? AND region_id=?");
         $chain->execute(['regional_commander', (int)$r['region_id']]);
-        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$r['full_name'], $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
-        notify_superadmins('Leave expiring — '.$r['full_name'], $msg, ['kind'=>'leave', 'link'=>'/leave-requests.php']);
+        foreach ($chain->fetchAll() as $c) notify('Leave expiring — '.$empLabel, $msg, 'user', ['target_user_id'=>(int)$c['id'], 'kind'=>'leave', 'link'=>'/leave-requests.php']);
+        notify_superadmins('Leave expiring — '.$empLabel, $msg, ['kind'=>'leave', 'link'=>'/leave-requests.php']);
         $pdo->prepare("UPDATE leave_requests SET expiry_notified=1 WHERE id=?")->execute([(int)$r['id']]);
     }
 }

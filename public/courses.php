@@ -7,13 +7,15 @@ $page = 'courses';
 $page_title = 'On Course Management';
 $pdo = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
+$readonly = role_rank($user['role']) < role_rank('station_commander');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($readonly) { flash('err', 'Your role has view-only access to course records.'); header('Location: /courses.php'); exit; }
     $action = $_POST['action'] ?? '';
     $id     = (int)($_POST['id'] ?? 0);
     if ($action === 'create') {
         $eid = (int)$_POST['employee_id'];
-        $emp = $pdo->prepare("SELECT id, full_name FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
+        $emp = $pdo->prepare("SELECT id, service_no, rank, full_name FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
         $emp->execute(array_merge([$eid], $scopeP));
         $empRow = $emp->fetch();
         if ($empRow && valid_date($_POST['start_date'] ?? '') && valid_date($_POST['end_date'] ?? '')) {
@@ -37,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $notes[] = '"'.$a['course_name'].'" currently ON COURSE / not yet completed.';
                         }
                     }
-                    notify($empRow['full_name'].' — duplicate course', implode(' ', $notes), 'user',
+                    notify(personnel_label($empRow).' — duplicate course', implode(' ', $notes), 'user',
                         ['target_user_id'=>(int)$user['id'], 'kind'=>'course', 'link'=>'/courses.php']);
                     flash('err', 'Duplicate course not recorded: '.implode(' ', $notes));
                 } else {
@@ -49,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                    $_POST['start_date'], $_POST['end_date'], $duration,
                                    trim($_POST['sponsor'] ?? '') ?: null,
                                    trim($_POST['notes'] ?? '') ?: null, $user['id']]);
-                    log_activity('Recorded on-course', 'on_course', $rawCourse, 0, 'Employee #'.$eid.' · '.$duration.' days');
+                    log_activity('Recorded on-course', 'on_course', $rawCourse, 0, personnel_label($empRow).' · '.$duration.' days');
                     flash('msg', 'Course recorded — daily status will show "On Course" for its duration.');
                 }
             }
@@ -159,6 +161,11 @@ include __DIR__ . '/../includes/header.php';
   <div><h1>On Course Management</h1>
     <div class="desc">Training &amp; course records — auto-sets "On Course" status for the duration · <?= $activeCount ?> active</div></div>
   <div class="action-bar">
+    <a class="btn-icon bi-secondary" href="/records-export.php?module=courses" title="Export courses to CSV"><?= ICO_DL ?></a>
+    <?php if (!$readonly): ?>
+    <a class="btn-icon bi-secondary" href="/records-import.php?module=courses" title="Bulk import courses (CSV)"><?= ICO_GEN ?></a>
+    <?php endif; ?>
+    <?php if (!$readonly): ?>
     <div class="panel-wrap">
       <button class="btn-icon bi-primary" data-panel="panel-new" title="Record course"><?= ICO_PLUS ?></button>
       <div class="panel-drop" id="panel-new" style="min-width:440px">
@@ -202,6 +209,7 @@ include __DIR__ . '/../includes/header.php';
         </form>
       </div>
     </div>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -239,7 +247,7 @@ include __DIR__ . '/../includes/header.php';
           </td>
           <td><?= oc_pill($r['status']) ?></td>
           <td>
-            <?php if ($r['status']==='active'): ?>
+            <?php if ($r['status']==='active' && !$readonly): ?>
             <details class="form-panel" style="position:relative">
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Complete / withdraw"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
@@ -277,6 +285,7 @@ include __DIR__ . '/../includes/header.php';
       <?php endforeach; ?>
     </div>
     <?php else: ?><p class="muted" style="font-size:12px">No courses yet — add the first one below.</p><?php endif; ?>
+    <?php if (!$readonly): ?>
     <form method="post" class="form-row" style="margin:0">
       <input type="hidden" name="action" value="add_course">
       <div class="form-group" style="flex:2"><label>Course Name</label><input type="text" name="name" required placeholder="e.g. Inspectorate Course"></div>
@@ -286,6 +295,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="form-group" style="max-width:100px"><label>Days</label><input type="number" name="duration_days" min="0" placeholder="0"></div>
       <button class="btn-icon bi-gold" type="submit" title="Add course"><?= ICO_PLUS ?></button>
     </form>
+    <?php endif; ?>
   </div>
 
   <div class="card">
@@ -300,12 +310,14 @@ include __DIR__ . '/../includes/header.php';
       <?php endforeach; ?>
     </div>
     <?php else: ?><p class="muted" style="font-size:12px">No training schools yet — add the first one below.</p><?php endif; ?>
+    <?php if (!$readonly): ?>
     <form method="post" class="form-row" style="margin:0">
       <input type="hidden" name="action" value="add_school">
       <div class="form-group" style="flex:2"><label>School / Institution</label><input type="text" name="name" required placeholder="e.g. Police Training School Kabalye"></div>
       <div class="form-group"><label>Place</label><input type="text" name="place" placeholder="e.g. Masindi"></div>
       <button class="btn-icon bi-gold" type="submit" title="Add school"><?= ICO_PLUS ?></button>
     </form>
+    <?php endif; ?>
   </div>
 </div>
 

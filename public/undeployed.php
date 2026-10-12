@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
-$user = require_min_rank('post_commander');
+$user = require_min_rank('station_commander');
 $page = 'undeployed';
 $page_title = 'Undeployed Personnel';
 $pdo = db();
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            VALUES (?,?,?,?,'active',?,?)")
                 ->execute([$eid, trim($_POST['reason'] ?? 'Other'), $_POST['start_date'], $endDate,
                            trim($_POST['notes'] ?? '') ?: null, $user['id']]);
-            log_activity('Marked undeployed', 'undeployment', trim($_POST['reason']), 0, 'Employee #'.$eid);
+            log_activity('Marked undeployed', 'undeployment', trim($_POST['reason']), 0, personnel_label_by_id($pdo, $eid));
             flash('msg', 'Personnel marked undeployed — daily status will show "Undeployed".');
         }
     } elseif ($id && $action === 'redeploy') {

@@ -11,6 +11,10 @@ $pdo = db();
 // Alert commanders once when approved leave is about to run out / has expired.
 run_leave_countdown_notifications($pdo);
 
+// Configurable leave types (Super Admin manages these in Settings).
+$leaveTypes = leave_types_list($pdo);
+if (!$leaveTypes) $leaveTypes = [['id'=>0,'name'=>'Annual','min_role'=>'station_commander']];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'adjust' && role_rank($user['role']) > role_rank('officer')) {
@@ -24,14 +28,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($days !== 0) {
                     $pdo->prepare("INSERT INTO leave_adjustments (employee_id,days,reason,created_by) VALUES (?,?,?,?)")
                         ->execute([$eid, $days, trim($_POST['reason'] ?? '') ?: 'Manual adjustment', $user['id']]);
-                    log_activity('Leave days adjusted', 'leave_adjustment', (string)$days, (int)$eid, 'Employee #'.$eid);
+                    log_activity('Leave days adjusted', 'leave_adjustment', (string)$days, (int)$eid, personnel_label_by_id($pdo, $eid));
                 }
                 if ($newEnt !== '') {
                     $pdo->prepare("UPDATE employees SET annual_leave_days=? WHERE id=?")->execute([max(0,(int)$newEnt), $eid]);
-                    log_activity('Set annual leave entitlement', 'employee', (string)(int)$newEnt, (int)$eid, 'Personnel #'.$eid);
+                    log_activity('Set annual leave entitlement', 'employee', personnel_label_by_id($pdo, $eid), (int)$eid, 'Entitlement set to '.max(0,(int)$newEnt).' days');
                 }
                 notify_superadmins('Leave adjustment recorded',
-                    'Personnel #'.$eid.' adjusted'.($days!==0?' by '.$days.' days':'').($newEnt!==''?' (entitlement '.max(0,(int)$newEnt).' days)':'').' — '.trim($_POST['reason'] ?? ''),
+                    personnel_label_by_id($pdo, $eid).' adjusted'.($days!==0?' by '.$days.' days':'').($newEnt!==''?' (entitlement '.max(0,(int)$newEnt).' days)':'').' — '.trim($_POST['reason'] ?? ''),
                     ['created_by'=>$user['id'],'kind'=>'leave']);
                 flash('msg', 'Leave balance updated.');
             }
@@ -48,20 +52,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("INSERT INTO leave_requests (employee_id,post_id,station_id,division_id,region_id,directorate_id,unit_id,leave_type,start_date,end_date,destination,reason,status,submitted_by,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([$eid,$e['post_id'],$e['station_id'],$e['division_id'],$e['region_id'],$dirId,$unitId,$_POST['leave_type']??'Annual',$_POST['start_date'],$_POST['end_date'],trim($_POST['destination']??'')?:null,$_POST['reason']??'','pending',$user['id'],date('c')]);
             notify_superadmins('Leave request submitted',
-                $e['full_name'].' ('.($_POST['leave_type']??'Annual').') — submitted by '.role_label($user['role']),
+                personnel_label($e).' ('.($_POST['leave_type']??'Annual').') — submitted by '.role_label($user['role']),
                 ['created_by'=>$user['id'],'kind'=>'leave']);
             flash('msg','Leave request submitted.');
         }
     } elseif ($action === 'review') {
         $id=(int)$_POST['id']; $decision=$_POST['decision']; $notes=$_POST['notes']??'';
-        $req = $pdo->prepare("SELECT lr.*, e.full_name AS emp_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=?");
+        $req = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=?");
         $req->execute([$id]); $req=$req->fetch();
         if ($req && $req['status']==='pending' && can_approve_leave($user, $req['leave_type'])) {
             $newStatus = $decision==='approve' ? 'approved' : 'rejected';
             $pdo->prepare("UPDATE leave_requests SET status=?,reviewed_by=?,reviewed_at=?,review_notes=? WHERE id=?")->execute([$newStatus,$user['id'],date('c'),$notes,$id]);
             $pdo->prepare("INSERT INTO notifications (title,message,link,kind,audience,target_user_id,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)")
-                ->execute(["Leave request $newStatus",$req['emp_name']." — $newStatus by ".$user['full_name'],'/leave-requests.php#lr-'.$id,'leave','user',(int)$req['submitted_by'],$user['id'],date('c')]);
+                ->execute(["Leave request $newStatus",personnel_label(['service_no'=>$req['service_no'],'rank'=>$req['rank'],'full_name'=>$req['emp_name']])." — $newStatus by ".$user['full_name'],'/leave-requests.php#lr-'.$id,'leave','user',(int)$req['submitted_by'],$user['id'],date('c')]);
             flash('msg','Decision recorded.');
+        }
+    } elseif ($action === 'submit_extension') {
+        $lrId   = (int)($_POST['leave_request_id'] ?? 0);
+        $newEnd = trim($_POST['new_end_date'] ?? '');
+        $reason = trim($_POST['reason'] ?? '');
+        $req = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=?");
+        $req->execute([$lrId]); $lr = $req->fetch();
+        $inScope = false;
+        if ($lr) {
+            $chk = $pdo->prepare("SELECT 1 FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
+            $chk->execute(array_merge([(int)$lr['employee_id']], $scopeP));
+            $inScope = (bool)$chk->fetch();
+        }
+        if ($lr && $inScope && $lr['status']==='approved' && valid_date($newEnd) && $newEnd > $lr['end_date']) {
+            $pdo->prepare("INSERT INTO leave_extensions (leave_request_id,employee_id,old_end_date,new_end_date,reason,status,requested_by) VALUES (?,?,?,?,?, 'pending', ?)")
+                ->execute([$lrId, (int)$lr['employee_id'], $lr['end_date'], $newEnd, $reason ?: null, $user['id']]);
+            notify_superadmins('Leave extension requested',
+                personnel_label(['service_no'=>$lr['service_no'],'rank'=>$lr['rank'],'full_name'=>$lr['emp_name']]).' — extension to '.$newEnd.' requested by '.role_label($user['role']),
+                ['created_by'=>$user['id'],'kind'=>'leave','link'=>'/leave-requests.php']);
+            flash('msg', 'Leave extension request submitted.');
+        } else {
+            flash('err', 'Extension must target an approved leave and a later end date.');
+        }
+    } elseif ($action === 'review_extension') {
+        $id = (int)$_POST['id']; $decision = $_POST['decision'] ?? ''; $notes = trim($_POST['notes'] ?? '');
+        $xq = $pdo->prepare("SELECT le.*, lr.leave_type, lr.submitted_by, e.service_no, e.rank, e.full_name AS emp_name
+                             FROM leave_extensions le
+                             JOIN leave_requests lr ON lr.id=le.leave_request_id
+                             JOIN employees e ON e.id=le.employee_id WHERE le.id=?");
+        $xq->execute([$id]); $x = $xq->fetch();
+        if ($x && $x['status']==='pending' && can_approve_leave($user, $x['leave_type'])) {
+            $newStatus = $decision==='approve' ? 'approved' : 'rejected';
+            $pdo->prepare("UPDATE leave_extensions SET status=?,reviewed_by=?,reviewed_at=?,review_notes=? WHERE id=?")
+                ->execute([$newStatus,$user['id'],date('c'),$notes ?: null,$id]);
+            if ($newStatus==='approved') {
+                // Extend the underlying leave and restart the countdown notifications.
+                $pdo->prepare("UPDATE leave_requests SET end_date=?, expiry_notified=0 WHERE id=?")
+                    ->execute([$x['new_end_date'], (int)$x['leave_request_id']]);
+            }
+            $label = personnel_label(['service_no'=>$x['service_no'],'rank'=>$x['rank'],'full_name'=>$x['emp_name']]);
+            if (!empty($x['submitted_by'])) {
+                $pdo->prepare("INSERT INTO notifications (title,message,link,kind,audience,target_user_id,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)")
+                    ->execute(["Leave extension $newStatus", $label." — extension to ".$x['new_end_date']." $newStatus by ".$user['full_name'],'/leave-requests.php#le-'.$id,'leave','user',(int)$x['submitted_by'],$user['id'],date('c')]);
+            }
+            notify_superadmins('Leave extension '.$newStatus, $label.' — '.$x['new_end_date'].' ('.$newStatus.')', ['created_by'=>$user['id'],'kind'=>'leave','link'=>'/leave-requests.php']);
+            flash('msg','Extension decision recorded.');
         }
     }
     header('Location:/leave-requests.php'); exit;
@@ -72,6 +122,18 @@ $empStmt->execute($scopeP); $emps = $empStmt->fetchAll();
 [$lrW,$lrP] = scope_where_for($user,'lr');
 $lrRows = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name, s.full_name AS submitter, rv.full_name AS reviewer, rg.name AS region_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id LEFT JOIN users s ON s.id=lr.submitted_by LEFT JOIN users rv ON rv.id=lr.reviewed_by LEFT JOIN regions rg ON rg.id=lr.region_id WHERE $lrW ORDER BY CASE lr.status WHEN 'pending' THEN 1 ELSE 2 END, lr.submitted_at DESC, " . personnel_order_sql('e') . " LIMIT 200");
 $lrRows->execute($lrP); $requests=$lrRows->fetchAll();
+
+$extRows = $pdo->prepare("SELECT le.*, e.service_no, e.rank, e.full_name AS emp_name, lr.leave_type,
+                                 rv.full_name AS reviewer, rq.full_name AS requester
+                          FROM leave_extensions le
+                          JOIN employees e ON e.id=le.employee_id
+                          JOIN leave_requests lr ON lr.id=le.leave_request_id
+                          LEFT JOIN users rv ON rv.id=le.reviewed_by
+                          LEFT JOIN users rq ON rq.id=le.requested_by
+                          WHERE $scopeW
+                          ORDER BY CASE le.status WHEN 'pending' THEN 1 ELSE 2 END, le.requested_at DESC
+                          LIMIT 100");
+$extRows->execute($scopeP); $extensions = $extRows->fetchAll();
 
 function lr_pill(string $s): string {
     $map=['pending'=>['Pending','badge-sick'],'approved'=>['Approved','badge-present'],'rejected'=>['Rejected','badge-awol']];
@@ -97,7 +159,9 @@ include __DIR__ . '/../includes/header.php';
               </select>
             </div>
             <div class="form-group"><label>Leave Type</label>
-              <select name="leave_type"><option>Annual</option><option>Sick</option><option>Compassionate</option><option>Maternity</option><option>Study</option><option>Other</option></select>
+              <select name="leave_type">
+                <?php foreach ($leaveTypes as $lt): ?><option value="<?= e($lt['name']) ?>"><?= e($lt['name']) ?></option><?php endforeach; ?>
+              </select>
             </div>
             <div class="form-group"><label>Start Date</label><input type="date" name="start_date" required value="<?= date('Y-m-d') ?>"></div>
             <div class="form-group"><label>End Date</label><input type="date" name="end_date" required value="<?= date('Y-m-d') ?>"></div>
@@ -128,7 +192,7 @@ $balEmps = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.rank, e.annu
 $balEmps->execute($scopeP); $balEmps = $balEmps->fetchAll();
 $balIds  = array_column($balEmps, 'id');
 $balances = leave_balances($pdo, $balIds, (string)$balYear);
-$adjSQL = "SELECT la.*, e.full_name AS emp_name FROM leave_adjustments la
+$adjSQL = "SELECT la.*, e.service_no, e.rank, e.full_name AS emp_name FROM leave_adjustments la
                           JOIN employees e ON e.id=la.employee_id WHERE $scopeW AND la.employee_id IN (".
                           (empty($balIds) ? '0' : implode(',', array_map('intval',$balIds))).
                           ") ORDER BY la.created_at DESC LIMIT 100";
@@ -217,10 +281,12 @@ $adjRows = $adjRows->fetchAll();
   <div class="chr"><h3>Recent Leave Adjustments</h3></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Employee</th><th>Days</th><th>Reason</th><th>Adjusted By</th><th>When</th></tr></thead>
+      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Days</th><th>Reason</th><th>Adjusted By</th><th>When</th></tr></thead>
       <tbody>
         <?php foreach ($adjRows as $a): ?>
         <tr>
+          <td style="font-family:monospace;font-size:12px"><?= e($a['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($a['rank']) ?></td>
           <td><strong><?= e($a['emp_name']) ?></strong></td>
           <td><span style="color:<?= $a['days']>0?'#16a34a':'#ef4444' ?>;font-weight:600"><?= $a['days']>0?'+':'' ?><?= (int)$a['days'] ?></span></td>
           <td><?= e($a['reason']) ?></td>
@@ -238,11 +304,13 @@ $adjRows = $adjRows->fetchAll();
   <div class="chr"><h3>Leave Requests</h3></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Employee</th><th>Region</th><th>Type</th><th>Dates</th><th>Destination</th><th>Remaining</th><th>Reason</th><th>Status</th><th>Submitted</th><th style="width:80px"></th></tr></thead>
+      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Region</th><th>Type</th><th>Dates</th><th>Destination</th><th>Remaining</th><th>Reason</th><th>Status</th><th>Submitted</th><th style="width:80px"></th></tr></thead>
       <tbody>
         <?php foreach ($requests as $r): ?>
         <tr id="lr-<?= $r['id'] ?>">
-          <td><strong><?= e($r['emp_name']) ?></strong><br><span class="muted"><?= e($r['service_no']) ?></span></td>
+          <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
+          <td><strong><?= e($r['emp_name']) ?></strong></td>
           <td><?= e($r['region_name']??'—') ?></td>
           <td><?= e($r['leave_type']) ?></td>
           <td style="white-space:nowrap"><?= e($r['start_date']) ?><br><span class="muted">→ <?= e($r['end_date']) ?></span></td>
@@ -280,10 +348,73 @@ $adjRows = $adjRows->fetchAll();
               </div>
             </details>
             <?php endif; ?>
+            <?php if ($r['status']==='approved'): ?>
+            <details class="form-panel" style="position:relative">
+              <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Request leave extension"><?= ICO_EDIT ?></button></summary>
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:270px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+                <form method="post" style="display:flex;flex-direction:column;gap:8px">
+                  <input type="hidden" name="action" value="submit_extension">
+                  <input type="hidden" name="leave_request_id" value="<?= $r['id'] ?>">
+                  <div style="font-size:12px;color:var(--muted)">Current end date: <strong><?= e($r['end_date']) ?></strong></div>
+                  <input type="date" name="new_end_date" required value="<?= e(date('Y-m-d', strtotime($r['end_date'].' +7 days'))) ?>">
+                  <input type="text" name="reason" placeholder="Reason for extension (optional)">
+                  <div class="action-bar" style="justify-content:flex-end">
+                    <button class="btn-icon bi-gold bi-sm" type="submit" title="Submit extension request"><?= ICO_SEND ?></button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            <?php endif; ?>
           </td>
         </tr>
         <?php endforeach; ?>
-        <?php if (!$requests): ?><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">No leave requests found.</td></tr><?php endif; ?>
+        <?php if (!$requests): ?><tr><td colspan="12" style="text-align:center;color:var(--muted);padding:24px">No leave requests found.</td></tr><?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="chr"><h3>Leave Extensions <span class="badge badge-admin"><?= count($extensions) ?></span></h3></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Type</th><th>Extension</th><th>Reason</th><th>Requested By</th><th>Status</th><th style="width:80px"></th></tr></thead>
+      <tbody>
+        <?php foreach ($extensions as $x): ?>
+        <tr id="le-<?= (int)$x['id'] ?>">
+          <td style="font-family:monospace;font-size:12px"><?= e($x['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($x['rank']) ?></td>
+          <td><strong><?= e($x['emp_name']) ?></strong></td>
+          <td><?= e($x['leave_type']) ?></td>
+          <td style="white-space:nowrap;font-size:12px"><?= e($x['old_end_date']) ?><br><span class="muted">→ <?= e($x['new_end_date']) ?></span></td>
+          <td style="font-size:12px"><?= e($x['reason'] ?? '—') ?></td>
+          <td class="muted" style="font-size:11px"><?= e($x['requester'] ?? '—') ?><br><?= e(date('M j, H:i', strtotime($x['requested_at']))) ?></td>
+          <td>
+            <?php if ($x['status']==='pending'): ?><span class="badge badge-sick">Pending</span>
+            <?php elseif ($x['status']==='approved'): ?><span class="badge badge-present">Approved</span>
+              <?php if ($x['reviewer']): ?><div class="muted" style="font-size:10px"><?= e($x['reviewer']) ?></div><?php endif; ?>
+            <?php else: ?><span class="badge badge-awol">Rejected</span><?php endif; ?>
+          </td>
+          <td>
+            <?php if ($x['status']==='pending' && can_approve_leave($user, $x['leave_type'])): ?>
+            <details class="form-panel" style="position:relative">
+              <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review extension"><?= ICO_EYE ?></button></summary>
+              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:260px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
+                <form method="post" style="display:flex;flex-direction:column;gap:8px">
+                  <input type="hidden" name="action" value="review_extension"><input type="hidden" name="id" value="<?= (int)$x['id'] ?>">
+                  <input type="text" name="notes" placeholder="Review notes (optional)">
+                  <div class="action-bar">
+                    <button class="btn-icon bi-green" name="decision" value="approve" title="Approve extension"><?= ICO_OK ?></button>
+                    <button class="btn-icon bi-danger" name="decision" value="reject" title="Reject extension"><?= ICO_REJECT ?></button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        <?php if (!$extensions): ?><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">No leave extension requests.</td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>

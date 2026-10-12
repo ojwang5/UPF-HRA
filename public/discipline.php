@@ -6,8 +6,10 @@ $page = 'discipline';
 $page_title = 'Discipline Management';
 $pdo = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
+$readonly = role_rank($user['role']) < role_rank('station_commander');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($readonly) { flash('err', 'Your role has view-only access to discipline records.'); header('Location: /discipline.php'); exit; }
     $action = $_POST['action'] ?? '';
     $id     = (int)($_POST['id'] ?? 0);
     if ($action === 'create') {
@@ -22,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$eid, $type, trim($_POST['case_ref'] ?? '') ?: null,
                            trim($_POST['offence']), $_POST['start_date'], $endDate,
                            trim($_POST['notes'] ?? '') ?: null, $user['id']]);
-            log_activity('Opened '.ucfirst($type).' case', 'discipline_case', trim($_POST['case_ref']) ?: '', 0, 'Employee #'.$eid);
+            log_activity('Opened '.ucfirst($type).' case', 'discipline_case', trim($_POST['case_ref']) ?: '', 0, personnel_label_by_id($pdo, $eid));
             flash('msg', ucfirst($type).' case opened — daily status will show "'.($type==='disciplinary'?'Disciplinary':'Suspended').'" while open.');
         }
     } elseif ($id && in_array($action, ['close','reinstate'], true)) {
@@ -99,6 +101,7 @@ include __DIR__ . '/../includes/header.php';
         </form>
       </div>
     </details>
+    <?php if (!$readonly): ?>
     <div class="panel-wrap">
       <button class="btn-icon bi-primary" data-panel="panel-new" title="Open case"><?= ICO_PLUS ?></button>
       <div class="panel-drop" id="panel-new" style="min-width:420px">
@@ -130,6 +133,7 @@ include __DIR__ . '/../includes/header.php';
         </form>
       </div>
     </div>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -159,7 +163,7 @@ include __DIR__ . '/../includes/header.php';
               <?= $r['end_date'] ? '<br><span class="muted">→ '.e(date('j M y', strtotime($r['end_date']))).'</span>' : '<br><span class="muted">→ until closed</span>' ?></td>
           <td><?= dc_pill($r['status']) ?><?= $ongoing ? '<div class="stat-pct" style="color:#dc2626;font-weight:700">● active now</div>' : '' ?></td>
           <td>
-            <?php if ($r['status']==='open'): ?>
+            <?php if ($r['status']==='open' && !$readonly): ?>
             <details class="form-panel" style="position:relative">
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Close / reinstate"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:250px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">

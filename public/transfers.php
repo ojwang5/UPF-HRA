@@ -18,8 +18,7 @@ $units        = $pdo->query("SELECT u.id, u.directorate_id, u.name FROM units u 
 
 /* ── Transfer helpers ─────────────────────────────────────────────────── */
 function transfer_emp_label(PDO $pdo, int $eid): string {
-    $r = $pdo->query("SELECT service_no, rank, full_name FROM employees WHERE id=".(int)$eid)->fetch();
-    return $r ? personnel_label($r) : '—';
+    return personnel_label_by_id($pdo, $eid);
 }
 
 function transfer_from_label(PDO $pdo, array $t): string {
@@ -111,9 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'to_region_id'=>$toRegionId, 'to_division_id'=>$toDivision,
                         'to_station_id'=>$toStation, 'to_post_id'=>$toPost,
                     ];
-                    log_activity('Requested transfer', 'transfer', 'To post #'.$toPost, $tid, 'Employee #'.$eid);
+                    log_activity('Requested transfer', 'transfer', 'To post #'.$toPost, $tid, transfer_emp_label($pdo, $eid));
                     $empLabel = e(personnel_label($e));
-                    transfer_notify($pdo, $rec, 'New transfer request — '.e($e['full_name']),
+                    transfer_notify($pdo, $rec, 'New transfer request — '.$empLabel,
                         $empLabel.' posted to '.transfer_to_label($pdo, $rec).' (status: pending).', 'transfer', $user['id']);
                     flash('msg', 'Transfer request submitted (hierarchy). Selected users notified.');
                 }
@@ -148,9 +147,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'transfer_scope'=>'directorate', 'requested_by'=>$user['id'],
                         'to_directorate_id'=>$toDirId ?: null, 'to_unit_id'=>$toUnitId ?: null,
                     ];
-                    log_activity('Requested transfer', 'transfer', 'To unit #'.$toUnitId, $tid, 'Employee #'.$eid);
+                    log_activity('Requested transfer', 'transfer', 'To unit #'.$toUnitId, $tid, transfer_emp_label($pdo, $eid));
                     $empLabel = e(personnel_label($e));
-                    transfer_notify($pdo, $rec, 'New transfer request — '.e($e['full_name']),
+                    transfer_notify($pdo, $rec, 'New transfer request — '.$empLabel,
                         $empLabel.' posted to '.transfer_to_label($pdo, $rec).' (status: pending).', 'transfer', $user['id']);
                     flash('msg', 'Transfer request submitted (directorate). Selected users notified.');
                 }
@@ -162,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newStatus = $action === 'approve' ? 'approved' : 'rejected';
             $pdo->prepare("UPDATE transfers SET status=?, reviewed_by=?, reviewed_at=?, review_notes=? WHERE id=?")
                 ->execute([$newStatus, $user['id'], date('c'), trim($_POST['notes'] ?? '') ?: null, $id]);
-            log_activity(ucfirst($action).'d transfer', 'transfer', (string)$id, $id, 'Employee #'.$t['employee_id']);
+            log_activity(ucfirst($action).'d transfer', 'transfer', (string)$id, $id, transfer_emp_label($pdo, (int)$t['employee_id']));
             $empLabel = transfer_emp_label($pdo, (int)$t['employee_id']);
             transfer_notify($pdo, $t, 'Transfer '.$newStatus.' — '.$empLabel,
                 $empLabel.' transfer is now '.$newStatus.' (to '.transfer_to_label($pdo, $t).'). Review notes: '.((trim($_POST['notes'] ?? '') !== '') ? trim($_POST['notes']) : '—'),
@@ -190,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare("UPDATE transfers SET status='executed', executed_by=?, executed_at=datetime('now','localtime') WHERE id=?")
                     ->execute([$user['id'], $id]);
                 $t = $pdo->query("SELECT * FROM transfers WHERE id=$id")->fetch();
-                log_activity('Executed transfer', 'transfer', (string)$id, $id, 'Employee #'.$t['employee_id']);
+                log_activity('Executed transfer', 'transfer', (string)$id, $id, transfer_emp_label($pdo, (int)$t['employee_id']));
                 $empLabel = transfer_emp_label($pdo, (int)$t['employee_id']);
                 transfer_notify($pdo, $t, 'Transfer executed — '.$empLabel,
                     $empLabel.' transferred to '.transfer_to_label($pdo, $t).'. Status: executed (normal). Reporting to the new place of work is expected.', 'success', $user['id']);
@@ -198,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $pdo->prepare("UPDATE transfers SET status='cancelled' WHERE id=?")->execute([$id]);
                 $t = $pdo->query("SELECT * FROM transfers WHERE id=$id")->fetch();
-                log_activity('Cancelled transfer', 'transfer', (string)$id, $id, 'Employee #'.$t['employee_id']);
+                log_activity('Cancelled transfer', 'transfer', (string)$id, $id, transfer_emp_label($pdo, (int)$t['employee_id']));
                 $empLabel = transfer_emp_label($pdo, (int)$t['employee_id']);
                 transfer_notify($pdo, $t, 'Transfer cancelled — '.$empLabel,
                     $empLabel.' transfer to '.transfer_to_label($pdo, $t).' has been cancelled. Status: cancelled.', 'warning', $user['id']);
@@ -211,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE transfers SET report_status='reported', reported_by=?, reported_at=datetime('now','localtime'), report_notes=? WHERE id=?")
                 ->execute([$user['id'], trim($_POST['notes'] ?? '') ?: null, $id]);
             $t = $pdo->query("SELECT * FROM transfers WHERE id=$id")->fetch();
-            log_activity('Recorded transfer report', 'transfer', (string)$id, $id, 'Employee #'.$t['employee_id']);
+            log_activity('Recorded transfer report', 'transfer', (string)$id, $id, transfer_emp_label($pdo, (int)$t['employee_id']));
             $empLabel = transfer_emp_label($pdo, (int)$t['employee_id']);
             transfer_notify($pdo, $t, 'Reporting confirmed — '.$empLabel,
                 $empLabel.' has reported to '.transfer_to_label($pdo, $t).'. Transfer status: executed (reported).', 'success', $user['id']);
@@ -292,6 +291,8 @@ include __DIR__ . '/../includes/header.php';
         </form>
       </div>
     </details>
+    <a class="btn-icon bi-secondary" href="/records-export.php?module=transfers" title="Export transfers to CSV"><?= ICO_DL ?></a>
+    <a class="btn-icon bi-secondary" href="/records-import.php?module=transfers" title="Bulk import transfers (CSV)"><?= ICO_GEN ?></a>
     <div class="panel-wrap">
       <button class="btn-icon bi-primary" data-panel="panel-new" title="New transfer request"><?= ICO_PLUS ?></button>
       <div class="panel-drop" id="panel-new" style="min-width:640px">
