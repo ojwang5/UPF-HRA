@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'create') {
                 $pdo->prepare("INSERT INTO employees (service_no,full_name,gender,rank,directorate,unit,region_id,division_id,station_id,post_id,email,phone,photo_path) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
                     ->execute([$sno,$name,$gender,$rank,$dir,$unit,$rId,$dId,$sId,$pId,$email,$phone,$photo]);
-                log_activity('Add Personnel', 'employee', "{$rank} {$name}", (int)$pdo->lastInsertId(), "Service No: {$sno}");
+                log_activity('Add Personnel', 'employee', personnel_label(['service_no'=>$sno,'rank'=>$rank,'full_name'=>$name]), (int)$pdo->lastInsertId(), "File/Force No: {$sno}");
                 flash('msg','Personnel record created successfully.');
             } else {
                 $id = (int)$_POST['id'];
@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare("UPDATE employees SET service_no=?,full_name=?,gender=?,rank=?,directorate=?,unit=?,region_id=?,division_id=?,station_id=?,post_id=?,email=?,phone=? WHERE id=?")
                         ->execute([$sno,$name,$gender,$rank,$dir,$unit,$rId,$dId,$sId,$pId,$email,$phone,$id]);
                 }
-                log_activity('Edit Personnel', 'employee', "{$rank} {$name}", $id);
+                log_activity('Edit Personnel', 'employee', personnel_label(['service_no'=>$sno,'rank'=>$rank,'full_name'=>$name]), $id);
                 flash('msg','Record updated successfully.');
             }
         } catch (\PDOException $ex) {
@@ -132,10 +132,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($action === 'delete') {
         $id = (int)$_POST['id'];
-        $emp = $pdo->prepare("SELECT full_name, rank FROM employees WHERE id=? AND $scopeW");
+        $emp = $pdo->prepare("SELECT service_no, full_name, rank FROM employees WHERE id=? AND $scopeW");
         $emp->execute(array_merge([$id], $scopeP)); $empRow = $emp->fetch();
         $pdo->prepare("DELETE FROM employees WHERE id=? AND $scopeW")->execute(array_merge([$id], $scopeP));
-        if ($empRow) log_activity('Remove Personnel', 'employee', ($empRow['rank'].' '.$empRow['full_name']), $id);
+        if ($empRow) log_activity('Remove Personnel', 'employee', personnel_label($empRow), $id);
         flash('msg','Personnel record removed.');
     }
 
@@ -152,7 +152,6 @@ if ($search !== '') {
     array_push($params, $s, $s, $s, $s, $s);
 }
 
-$rankOrderExpr = rank_order_sql();
 $stmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.gender, e.rank, e.directorate, e.unit,
                               e.email, e.phone, e.photo_path,
                               rg.name AS region_name, dv.name AS division_name,
@@ -164,7 +163,7 @@ $stmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.gender, e.rank,
                        LEFT JOIN stations  st ON st.id=e.station_id
                        LEFT JOIN posts     pt ON pt.id=e.post_id
                        WHERE $where
-                       ORDER BY $rankOrderExpr, e.full_name");
+                       ORDER BY " . personnel_order_sql('e'));
 $stmt->execute($params);
 $employees = $stmt->fetchAll();
 
@@ -242,7 +241,7 @@ if (!is_superadmin($user)) {
     $hier['posts']     = array_values(array_filter($hier['posts'],     fn($p) => isset($keepPos[$p['id']])));
 }
 
-$ranks = UPF_RANKS;
+$ranks = rank_options($pdo);
 try {
     $directorates = $pdo->query("SELECT name FROM directorates WHERE active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
     $dirUnits     = $pdo->query("SELECT u.name, d.name AS dir_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.active=1 ORDER BY d.name, u.name")->fetchAll();
@@ -269,7 +268,7 @@ include __DIR__ . '/../includes/header.php';
         <h4><?= ICO_SEARCH ?> Search Personnel</h4>
         <form method="get" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
           <div class="form-group" style="flex:1;min-width:200px"><label>Keyword</label>
-            <input type="text" name="q" value="<?= e($search) ?>" autofocus placeholder="Name, file no, rank, directorate…">
+            <input type="text" name="q" value="<?= e($search) ?>" autofocus placeholder="File/force no, rank, name, directorate…">
           </div>
           <button class="btn-icon bi-primary" type="submit" title="Search"><?= ICO_SEARCH ?></button>
           <?php if ($search): ?>
@@ -282,7 +281,9 @@ include __DIR__ . '/../includes/header.php';
 
     <!-- EXPORT -->
     <div class="panel-wrap">
-      <button class="btn-icon bi-secondary" data-panel="panel-export" title="Export personnel"><?= ICO_DL ?></button>
+      <button class="btn-icon bi-secondary" data-panel="panel-export" title="Export personnel" style="gap:6px;padding:0 14px;width:auto;font-size:12px;font-weight:600">
+        <?= ICO_DL ?><span>Export</span>
+      </button>
       <div class="panel-drop" id="panel-export" style="min-width:340px">
         <h4><?= ICO_DL ?> Export Personnel</h4>
         <form method="post" action="/export-personnel.php" target="_blank">
@@ -310,7 +311,9 @@ include __DIR__ . '/../includes/header.php';
               <?php endforeach; ?>
             </div>
           </div>
-          <button class="btn-icon bi-gold bi-lg" type="submit"><?= ICO_DL ?> <span style="font-size:12px;margin-left:4px;">Export</span></button>
+          <button class="btn-icon bi-gold bi-lg" type="submit" style="width:auto;padding:0 20px;gap:8px;font-size:13px;font-weight:600">
+            <?= ICO_DL ?> <span>Export Personnel</span>
+          </button>
         </form>
       </div>
     </div>
@@ -373,8 +376,9 @@ include __DIR__ . '/../includes/header.php';
         <?php endif; ?>
       </div>
       <div>
-        <h3 style="margin:0 0 3px"><?= e($viewing['rank'].' '.$viewing['full_name']) ?></h3>
-        <div style="font-size:12px;color:var(--muted)"><?= e($viewing['service_no']) ?> &nbsp;·&nbsp; <?= $viewing['gender']==='M'?'Male':'Female' ?></div>
+        <div style="font-family:monospace;font-size:12px;color:var(--muted);margin-bottom:2px"><?= e($viewing['service_no']) ?></div>
+        <h3 style="margin:0 0 3px"><?= e(trim($viewing['rank'].' '.$viewing['full_name'])) ?></h3>
+        <div style="font-size:12px;color:var(--muted)"><?= $viewing['gender']==='M'?'Male':'Female' ?></div>
       </div>
     </div>
     <a class="btn-icon bi-secondary bi-sm" href="/employees.php<?= $search?'?q='.urlencode($search):'' ?>" title="Close"><?= ICO_CANCEL ?></a>
@@ -430,10 +434,11 @@ include __DIR__ . '/../includes/header.php';
   <?php endif; ?>
   <div class="detail-actions">
     <div class="detail-btn-row">
-      <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span style="font-size:12px;margin-left:4px">Edit</span></a>
+      <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span>Edit Record</span></a>
+      <span class="detail-btn-sep" aria-hidden="true"></span>
       <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>?')">
         <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $viewing['id'] ?>">
-        <button class="btn-icon bi-danger" type="submit" title="Delete"><?= ICO_TRASH ?> <span style="font-size:12px;margin-left:4px">Remove</span></button>
+        <button class="btn-icon bi-danger" type="submit" title="Remove this personnel record"><?= ICO_TRASH ?> <span>Remove</span></button>
       </form>
     </div>
     <form method="post" enctype="multipart/form-data" class="detail-photo-form">
@@ -451,9 +456,32 @@ include __DIR__ . '/../includes/header.php';
       <input type="hidden" name="region_id" value="<?= (int)$viewing['region_id'] ?>">
       <input type="hidden" name="email" value="<?= e($viewing['email']??'') ?>">
       <input type="hidden" name="phone" value="<?= e($viewing['phone']??'') ?>">
-      <span class="detail-photo-label">Change Photo:</span>
-      <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" class="detail-photo-input">
-      <button class="btn-icon bi-gold bi-sm" type="submit" title="Upload"><?= ICO_SAVE ?> <span style="font-size:12px;margin-left:4px">Upload</span></button>
+      <div class="detail-photo-head">
+        <span class="detail-photo-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Change Photo
+        </span>
+        <span class="detail-photo-hint">JPG, PNG or WebP &middot; max 5&nbsp;MB &middot; replaces the current photo</span>
+      </div>
+      <div class="detail-photo-body">
+        <div class="detail-photo-thumb" id="dp-thumb">
+          <img id="dp-thumb-img" alt="Current photo" src="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? '/uploads/photos/'.e($viewing['photo_path']) : '' ?>" style="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? '' : 'display:none' ?>">
+          <svg id="dp-thumb-ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? 'display:none' : '' ?>"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        </div>
+        <div class="detail-photo-fields">
+          <div class="detail-photo-pick">
+            <label class="btn-icon bi-secondary detail-photo-btn" for="detail-photo-input" title="Choose an image from your device">
+              <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Choose File
+            </label>
+            <input type="file" id="detail-photo-input" name="photo" accept="image/jpeg,image/png,image/webp" class="detail-photo-input">
+            <span class="detail-photo-file" id="dp-file">No file selected</span>
+          </div>
+        </div>
+        <div class="detail-photo-actions">
+          <button class="btn-icon bi-gold detail-photo-btn" type="submit" id="dp-upload" disabled title="Upload the selected photo"><?= ICO_SAVE ?> <span>Upload Photo</span></button>
+        </div>
+      </div>
     </form>
   </div>
 </div>
@@ -469,7 +497,7 @@ include __DIR__ . '/../includes/header.php';
       <thead>
         <tr>
           <th style="width:46px"></th>
-          <th>File No</th><th>Rank</th><th>Full Name</th><th>G</th>
+          <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>G</th>
           <th>Directorate</th><th>Unit</th>
           <th>Region</th><th>Division</th><th>Station / Post</th>
           <th>Contact</th>
@@ -554,23 +582,23 @@ include __DIR__ . '/../includes/header.php';
           </div>
           <div class="form-row">
             <div class="form-group" style="min-width:160px;max-width:200px">
-              <label>Force / File Number <span style="color:var(--red)">*</span></label>
+              <label>File/Force No <span style="color:var(--red)">*</span></label>
               <input type="text" name="service_no" required value="<?= e($editing['service_no']??'') ?>" placeholder="e.g. UPF-12345" style="font-family:monospace">
             </div>
-            <div class="form-group" style="flex:2;min-width:200px">
-              <label>Full Name(s) <span style="color:var(--red)">*</span></label>
-              <input type="text" name="full_name" required value="<?= e($editing['full_name']??'') ?>" placeholder="Surname, Other Names">
-            </div>
-          </div>
-          <div class="form-row">
             <div class="form-group" style="flex:2;min-width:180px">
               <label>Rank <span style="color:var(--red)">*</span></label>
               <select name="rank" required>
                 <option value="">— select rank —</option>
                 <?php foreach ($ranks as $r): ?>
-                <option value="<?= $r ?>" <?= ($editing['rank']??'')===$r?'selected':'' ?>><?= $r ?></option>
+                <option value="<?= e($r) ?>" <?= ($editing['rank']??'')===$r?'selected':'' ?>><?= e($r) ?></option>
                 <?php endforeach; ?>
               </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:2;min-width:200px">
+              <label>Full Name <span style="color:var(--red)">*</span></label>
+              <input type="text" name="full_name" required value="<?= e($editing['full_name']??'') ?>" placeholder="Surname, Other Names">
             </div>
             <div class="form-group" style="min-width:120px;max-width:150px">
               <label>Gender <span style="color:var(--red)">*</span></label>
@@ -770,6 +798,54 @@ include __DIR__ . '/../includes/header.php';
       reader.readAsDataURL(file);
     });
   }
+
+  // Detail view — change photo: file name, size check and live preview
+  (function(){
+    var input = document.getElementById('detail-photo-input');
+    if(!input) return;
+    var fileOut = document.getElementById('dp-file');
+    var thumb   = document.getElementById('dp-thumb');
+    var thumbImg= document.getElementById('dp-thumb-img');
+    var thumbPh = document.getElementById('dp-thumb-ph');
+    var upload  = document.getElementById('dp-upload');
+    var MAX_BYTES = 5 * 1024 * 1024;
+    var ALLOWED = ['image/jpeg','image/png','image/webp'];
+
+    function prettySize(bytes){
+      return bytes >= 1048576 ? (bytes/1048576).toFixed(2)+' MB' : Math.max(1, Math.round(bytes/1024))+' KB';
+    }
+    function reset(msg, isError){
+      fileOut.textContent = msg || 'No file selected';
+      fileOut.className = 'detail-photo-file' + (isError ? ' is-error' : '');
+      upload.disabled = true;
+      thumb.classList.remove('is-new');
+    }
+    input.addEventListener('change', function(){
+      var file = this.files[0];
+      if(!file){ reset(); return; }
+      if(ALLOWED.indexOf(file.type) === -1){
+        this.value = '';
+        reset('Unsupported file — choose a JPG, PNG or WebP image', true);
+        return;
+      }
+      if(file.size > MAX_BYTES){
+        this.value = '';
+        reset('File is ' + prettySize(file.size) + ' — the limit is 5 MB', true);
+        return;
+      }
+      fileOut.textContent = file.name + ' · ' + prettySize(file.size);
+      fileOut.className = 'detail-photo-file has-file';
+      upload.disabled = false;
+      thumb.classList.add('is-new');
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        thumbImg.src = ev.target.result;
+        thumbImg.style.display = 'block';
+        thumbPh.style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    });
+  })();
 
   // Bulk CSV drop zone
   var dropZone = document.getElementById('bulk-drop-zone');

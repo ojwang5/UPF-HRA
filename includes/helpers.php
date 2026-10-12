@@ -30,14 +30,85 @@ const UPF_RANKS = [
     'IP','AIP','HCM','HC','S/SGT','SGT','CPL','L/CPL','PC','PPC','SPC','CIVILIAN',
 ];
 
+/** Long-form rank spellings found in legacy records, mapped to their canonical code. */
+const UPF_RANK_ALIASES = [
+    'Inspector' => 'IP',
+    'Sergeant'  => 'SGT',
+    'Corporal'  => 'CPL',
+    'Constable' => 'PC',
+    'Private'   => 'PPC',
+];
+
+/**
+ * Canonical order in which personnel fields are shown everywhere in the system:
+ * force/file number, then rank, then full name.
+ */
+const PERSONNEL_COLUMNS = [
+    'service_no' => 'File/Force No',
+    'rank'       => 'Rank',
+    'full_name'  => 'Full Name',
+];
+
+/** SQL string literal for a rank value. */
+function rank_sql_literal(string $r): string {
+    return "'" . str_replace("'", "''", $r) . "'";
+}
+
 /** Returns a SQL CASE expression for ORDER BY rank seniority (alias defaults to 'e') */
 function rank_order_sql(string $col = 'e.rank'): string {
     $cases = '';
     foreach (UPF_RANKS as $i => $r) {
-        $esc = str_replace("'", "''", $r);
-        $cases .= "WHEN '{$esc}' THEN " . ($i + 1) . " ";
+        $cases .= 'WHEN ' . rank_sql_literal($r) . ' THEN ' . ($i + 1) . ' ';
+    }
+    foreach (UPF_RANK_ALIASES as $long => $canon) {
+        $i = array_search($canon, UPF_RANKS, true);
+        if ($i !== false) {
+            $cases .= 'WHEN ' . rank_sql_literal($long) . ' THEN ' . ($i + 1) . ' ';
+        }
     }
     return "CASE {$col} {$cases}ELSE 99 END";
+}
+
+/**
+ * ORDER BY fragment listing personnel in rank-seniority order, then by
+ * force/file number. Append it after any grouping keys (geography, unit, …):
+ * `rg.name, ` . personnel_order_sql('e')
+ */
+function personnel_order_sql(string $empAlias = 'e'): string {
+    return rank_order_sql($empAlias . '.rank')
+         . ', ' . $empAlias . '.service_no'
+         . ', ' . $empAlias . '.full_name';
+}
+
+/**
+ * Renders a personnel row as a single label in the canonical order:
+ * `File/Force No - RANK Full Name`. Used by every personnel dropdown.
+ */
+function personnel_label(array $emp, string $sep = ' — '): string {
+    $no   = trim((string)($emp['service_no'] ?? ''));
+    $rank = trim((string)($emp['rank']   ?? ''));
+    $name = trim((string)($emp['full_name'] ?? ''));
+    $body = trim($rank . ' ' . $name);
+    if ($no === '') return $body !== '' ? $body : '—';
+    return $body !== '' ? $no . $sep . $body : $no;
+}
+
+/**
+ * Canonical rank list for dropdowns, plus any legacy long-form rank that
+ * exists in the data so editing such a record does not silently clear it.
+ */
+function rank_options(?PDO $pdo = null): array {
+    $opts = UPF_RANKS;
+    if ($pdo) {
+        try {
+            $used = $pdo->query("SELECT DISTINCT rank FROM employees WHERE rank IS NOT NULL AND rank <> ''")
+                        ->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($used as $r) {
+                if (!in_array($r, $opts, true)) $opts[] = $r;
+            }
+        } catch (\Throwable $e) { /* employees table not created yet */ }
+    }
+    return $opts;
 }
 
 /** Log a user action to the activity_log table — never throws */

@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: /discipline.php'); exit;
 }
 
-$emps = $pdo->prepare("SELECT id, service_no, full_name, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY full_name");
+$emps = $pdo->prepare("SELECT id, service_no, full_name, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $emps->execute($scopeP); $emps = $emps->fetchAll();
 
 $typeFilter = ($_GET['type'] ?? '') === 'suspension' ? 'suspension' : ((($_GET['type'] ?? '') === 'disciplinary') ? 'disciplinary' : '');
@@ -60,7 +60,7 @@ $rows = $pdo->prepare("SELECT dc.*, e.full_name, e.service_no, e.rank,
                        LEFT JOIN stations st ON st.id=e.station_id
                        LEFT JOIN posts pt ON pt.id=e.post_id
                        WHERE $scopeW$addW
-                       ORDER BY CASE dc.status WHEN 'open' THEN 1 ELSE 2 END, dc.start_date DESC
+                       ORDER BY CASE dc.status WHEN 'open' THEN 1 ELSE 2 END, dc.start_date DESC, " . personnel_order_sql('e') . "
                        LIMIT 300");
 $rows->execute(array_merge($scopeP)); $rows = $rows->fetchAll();
 
@@ -107,7 +107,7 @@ include __DIR__ . '/../includes/header.php';
           <input type="hidden" name="action" value="create">
           <div class="form-group"><label>Employee</label>
             <select name="employee_id" required><option value="">— select —</option>
-              <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e($emp['service_no'].' — '.$emp['rank'].' '.$emp['full_name']) ?></option><?php endforeach; ?>
+              <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e(personnel_label($emp)) ?></option><?php endforeach; ?>
             </select>
           </div>
           <div class="form-row">
@@ -140,7 +140,7 @@ include __DIR__ . '/../includes/header.php';
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>File No</th><th>Name</th><th>Rank</th><th>Type</th><th>Ref</th><th>Offence / Allegation</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Type</th><th>Ref</th><th>Offence / Allegation</th>
         <th>Period</th><th>Status</th><th style="width:90px"></th>
       </tr></thead>
       <tbody>
@@ -149,8 +149,8 @@ include __DIR__ . '/../includes/header.php';
         ?>
         <tr class="<?= $ongoing ? 'row-'.e($r['case_type']==='suspension'?'suspended':'disciplinary') : '' ?>">
           <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
           <td><strong><?= e($r['full_name']) ?></strong></td>
-          <td><?= e($r['rank']) ?></td>
           <td><span class="badge <?= $r['case_type']==='suspension' ? 'badge-suspended' : 'badge-disciplinary' ?>"><?= $r['case_type']==='suspension' ? 'Suspension' : 'Disciplinary' ?></span></td>
           <td style="font-family:monospace;font-size:11px"><?= e($r['case_ref'] ?? '—') ?></td>
           <td style="max-width:260px;font-size:12px"><?= e($r['offence']) ?><?= $r['notes'] ? '<br><span class="muted">'.e($r['notes']).'</span>' : '' ?>

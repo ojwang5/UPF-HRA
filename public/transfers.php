@@ -18,8 +18,8 @@ $units        = $pdo->query("SELECT u.id, u.directorate_id, u.name FROM units u 
 
 /* ── Transfer helpers ─────────────────────────────────────────────────── */
 function transfer_emp_label(PDO $pdo, int $eid): string {
-    $r = $pdo->query("SELECT full_name, service_no, rank FROM employees WHERE id=".(int)$eid)->fetch();
-    return trim((string)($r['rank'] ?? '').' '.($r['full_name'] ?? '').' ('.($r['service_no'] ?? '').')');
+    $r = $pdo->query("SELECT service_no, rank, full_name FROM employees WHERE id=".(int)$eid)->fetch();
+    return $r ? personnel_label($r) : '—';
 }
 
 function transfer_from_label(PDO $pdo, array $t): string {
@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'to_station_id'=>$toStation, 'to_post_id'=>$toPost,
                     ];
                     log_activity('Requested transfer', 'transfer', 'To post #'.$toPost, $tid, 'Employee #'.$eid);
-                    $empLabel = trim(e($e['rank']).' '.e($e['full_name']).' ('.e($e['service_no']).')');
+                    $empLabel = e(personnel_label($e));
                     transfer_notify($pdo, $rec, 'New transfer request — '.e($e['full_name']),
                         $empLabel.' posted to '.transfer_to_label($pdo, $rec).' (status: pending).', 'transfer', $user['id']);
                     flash('msg', 'Transfer request submitted (hierarchy). Selected users notified.');
@@ -149,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'to_directorate_id'=>$toDirId ?: null, 'to_unit_id'=>$toUnitId ?: null,
                     ];
                     log_activity('Requested transfer', 'transfer', 'To unit #'.$toUnitId, $tid, 'Employee #'.$eid);
-                    $empLabel = trim(e($e['rank']).' '.e($e['full_name']).' ('.e($e['service_no']).')');
+                    $empLabel = e(personnel_label($e));
                     transfer_notify($pdo, $rec, 'New transfer request — '.e($e['full_name']),
                         $empLabel.' posted to '.transfer_to_label($pdo, $rec).' (status: pending).', 'transfer', $user['id']);
                     flash('msg', 'Transfer request submitted (directorate). Selected users notified.');
@@ -224,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Data for listing ─────────────────────────────────────────────────
 $empStmt = $pdo->prepare("SELECT id, service_no, full_name, rank, directorate, unit,
                                  region_id, division_id, station_id, post_id
-                          FROM employees e WHERE e.active=1 AND $scopeW ORDER BY full_name");
+                          FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $empStmt->execute($scopeP); $selectEmps = $empStmt->fetchAll();
 
 $scopeFilter = $_GET['scope'] ?? '';
@@ -255,7 +255,7 @@ $rows = $pdo->prepare("
     LEFT JOIN units     tu  ON tu.id=t.to_unit_id
     LEFT JOIN users     req ON req.id=t.requested_by
     WHERE $scopeW$extra
-    ORDER BY CASE t.status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, t.requested_at DESC
+    ORDER BY CASE t.status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, t.requested_at DESC, " . personnel_order_sql('e') . "
     LIMIT 300
 ");
 $rows->execute($scopeP); $transfers = $rows->fetchAll();
@@ -304,7 +304,7 @@ include __DIR__ . '/../includes/header.php';
                 <?php foreach ($selectEmps as $emp): ?><option value="<?= $emp['id'] ?>"
                   data-region="<?= (int)$emp['region_id'] ?>" data-division="<?= (int)$emp['division_id'] ?>"
                   data-station="<?= (int)$emp['station_id'] ?>" data-post="<?= (int)$emp['post_id'] ?>"
-                  data-dir="<?= e($emp['directorate']??'') ?>" data-unit="<?= e($emp['unit']??'') ?>"><?= e($emp['service_no'].' — '.$emp['full_name']) ?></option>
+                  data-dir="<?= e($emp['directorate']??'') ?>" data-unit="<?= e($emp['unit']??'') ?>"><?= e(personnel_label($emp)) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -392,7 +392,7 @@ include __DIR__ . '/../includes/header.php';
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>File No</th><th>Name</th><th>Rank</th><th>Type</th><th>From</th><th>To</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Type</th><th>From</th><th>To</th>
         <th>Effective</th><th>Reason</th><th>Status</th><th>Reporting</th><th style="width:150px"></th>
       </tr></thead>
       <tbody>
@@ -409,8 +409,8 @@ include __DIR__ . '/../includes/header.php';
         ?>
         <tr>
           <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
           <td><strong><?= e($r['emp_name']) ?></strong></td>
-          <td><?= e($r['rank']) ?></td>
           <td><span class="badge <?= $r['transfer_scope']==='hierarchy'?'badge-special_assignment':'badge-undeployed' ?>"><?= $type ?></span></td>
           <td style="font-size:12px;max-width:150px"><?= e($from) ?></td>
           <td style="font-size:12px;max-width:150px"><strong><?= e($to) ?></strong></td>

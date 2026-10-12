@@ -67,10 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location:/leave-requests.php'); exit;
 }
 
-$empStmt = $pdo->prepare("SELECT id,full_name,service_no FROM employees e WHERE e.active=1 AND $scopeW ORDER BY full_name");
+$empStmt = $pdo->prepare("SELECT id,service_no,full_name,rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $empStmt->execute($scopeP); $emps = $empStmt->fetchAll();
 [$lrW,$lrP] = scope_where_for($user,'lr');
-$lrRows = $pdo->prepare("SELECT lr.*, e.full_name AS emp_name, e.service_no, s.full_name AS submitter, rv.full_name AS reviewer, rg.name AS region_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id LEFT JOIN users s ON s.id=lr.submitted_by LEFT JOIN users rv ON rv.id=lr.reviewed_by LEFT JOIN regions rg ON rg.id=lr.region_id WHERE $lrW ORDER BY CASE lr.status WHEN 'pending' THEN 1 ELSE 2 END, lr.submitted_at DESC LIMIT 200");
+$lrRows = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name, s.full_name AS submitter, rv.full_name AS reviewer, rg.name AS region_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id LEFT JOIN users s ON s.id=lr.submitted_by LEFT JOIN users rv ON rv.id=lr.reviewed_by LEFT JOIN regions rg ON rg.id=lr.region_id WHERE $lrW ORDER BY CASE lr.status WHEN 'pending' THEN 1 ELSE 2 END, lr.submitted_at DESC, " . personnel_order_sql('e') . " LIMIT 200");
 $lrRows->execute($lrP); $requests=$lrRows->fetchAll();
 
 function lr_pill(string $s): string {
@@ -93,7 +93,7 @@ include __DIR__ . '/../includes/header.php';
           <div class="form-row">
             <div class="form-group" style="flex:2"><label>Employee</label>
               <select name="employee_id" required><option value="">— select —</option>
-                <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e($emp['service_no'].' — '.$emp['full_name']) ?></option><?php endforeach; ?>
+                <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e(personnel_label($emp)) ?></option><?php endforeach; ?>
               </select>
             </div>
             <div class="form-group"><label>Leave Type</label>
@@ -124,7 +124,7 @@ $balEmps = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.rank, e.annu
                           LEFT JOIN regions rg ON rg.id=e.region_id
                           LEFT JOIN stations st ON st.id=e.station_id
                           LEFT JOIN posts pt ON pt.id=e.post_id
-                          WHERE e.active=1 AND $scopeW ORDER BY e.full_name");
+                          WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $balEmps->execute($scopeP); $balEmps = $balEmps->fetchAll();
 $balIds  = array_column($balEmps, 'id');
 $balances = leave_balances($pdo, $balIds, (string)$balYear);
@@ -162,7 +162,7 @@ $adjRows = $adjRows->fetchAll();
             <input type="hidden" name="action" value="adjust">
             <div class="form-group"><label>Employee</label>
               <select name="employee_id" required><option value="">— select —</option>
-                <?php foreach ($balEmps as $e): ?><option value="<?= $e['id'] ?>"><?= e($e['service_no'].' — '.$e['full_name']) ?></option><?php endforeach; ?>
+                <?php foreach ($balEmps as $e): ?><option value="<?= $e['id'] ?>"><?= e(personnel_label($e)) ?></option><?php endforeach; ?>
               </select>
             </div>
             <div class="form-row">
@@ -186,7 +186,7 @@ $adjRows = $adjRows->fetchAll();
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>File No</th><th>Name</th><th>Rank</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th>
         <th>Entitlement</th><th>Adjustments</th><th>Taken</th><th>Pending</th><th>Remaining</th>
       </tr></thead>
       <tbody>
@@ -197,8 +197,8 @@ $adjRows = $adjRows->fetchAll();
         ?>
         <tr>
           <td style="font-family:monospace;font-size:12px"><?= e($e['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($e['rank']) ?></td>
           <td><strong><?= e($e['full_name']) ?></strong></td>
-          <td><?= e($e['rank']) ?></td>
           <td><?= (int)$e['annual_leave_days'] ?></td>
           <td><?= $b['adjust'] ? '<span style="color:'.($b['adjust']>0?'#16a34a':'#ef4444').';font-weight:600">'.($b['adjust']>0?'+':'').$b['adjust'].'</span>' : '—' ?></td>
           <td><?= $b['taken'] ?: '—' ?></td>

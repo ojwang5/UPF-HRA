@@ -1859,51 +1859,201 @@ gap:8px
 .detail-actions{
   display:flex;
   flex-direction:column;
-  gap:10px
+  gap:16px
 }
 
 
 .detail-actions .detail-btn-row{
   display:flex;
-  gap:8px;
+  gap:16px;
   flex-wrap:wrap;
   align-items:center
 
 }
 
-.detail-photo-form{
-  display:flex;
-  align-items:center;
+/* Icon + label buttons (Edit / Remove) size to their text instead of the
+   fixed square icon-button box, so labels never spill over each other */
+.detail-btn-row .btn-icon{
+  width:auto;
+  height:34px;
+  padding:0 18px;
   gap:8px;
-  flex-wrap:wrap;
+  font-size:12px;
+  font-weight:600;
+  white-space:nowrap
+}
+
+/* Thin divider that keeps Edit and Remove visually apart */
+.detail-btn-sep{
+  width:1px;
+  height:22px;
+  background:var(--border);
+  flex-shrink:0
+}
+
+/* ===== Change photo module (personnel detail view) ===== */
+.detail-photo-form{
+  display:block;
   width:100%;
   box-sizing:border-box;
   background:var(--navy-50);
-  padding:10px 12px;
-  border-radius:8px;
+  padding:14px 16px;
+  border-radius:10px;
   border:1px solid var(--border);
 }
-.detail-photo-label{
+
+.detail-photo-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px 14px;
+  flex-wrap:wrap;
+  margin-bottom:13px;
+  padding-bottom:10px;
+  border-bottom:1px dashed var(--border)
+}
+
+.detail-photo-title{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
   font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:1px;
+  color:var(--navy-700)
+}
+
+.detail-photo-title svg{
+  width:14px;
+  height:14px;
+  color:var(--gold)
+}
+
+.detail-photo-hint{
+  font-size:11px;
+  color:var(--muted)
+}
+
+.detail-photo-body{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap
+}
+
+.detail-photo-thumb{
+  width:56px;
+  height:56px;
+  border-radius:10px;
+  overflow:hidden;
+  border:2px solid var(--border);
+  background:#fff;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:border-color .15s
+}
+
+.detail-photo-thumb.is-new{
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px var(--navy-100)
+}
+
+.detail-photo-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block
+}
+
+.detail-photo-thumb svg{
+  width:26px;
+  height:26px;
+  color:#94a3b8
+}
+
+.detail-photo-fields{
+  flex:1;
+  min-width:180px;
+  display:flex;
+  flex-direction:column;
+  gap:8px
+}
+
+/* Styled replacement for the native file input */
+.detail-photo-input{
+  display:none
+}
+
+.detail-photo-pick{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  max-width:100%
+}
+
+.detail-photo-btn{
+  width:auto;
+  height:34px;
+  padding:0 16px;
+  gap:8px;
+  font-size:12px;
+  font-weight:600;
+  white-space:nowrap
+}
+
+.detail-photo-file{
+  font-size:11px;
+  color:var(--muted);
+  overflow:hidden;
+  text-overflow:ellipsis;
   white-space:nowrap;
-  color:var(--navy-700);
+  max-width:100%
+}
+
+.detail-photo-file.has-file{
+  color:var(--navy-800);
   font-weight:600
 }
 
-.detail-photo-input{
-  flex:1;min-width:150px;
-  max-width:280px;
-  font-size:11px
+.detail-photo-file.is-error{
+  color:var(--red);
+  font-weight:600
 }
 
-@media (max-width:480px){
-  .detail-photo-form{
-    flex-direction:column;
-    align-items:stretch
+.detail-photo-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-left:auto
+}
+
+.detail-photo-actions .btn-icon[disabled]{
+  opacity:.45;
+  cursor:not-allowed;
+  transform:none;
+  box-shadow:none
+}
+
+@media (max-width:560px){
+  .detail-actions .detail-btn-row{
+    gap:12px
   }
 
-  .detail-photo-input{
-    max-width:none
+  .detail-btn-sep{
+    display:none
+  }
+
+  .detail-photo-actions{
+    margin-left:0;
+    width:100%
+  }
+
+  .detail-photo-actions .btn-icon{
+    flex:1;
+    justify-content:center
   }
 }
 

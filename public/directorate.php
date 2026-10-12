@@ -18,7 +18,7 @@ $stmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.gender, e.rank,
                        LEFT JOIN stations  st ON st.id=e.station_id
                        LEFT JOIN posts     pt ON pt.id=e.post_id
                        WHERE e.active=1 AND $scopeW
-                       ORDER BY rg.name, dv.name, st.name, pt.name, e.rank, e.full_name");
+                       ORDER BY rg.name, dv.name, st.name, pt.name, " . personnel_order_sql('e'));
 $stmt->execute($scopeP);
 $personnel = $stmt->fetchAll();
 
@@ -108,13 +108,13 @@ include __DIR__ . '/../includes/header.php';
   <div class="chr">
     <h3>Personnel <span class="badge badge-admin"><?= $total ?></span></h3>
     <div class="form-group" style="max-width:300px;min-width:200px">
-      <input type="search" id="filter-pers" placeholder="Filter by name, rank, file no, station…" style="font-size:12px">
+      <input type="search" id="filter-pers" placeholder="Filter by file/force no, rank, name, station…" style="font-size:12px">
     </div>
   </div>
   <div class="table-wrap">
     <table id="pers-table">
       <thead><tr>
-        <th>File No</th><th>Rank</th><th>Full Name</th><th>G</th><th>Unit</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>G</th><th>Unit</th>
         <th>Region</th><th>Division</th><th>Station</th><th>Post</th>
       </tr></thead>
       <tbody>

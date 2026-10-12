@@ -9,9 +9,9 @@ if (isset($_GET['tpl'])) {
     header('Content-Type: text/csv');
     header('Content-Disposition: attachment; filename="personnel_import_template.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['service_no','full_name','rank','gender','directorate','unit','email','phone','post_id']);
-    fputcsv($out, ['UPF-00001','SURNAME FIRSTNAME','SGT','M','Operations','General Duty','officer@upf.go.ug','+256700000000','1']);
-    fputcsv($out, ['UPF-00002','SURNAME FIRSTNAME B','CPL','F','Criminal Investigations','','','','1']);
+    fputcsv($out, ['service_no','rank','full_name','gender','directorate','unit','email','phone','post_id']);
+    fputcsv($out, ['UPF-00001','SGT','SURNAME FIRSTNAME','M','Operations','General Duty','officer@upf.go.ug','+256700000000','1']);
+    fputcsv($out, ['UPF-00002','CPL','SURNAME FIRSTNAME B','F','Criminal Investigations','','','','1']);
     fclose($out);
     exit;
 }
@@ -30,7 +30,17 @@ try {
     $validUnits = [];
 }
 
-$validRanks = UPF_RANKS;
+$validRanks = rank_options($pdo);
+
+/** Maps each supported CSV column name to its index in the uploaded header row. */
+function csv_col_map(array $headers): array {
+    $map = [];
+    foreach ($headers as $i => $h) {
+        $key = strtolower(trim((string)$h, " \t\"'"));
+        if ($key !== '') $map[$key] = $i;
+    }
+    return $map;
+}
 
 /* ── Process upload ── */
 $results    = [];
@@ -50,24 +60,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
         $results[] = ['err', 'File upload failed (error code '.$f['error'].')'];
     } else {
         $handle  = fopen($f['tmp_name'], 'r');
-        $headers = fgetcsv($handle); // skip header row
+        $headers = fgetcsv($handle);
         $rowData = [];
+
+        // Columns are resolved from the header row, so any column order is accepted.
+        $cm = csv_col_map(is_array($headers) ? $headers : []);
+        $requiredCols = ['service_no','rank','full_name'];
+        $missingCols  = array_values(array_filter($requiredCols, fn($c) => !isset($cm[$c])));
+        if ($missingCols) {
+            $results[] = ['err', 'CSV header row is missing required column'.(count($missingCols) > 1 ? 's' : '').': '.implode(', ', $missingCols).'. Download the template to get the correct format.'];
+            $handle = null;
+        }
 
         // First pass: parse & validate ALL rows
         $rowNum = 1;
-        while (($data = fgetcsv($handle)) !== false) {
+        while ($handle !== null && ($data = fgetcsv($handle)) !== false) {
             $rowNum++;
             if (count(array_filter($data)) === 0) continue; // blank row
 
-            $sno    = trim($data[0] ?? '');
-            $name   = trim($data[1] ?? '');
-            $rank   = trim($data[2] ?? '');
-            $gender = strtoupper(trim($data[3] ?? 'M'));
-            $dir    = trim($data[4] ?? '');
-            $unit   = trim($data[5] ?? '');
-            $email  = trim($data[6] ?? '');
-            $phone  = trim($data[7] ?? '');
-            $postId = (int)trim($data[8] ?? '0');
+            $cell = fn(string $c, string $default = ''): string => isset($cm[$c]) ? trim((string)($data[$cm[$c]] ?? '')) : $default;
+
+            $sno    = $cell('service_no');
+            $rank   = $cell('rank');
+            $name   = $cell('full_name');
+            $gender = strtoupper($cell('gender', 'M'));
+            $dir    = $cell('directorate');
+            $unit   = $cell('unit');
+            $email  = $cell('email');
+            $phone  = $cell('phone');
+            $postId = (int)$cell('post_id', '0');
             $rowErrs = [];
 
             // Required fields
@@ -90,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
 
             // Post validation
             if (!$postId || !isset($postMap[$postId])) {
-                $rowErrs[] = "post_id '{$data[8]}' not found in the system";
+                $rowErrs[] = "post_id '".$cell('post_id')."' not found in the system";
             }
 
             // Directorate (warn only)
@@ -102,14 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
             // Check for duplicate service_no
             $existing = null;
             if ($sno !== '') {
-                $eStmt = $pdo->prepare("SELECT id, full_name, rank FROM employees WHERE service_no=?");
+                $eStmt = $pdo->prepare("SELECT id, service_no, full_name, rank FROM employees WHERE service_no=?");
                 $eStmt->execute([$sno]);
                 $existing = $eStmt->fetch() ?: null;
             }
 
             $rowData[] = compact('rowNum','sno','name','rank','gender','dir','unit','email','phone','postId','rowErrs','dirWarn','existing');
         }
-        fclose($handle);
+        if ($handle !== null) fclose($handle);
 
         // Abort-on-duplicate check
         $aborted = false;
@@ -117,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
             $dupRows = array_filter($rowData, fn($r) => $r['existing'] !== null && empty($r['rowErrs']));
             if ($dupRows) {
                 foreach ($dupRows as $r) {
-                    $results[] = ['err', "Row {$r['rowNum']} [{$r['sno']}]: Duplicate — <strong>{$r['existing']['full_name']}</strong> already exists. Import aborted."];
+                    $results[] = ['err', 'Row '.$r['rowNum'].' ['.$r['sno'].']: Duplicate — <strong>'.e(personnel_label($r['existing'])).'</strong> already exists. Import aborted.'];
                 }
                 $errors  = count($dupRows);
                 $aborted = true;
@@ -209,7 +230,7 @@ include __DIR__ . '/../includes/header.php';
       </div>
 
       <div class="form-group" style="min-width:220px">
-        <label>On Duplicate Service No</label>
+        <label>On Duplicate File/Force No</label>
         <select name="on_conflict">
           <option value="skip">Skip duplicate rows</option>
           <option value="update">Update existing record</option>
@@ -239,9 +260,9 @@ include __DIR__ . '/../includes/header.php';
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px">CSV Column Reference</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px">
       <?php foreach ([
-        'service_no'=>'Required · unique force/file no',
-        'full_name'  =>'Required · Surname Firstname',
+        'service_no'=>'Required · unique file/force no',
         'rank'       =>'Required · e.g. SGT, CPL, IP',
+        'full_name'  =>'Required · Surname Firstname',
         'gender'     =>'M or F',
         'directorate'=>'e.g. Operations',
         'unit'       =>'e.g. Flying Squad',

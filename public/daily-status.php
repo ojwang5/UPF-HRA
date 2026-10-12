@@ -38,7 +38,7 @@ $sql = "SELECT e.id, e.service_no, e.full_name, e.rank,
         LEFT JOIN posts     pt ON pt.id=e.post_id
         LEFT JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
         WHERE e.active=1 AND $scopeW
-        ORDER BY rg.name, dv.name, st.name, pt.name, e.full_name";
+        ORDER BY rg.name, dv.name, st.name, pt.name, " . personnel_order_sql('e');
 $stmt = $pdo->prepare($sql);
 $stmt->execute(array_merge([$date], $scopeP));
 $rows = $stmt->fetchAll();
@@ -129,14 +129,14 @@ include __DIR__ . '/../includes/header.php';
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>File No</th><th>Name</th><th>Rank</th><th>Status</th><th>Notes</th></tr>
+          <tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Status</th><th>Notes</th></tr>
         </thead>
         <tbody>
           <?php foreach ($group['rows'] as $r): ?>
           <tr class="<?= $r['status'] ? 'row-'.e($r['status']) : '' ?>">
             <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
+            <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
             <td><strong><?= e($r['full_name']) ?></strong></td>
-            <td><?= e($r['rank']) ?></td>
             <td>
               <select name="status[<?= $r['id'] ?>]" class="status-select">
                 <option value="" <?= !$r['status']?'selected':'' ?>>— unrecorded —</option>

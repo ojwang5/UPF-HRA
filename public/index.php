@@ -34,7 +34,7 @@ if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')
          LEFT JOIN posts     pt ON pt.id=e.post_id
          JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
          WHERE e.active=1 AND ds.status=? AND $scopeW
-         ORDER BY rg.name, dv.name, pt.name, e.full_name"
+         ORDER BY rg.name, dv.name, pt.name, " . personnel_order_sql('e')
     );
     $stmt->execute(array_merge([$date, $dsStatus], $scopeP));
     $detailPersonnel = $stmt->fetchAll();
@@ -147,7 +147,7 @@ $cards = [
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>File No</th><th>Rank</th><th>Name</th><th>G</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>G</th>
         <th>Directorate</th><th>Unit</th>
         <th>Region</th><th>Station/Post</th><th>Notes</th>
       </tr></thead>

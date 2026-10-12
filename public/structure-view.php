@@ -76,7 +76,7 @@ if ($type === 'directorate') {
     $subUnits = $pdo->prepare("SELECT u.*, (SELECT COUNT(*) FROM employees e WHERE e.unit=u.name AND e.active=1) AS personnel_count FROM units u WHERE u.directorate_id=? ORDER BY u.name");
     $subUnits->execute([$id]); $subUnits = $subUnits->fetchAll();
 
-    $personnel = $pdo->prepare("SELECT e.*, p.name AS post_name, s.name AS sta_name, d2.name AS div_name, r.name AS reg_name FROM employees e LEFT JOIN posts p ON p.id=e.post_id LEFT JOIN stations s ON s.id=e.station_id LEFT JOIN divisions d2 ON d2.id=e.division_id LEFT JOIN regions r ON r.id=e.region_id WHERE e.directorate=? AND e.active=1 ORDER BY ".\rank_order_sql('e.rank').", e.full_name");
+    $personnel = $pdo->prepare("SELECT e.*, p.name AS post_name, s.name AS sta_name, d2.name AS div_name, r.name AS reg_name FROM employees e LEFT JOIN posts p ON p.id=e.post_id LEFT JOIN stations s ON s.id=e.station_id LEFT JOIN divisions d2 ON d2.id=e.division_id LEFT JOIN regions r ON r.id=e.region_id WHERE e.directorate=? AND e.active=1 ORDER BY ".personnel_order_sql('e'));
     $personnel->execute([$entity['name']]); $personnel = $personnel->fetchAll();
 
     $backLabel = 'Back to Directorates';
@@ -88,7 +88,7 @@ if ($type === 'directorate') {
     if (!$entity) { header('Location:/hierarchy.php?tab=directorates'); exit; }
 
     $subUnits  = [];
-    $personnel = $pdo->prepare("SELECT e.*, p.name AS post_name, s.name AS sta_name, d2.name AS div_name, r.name AS reg_name FROM employees e LEFT JOIN posts p ON p.id=e.post_id LEFT JOIN stations s ON s.id=e.station_id LEFT JOIN divisions d2 ON d2.id=e.division_id LEFT JOIN regions r ON r.id=e.region_id WHERE e.unit=? AND e.active=1 ORDER BY ".\rank_order_sql('e.rank').", e.full_name");
+    $personnel = $pdo->prepare("SELECT e.*, p.name AS post_name, s.name AS sta_name, d2.name AS div_name, r.name AS reg_name FROM employees e LEFT JOIN posts p ON p.id=e.post_id LEFT JOIN stations s ON s.id=e.station_id LEFT JOIN divisions d2 ON d2.id=e.division_id LEFT JOIN regions r ON r.id=e.region_id WHERE e.unit=? AND e.active=1 ORDER BY ".personnel_order_sql('e'));
     $personnel->execute([$entity['name']]); $personnel = $personnel->fetchAll();
 
     $backLabel = 'Back to Structure';
@@ -215,16 +215,16 @@ dialog::backdrop { background:rgba(0,0,0,.45) }
   <?php else: ?>
   <div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Rank</th><th>Full Name</th><th>Service No</th><th>Gender</th>
+      <th>#</th><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Gender</th>
       <th>Unit</th><th>Post / Station</th><th style="text-align:right">Action</th>
     </tr></thead>
     <tbody>
       <?php foreach ($personnel as $i=>$e): ?>
       <tr>
         <td class="muted" style="font-size:11px"><?= $i+1 ?></td>
+        <td style="font-family:monospace;font-size:12px"><?= e($e['service_no']) ?></td>
         <td><span class="badge badge-admin" style="font-size:10px;padding:2px 7px"><?= e($e['rank']) ?></span></td>
         <td><strong><?= e($e['full_name']) ?></strong></td>
-        <td style="font-family:monospace;font-size:12px;color:var(--muted)"><?= e($e['service_no']) ?></td>
         <td style="font-size:12px"><?= $e['gender']==='F'?'Female':'Male' ?></td>
         <td style="font-size:12px;color:var(--muted)"><?= e($e['unit']?:'—') ?></td>
         <td style="font-size:12px;color:var(--muted)"><?= e(implode(' / ', array_filter([$e['post_name']??null, $e['sta_name']??null]))) ?></td>

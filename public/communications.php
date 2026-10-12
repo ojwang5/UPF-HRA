@@ -95,7 +95,7 @@ $stations  = $pdo->query("SELECT s.id, s.name, d.name AS division_name FROM stat
 $posts     = $pdo->query("SELECT p.id, p.name, s.name AS station_name FROM posts p JOIN stations s ON s.id=p.station_id ORDER BY s.name, p.name")->fetchAll();
 
 // Employees with email or phone within scope
-$empStmt = $pdo->prepare("SELECT id, full_name, email, phone, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY full_name");
+$empStmt = $pdo->prepare("SELECT id, service_no, full_name, email, phone, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $empStmt->execute($scopeP);
 $employees = $empStmt->fetchAll();
 
@@ -371,7 +371,7 @@ var regionsData   = <?= json_encode(array_map(fn($r)=>['id'=>$r['id'],'label'=>$
 var divisionsData = <?= json_encode(array_map(fn($r)=>['id'=>$r['id'],'label'=>$r['division_name'].' › '.$r['name']], $divisions)) ?>;
 var stationsData  = <?= json_encode(array_map(fn($r)=>['id'=>$r['id'],'label'=>$r['division_name'].' › '.$r['name']], $stations)) ?>;
 var postsData     = <?= json_encode(array_map(fn($r)=>['id'=>$r['id'],'label'=>$r['station_name'].' › '.$r['name']], $posts)) ?>;
-var employeesData = <?= json_encode(array_map(fn($e)=>['id'=>$e['id'],'label'=>$e['rank'].' '.$e['full_name'],'email'=>$e['email'],'phone'=>$e['phone']], $employees)) ?>;
+var employeesData = <?= json_encode(array_map(fn($e)=>['id'=>$e['id'],'label'=>personnel_label($e),'email'=>$e['email'],'phone'=>$e['phone']], $employees), JSON_UNESCAPED_UNICODE) ?>;
 
 var currentChannel = 'email';
 

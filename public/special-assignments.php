@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: /special-assignments.php'); exit;
 }
 
-$emps = $pdo->prepare("SELECT id, service_no, full_name, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY full_name");
+$emps = $pdo->prepare("SELECT id, service_no, full_name, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $emps->execute($scopeP); $emps = $emps->fetchAll();
 
 $rows = $pdo->prepare("SELECT sa.*, e.full_name, e.service_no, e.rank,
@@ -85,8 +85,8 @@ $rows = $pdo->prepare("SELECT sa.*, e.full_name, e.service_no, e.rank,
                        LEFT JOIN posts pt ON pt.id=e.post_id
                        LEFT JOIN users u ON u.id=sa.created_by
                        WHERE $scopeW
-                       ORDER BY CASE sa.status WHEN 'active' THEN 1 ELSE 2 END, sa.start_date DESC
-                       LIMIT 300");
+ORDER BY CASE sa.status WHEN 'active' THEN 1 ELSE 2 END, sa.start_date DESC, " . personnel_order_sql('e') . "
+                        LIMIT 300");
 $rows->execute(array_merge($scopeP)); $rows = $rows->fetchAll();
 
 $activeCount = count(array_filter($rows, fn($r) => $r['status'] === 'active'));
@@ -121,7 +121,7 @@ include __DIR__ . '/../includes/header.php';
           <input type="hidden" name="action" value="create">
           <div class="form-group"><label>Employee</label>
             <select name="employee_id" required><option value="">— select —</option>
-              <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e($emp['service_no'].' — '.$emp['rank'].' '.$emp['full_name']) ?></option><?php endforeach; ?>
+              <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e(personnel_label($emp)) ?></option><?php endforeach; ?>
             </select>
           </div>
           <div class="form-row">
@@ -158,8 +158,9 @@ include __DIR__ . '/../includes/header.php';
 <div class="card" style="border-left:4px solid var(--primary);margin-bottom:16px">
   <div class="chr">
     <div>
-      <h3 style="margin:0 0 3px"><?= e($viewing['rank'].' '.$viewing['full_name']) ?></h3>
-      <div style="font-size:12px;color:var(--muted)"><?= e($viewing['service_no']) ?> · <?= sa_pill($viewing['status']) ?></div>
+      <div style="font-family:monospace;font-size:12px;color:var(--muted);margin-bottom:2px"><?= e($viewing['service_no']) ?></div>
+      <h3 style="margin:0 0 3px"><?= e(trim($viewing['rank'].' '.$viewing['full_name'])) ?></h3>
+      <div style="font-size:12px;color:var(--muted)"><?= sa_pill($viewing['status']) ?></div>
     </div>
     <a class="btn-icon bi-secondary bi-sm" href="/special-assignments.php" title="Close"><?= ICO_CANCEL ?></a>
   </div>
@@ -186,15 +187,15 @@ include __DIR__ . '/../includes/header.php';
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>File No</th><th>Name</th><th>Rank</th><th>Assignment</th><th>Nature</th><th>Place</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Assignment</th><th>Nature</th><th>Place</th>
         <th>Period</th><th>Status</th><th style="width:150px">Actions</th>
       </tr></thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
         <tr>
           <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
           <td><strong><?= e($r['full_name']) ?></strong></td>
-          <td><?= e($r['rank']) ?></td>
           <td><?= e($r['title']) ?><?= $r['notes'] ? '<br><span class="muted" style="font-size:11px">'.e($r['notes']).'</span>' : '' ?></td>
           <td><?= e($r['nature'] ?? '—') ?></td>
           <td><?= e($r['place'] ?? '—') ?></td>
@@ -211,7 +212,7 @@ include __DIR__ . '/../includes/header.php';
                   <input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <div class="form-group"><label>Employee</label>
                     <select name="employee_id" required><option value="">— select —</option>
-                      <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>" <?= (int)$emp['id']===(int)$r['employee_id']?'selected':'' ?>><?= e($emp['service_no'].' — '.$emp['rank'].' '.$emp['full_name']) ?></option><?php endforeach; ?>
+                      <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>" <?= (int)$emp['id']===(int)$r['employee_id']?'selected':'' ?>><?= e(personnel_label($emp)) ?></option><?php endforeach; ?>
                     </select>
                   </div>
                   <div class="form-row">

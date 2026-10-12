@@ -26,7 +26,7 @@ $sql = "SELECT e.*, rg.name AS region_name, dv.name AS division_name, st.name AS
         LEFT JOIN posts     pt ON pt.id=e.post_id
         LEFT JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
         WHERE e.active=1 AND $scopeW $statusClause
-        ORDER BY rg.name, dv.name, st.name, e.full_name";
+        ORDER BY rg.name, dv.name, st.name, " . personnel_order_sql('e');
 $stmt = $pdo->prepare($sql);
 $stmt->execute(array_merge([$date], $scopeP, $statusParams));
 $rows = $stmt->fetchAll();
@@ -44,12 +44,14 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Service No</th><th>Name</th><th>Rank</th><th>Gender</th><th>Region</th><th>Station</th><th>Post</th><th>Phone</th><th>Status</th><th>Notes</th></tr></thead>
+      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Gender</th><th>Region</th><th>Station</th><th>Post</th><th>Phone</th><th>Status</th><th>Notes</th></tr></thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
         <tr>
-          <td><?= e($r['service_no']) ?></td><td><?= e($r['full_name']) ?></td>
-          <td><?= e($r['rank']) ?></td><td><?= $r['gender']==='M'?'Male':'Female' ?></td>
+          <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
+          <td><strong><?= e($r['full_name']) ?></strong></td>
+          <td><?= $r['gender']==='M'?'Male':'Female' ?></td>
           <td><?= e($r['region_name']??'—') ?></td><td><?= e($r['station_name']??'—') ?></td>
           <td><?= e($r['post_name']??'—') ?></td><td><?= e($r['phone']??'') ?></td>
           <td><?= $r['status'] ? status_badge($r['status']) : '<span class="muted">Unrecorded</span>' ?></td>

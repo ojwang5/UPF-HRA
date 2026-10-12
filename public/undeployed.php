@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $emps = $pdo->prepare("SELECT id, service_no, full_name, rank,
                               CASE WHEN post_id IS NULL THEN 0 ELSE 1 END has_post
                        FROM employees e WHERE e.active=1 AND $scopeW
-                       ORDER BY has_post ASC, full_name");
+                       ORDER BY has_post ASC, " . personnel_order_sql('e'));
 $emps->execute($scopeP); $emps = $emps->fetchAll();
 
 $rows = $pdo->prepare("SELECT ud.*, e.full_name, e.service_no, e.rank,
@@ -55,8 +55,8 @@ $rows = $pdo->prepare("SELECT ud.*, e.full_name, e.service_no, e.rank,
                        LEFT JOIN stations st ON st.id=e.station_id
                        LEFT JOIN posts pt ON pt.id=e.post_id
                        WHERE $scopeW
-                       ORDER BY CASE ud.status WHEN 'active' THEN 1 ELSE 2 END, ud.start_date DESC
-                       LIMIT 300");
+ORDER BY CASE ud.status WHEN 'active' THEN 1 ELSE 2 END, ud.start_date DESC, " . personnel_order_sql('e') . "
+                        LIMIT 300");
 $rows->execute(array_merge($scopeP)); $rows = $rows->fetchAll();
 
 $today = date('Y-m-d');
@@ -85,7 +85,7 @@ include __DIR__ . '/../includes/header.php';
           <input type="hidden" name="action" value="create">
           <div class="form-group"><label>Employee</label>
             <select name="employee_id" required><option value="">— select —</option>
-              <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e($emp['service_no'].' — '.$emp['rank'].' '.$emp['full_name']) ?><?= !$emp['has_post'] ? ' ⚠ no post' : '' ?></option><?php endforeach; ?>
+              <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e(personnel_label($emp)) ?><?= !$emp['has_post'] ? ' ⚠ no post' : '' ?></option><?php endforeach; ?>
             </select>
           </div>
           <div class="form-row">
@@ -117,7 +117,7 @@ include __DIR__ . '/../includes/header.php';
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>File No</th><th>Name</th><th>Rank</th><th>Current Post</th><th>Reason</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Current Post</th><th>Reason</th>
         <th>Period</th><th>Status</th><th style="width:90px"></th>
       </tr></thead>
       <tbody>
@@ -127,8 +127,8 @@ include __DIR__ . '/../includes/header.php';
         ?>
         <tr class="<?= $ongoing ? 'row-undeployed' : '' ?>">
           <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
+          <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
           <td><strong><?= e($r['full_name']) ?></strong></td>
-          <td><?= e($r['rank']) ?></td>
           <td style="font-size:12px"><?= e(($r['station_name']??'').' '.($r['post_name']?'· '.($r['post_name']):'(no post)')) ?></td>
           <td><?= e($r['reason']) ?><?= $r['notes'] ? '<br><span class="muted" style="font-size:11px">'.e($r['notes']).'</span>' : '' ?></td>
           <td style="white-space:nowrap;font-size:12px"><?= e(date('j M y', strtotime($r['start_date']))) ?>

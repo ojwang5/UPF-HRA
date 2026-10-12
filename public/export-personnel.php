@@ -86,7 +86,7 @@ $sql = "SELECT e.service_no, e.rank, e.full_name, e.gender, e.directorate, e.uni
         LEFT JOIN stations  st ON st.id=e.station_id
         LEFT JOIN posts     pt ON pt.id=e.post_id
         WHERE $where
-        ORDER BY rg.name, dv.name, st.name, pt.name, e.full_name";
+        ORDER BY rg.name, dv.name, st.name, pt.name, " . personnel_order_sql('e');
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
