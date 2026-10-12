@@ -123,6 +123,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="panel-drop" id="panel-new" style="min-width:420px">
         <h4>New Special Assignment</h4>
         <form method="post" style="display:flex;flex-direction:column;gap:10px">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="create">
           <div class="form-group"><label>Employee</label>
             <select name="employee_id" required><option value="">— select —</option>
@@ -215,6 +216,7 @@ include __DIR__ . '/../includes/header.php';
               <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Edit assignment"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:380px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                   <input type="hidden" name="action" value="edit">
                   <input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <div class="form-group"><label>Employee</label>
@@ -258,6 +260,7 @@ include __DIR__ . '/../includes/header.php';
               <summary><button type="button" class="btn-icon bi-green bi-sm" title="End / cancel assignment"><?= ICO_OK ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:240px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                   <input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <input type="text" name="remarks" placeholder="Remarks (optional)">
                   <div class="action-bar">
@@ -269,6 +272,7 @@ include __DIR__ . '/../includes/header.php';
             </details>
             <?php endif; ?>
             <form method="post" style="display:inline-block" onsubmit="return confirm('Delete this special assignment?')">
+  <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="<?= $r['id'] ?>">
               <button class="btn-icon bi-danger bi-sm" type="submit" title="Delete assignment"><?= ICO_TRASH ?></button>

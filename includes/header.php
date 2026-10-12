@@ -80,6 +80,23 @@ $unreadCount = $user ? unread_notification_count($user) : 0;
 </head>
 <body>
 
+<script>
+/* CSRF: expose the session token and make sure every POST form carries it
+   (covers any form added dynamically or missed in markup). */
+window.CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('form').forEach(function (f) {
+    var m = (f.getAttribute('method') || 'get').toLowerCase();
+    if (m !== 'post') return;
+    if (!f.querySelector('input[name="csrf_token"]')) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'csrf_token'; i.value = window.CSRF_TOKEN;
+      f.appendChild(i);
+    }
+  });
+});
+</script>
+
 <header class="topbar">
   <div class="topbar-inner">
     <?php if ($user): ?>

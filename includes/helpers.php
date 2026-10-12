@@ -6,6 +6,27 @@ function e(?string $s): string {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
+/* ─── Password policy ─────────────────────────────────────────────
+ * A valid password must contain at least one capital letter, one small
+ * letter and one special character, and be longer than 6 characters. */
+const PASSWORD_MIN_LENGTH = 7;
+
+/** Returns the list of unmet policy requirements (empty array = compliant). */
+function password_policy_errors(string $pw): array {
+    $errs = [];
+    if (strlen($pw) < PASSWORD_MIN_LENGTH)   $errs[] = 'more than 6 characters';
+    if (!preg_match('/[A-Z]/', $pw))         $errs[] = 'a capital letter';
+    if (!preg_match('/[a-z]/', $pw))         $errs[] = 'a small letter';
+    if (!preg_match('/[^A-Za-z0-9]/', $pw))  $errs[] = 'a special character';
+    return $errs;
+}
+
+function password_policy_ok(string $pw): bool { return password_policy_errors($pw) === []; }
+
+function password_policy_hint(): string {
+    return 'Password must contain a capital letter, a small letter, a special character, and be more than 6 characters long.';
+}
+
 /* ─── Icon SVG snippets ─── */
 const ICO_PLUS   = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
 const ICO_TRASH  = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';

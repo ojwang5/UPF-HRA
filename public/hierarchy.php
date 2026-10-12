@@ -190,7 +190,8 @@ foreach ($geoSections as $sec):
         <td>
           <div class="btn-grp">
             <button class="px px-edit" onclick='openGeoEdit("<?= $lvl ?>",<?= $jEnc ?>)'><?= ICO_EDIT ?> Edit</button>
-            <form method="post" style="display:contents" onsubmit="return confirm('Delete this <?= $lvl ?>? This cannot be undone.')">
+            <form method="post" style="display:contents" onsubmit="return confirm('Delete this <?= $lvl ?>
+  <?= csrf_field() ?>? This cannot be undone.')">
               <input type="hidden" name="action" value="delete"><input type="hidden" name="level" value="<?= $lvl ?>">
               <input type="hidden" name="id" value="<?= $pid ?>"><input type="hidden" name="tab" value="geography">
               <button type="submit" class="px px-del"><?= ICO_TRASH ?></button>
@@ -208,6 +209,7 @@ foreach ($geoSections as $sec):
 <dialog id="dlg-add-<?= $lvl ?>">
   <div class="dlg-head"><h4>Add <?= rtrim($sec['label'],'s') ?></h4><button class="dlg-close" onclick="this.closest('dialog').close()">×</button></div>
   <form method="post">
+  <?= csrf_field() ?>
     <div class="dlg-body" style="display:flex;flex-direction:column;gap:12px">
       <input type="hidden" name="action" value="add"><input type="hidden" name="level" value="<?= $lvl ?>"><input type="hidden" name="tab" value="geography">
       <?php if ($hasParent): ?>
@@ -233,7 +235,8 @@ foreach ($geoSections as $sec):
 <!-- EDIT dialog -->
 <dialog id="dlg-edit-<?= $lvl ?>">
   <div class="dlg-head"><h4>Edit <?= rtrim($sec['label'],'s') ?></h4><button class="dlg-close" onclick="this.closest('dialog').close()">×</button></div>
-  <form method="post" id="form-edit-<?= $lvl ?>">
+  <form method="post" id="form-edit-<?= $lvl ?>
+  <?= csrf_field() ?>">
     <div class="dlg-body" style="display:flex;flex-direction:column;gap:12px">
       <input type="hidden" name="action" value="edit"><input type="hidden" name="level" value="<?= $lvl ?>"><input type="hidden" name="tab" value="geography">
       <input type="hidden" name="id" id="edit-<?= $lvl ?>-id">
@@ -288,6 +291,7 @@ foreach ($geoSections as $sec):
           <a class="px px-view" href="/structure-view.php?type=directorate&id=<?= $d['id'] ?>"><?= ICO_EYE ?> View</a>
           <button class="px px-edit" onclick='openDirEdit(<?= htmlspecialchars(json_encode($d),ENT_QUOTES) ?>)'><?= ICO_EDIT ?> Edit</button>
           <form method="post" style="display:contents" onsubmit="return confirm('Delete this directorate? Units inside it will also be removed.')">
+  <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete"><input type="hidden" name="level" value="directorate">
             <input type="hidden" name="id" value="<?= $d['id'] ?>"><input type="hidden" name="tab" value="directorates">
             <button type="submit" class="px px-del"><?= ICO_TRASH ?></button>
@@ -330,6 +334,7 @@ foreach ($geoSections as $sec):
           <a class="px px-view" href="/structure-view.php?type=unit&id=<?= $u['id'] ?>"><?= ICO_EYE ?> View</a>
           <button class="px px-edit" onclick='openUnitEdit(<?= htmlspecialchars(json_encode($u),ENT_QUOTES) ?>)'><?= ICO_EDIT ?> Edit</button>
           <form method="post" style="display:contents" onsubmit="return confirm('Delete this unit?')">
+  <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete"><input type="hidden" name="level" value="unit">
             <input type="hidden" name="id" value="<?= $u['id'] ?>"><input type="hidden" name="tab" value="directorates">
             <button type="submit" class="px px-del"><?= ICO_TRASH ?></button>
@@ -347,6 +352,7 @@ foreach ($geoSections as $sec):
 <dialog id="dlg-add-directorate">
   <div class="dlg-head"><h4>Add New Directorate</h4><button class="dlg-close" onclick="this.closest('dialog').close()">×</button></div>
   <form method="post">
+  <?= csrf_field() ?>
     <div class="dlg-body" style="display:flex;flex-direction:column;gap:12px">
       <input type="hidden" name="action" value="add"><input type="hidden" name="level" value="directorate"><input type="hidden" name="tab" value="directorates">
       <div class="form-group"><label>Name <span style="color:var(--red)">*</span></label><input type="text" name="name" required placeholder="e.g. Special Operations"></div>
@@ -364,6 +370,7 @@ foreach ($geoSections as $sec):
 <dialog id="dlg-edit-directorate">
   <div class="dlg-head"><h4>Edit Directorate</h4><button class="dlg-close" onclick="this.closest('dialog').close()">×</button></div>
   <form method="post">
+  <?= csrf_field() ?>
     <div class="dlg-body" style="display:flex;flex-direction:column;gap:12px">
       <input type="hidden" name="action" value="edit"><input type="hidden" name="level" value="directorate"><input type="hidden" name="tab" value="directorates">
       <input type="hidden" name="id" id="edit-dir-id">
@@ -382,6 +389,7 @@ foreach ($geoSections as $sec):
 <dialog id="dlg-add-unit">
   <div class="dlg-head"><h4>Add New Unit</h4><button class="dlg-close" onclick="this.closest('dialog').close()">×</button></div>
   <form method="post">
+  <?= csrf_field() ?>
     <div class="dlg-body" style="display:flex;flex-direction:column;gap:12px">
       <input type="hidden" name="action" value="add"><input type="hidden" name="level" value="unit"><input type="hidden" name="tab" value="directorates">
       <div class="form-group"><label>Parent Directorate <span style="color:var(--red)">*</span></label>
@@ -404,6 +412,7 @@ foreach ($geoSections as $sec):
 <dialog id="dlg-edit-unit">
   <div class="dlg-head"><h4>Edit Unit</h4><button class="dlg-close" onclick="this.closest('dialog').close()">×</button></div>
   <form method="post">
+  <?= csrf_field() ?>
     <div class="dlg-body" style="display:flex;flex-direction:column;gap:12px">
       <input type="hidden" name="action" value="edit"><input type="hidden" name="level" value="unit"><input type="hidden" name="tab" value="directorates">
       <input type="hidden" name="id" id="edit-unit-id">

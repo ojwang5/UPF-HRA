@@ -40,6 +40,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="form-body">
         <h4 style="margin:0 0 12px;color:var(--navy-800)">Send Broadcast</h4>
         <form method="post">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="broadcast">
           <div class="form-row">
             <div class="form-group" style="flex:2"><label>Title</label><input type="text" name="title" required></div>
@@ -75,6 +76,7 @@ include __DIR__ . '/../includes/header.php';
     <?php endif; ?>
     <!-- Mark all read -->
     <form method="post" style="display:contents">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="mark_all">
       <button type="submit" class="btn-icon bi-secondary" title="Mark all as read"><?= ICO_OK_ALL ?></button>
     </form>
@@ -100,6 +102,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <?php if ($unread): ?>
     <form method="post" style="display:contents">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="mark_one"><input type="hidden" name="id" value="<?= $n['id'] ?>">
       <button type="submit" class="btn-icon bi-secondary bi-sm" title="Mark as read" style="align-self:flex-start;margin-top:4px"><?= ICO_SAVE ?></button>
     </form>

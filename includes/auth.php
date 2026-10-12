@@ -63,12 +63,59 @@ function require_min_rank(string $minRole): array {
     return $u;
 }
 
+/* ─── Login throttling ─── */
+const MAX_LOGIN_ATTEMPTS    = 5;   // failed tries before lockout
+const LOGIN_LOCKOUT_MINUTES = 20;  // cooldown once the limit is reached
+
+/** Records a login outcome. On success the failed-attempt history is cleared. */
+function record_login_attempt(string $username, bool $success): void {
+    try {
+        $pdo = db();
+        if ($success) {
+            $pdo->prepare("DELETE FROM login_attempts WHERE username = ?")->execute([$username]);
+            return;
+        }
+        $pdo->prepare("INSERT INTO login_attempts (username, ip_address, success, attempted_at) VALUES (?,?,0,datetime('now','localtime'))")
+            ->execute([$username, $_SERVER['REMOTE_ADDR'] ?? null]);
+        // Keep the table small — attempts only matter for a 20-minute window.
+        $pdo->exec("DELETE FROM login_attempts WHERE attempted_at < datetime('now','localtime','-1 day')");
+    } catch (\Throwable $e) { /* never block login on audit failure */ }
+}
+
+/**
+ * Minutes the account is still locked for (0 when attempts are allowed).
+ * Locks once MAX_LOGIN_ATTEMPTS failures have occurred within the window;
+ * unlocks LOGIN_LOCKOUT_MINUTES after the qualifying attempt.
+ */
+function login_lockout_minutes(string $username): int {
+    try {
+        $st = db()->prepare("SELECT attempted_at FROM login_attempts
+                             WHERE username = ? AND success = 0
+                             ORDER BY attempted_at DESC, id DESC
+                             LIMIT 1 OFFSET ?");
+        $st->execute([$username, MAX_LOGIN_ATTEMPTS - 1]);
+        $t = $st->fetchColumn();
+        if (!$t) return 0;
+        $unlock = strtotime((string)$t) + LOGIN_LOCKOUT_MINUTES * 60;
+        $remaining = $unlock - time();
+        return $remaining > 0 ? (int)ceil($remaining / 60) : 0;
+    } catch (\Throwable $e) {
+        return 0;
+    }
+}
+
 function login(string $username, string $password): bool {
     $stmt = db()->prepare("SELECT * FROM users WHERE username = ?");
     $stmt->execute([$username]);
     $u = $stmt->fetch();
     if ($u && password_verify($password, $u['password_hash'])) {
-        $_SESSION['user_id'] = (int)$u['id'];
+        // New session id + fresh CSRF token to prevent session fixation/replay.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_regenerate_id(true);
+        }
+        $_SESSION['user_id']       = (int)$u['id'];
+        $_SESSION['last_activity'] = time();
+        $_SESSION['csrf_token']    = bin2hex(random_bytes(32));
         return true;
     }
     return false;

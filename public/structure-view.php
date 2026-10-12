@@ -26,8 +26,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action']??'') === 'create_
 
     if (!in_array($role, creatable_roles($user), true)) {
         flash('err','You cannot assign that role.');
-    } elseif ($uname===''||$fname===''||strlen($pw)<4) {
-        flash('err','Username, full name, and password (min 4 chars) are required.');
+    } elseif ($uname===''||$fname==='') {
+        flash('err','Username and full name are required.');
+    } elseif (!password_policy_ok($pw)) {
+        flash('err','Weak password — '.password_policy_hint());
     } else {
         $rid = $_POST['region_id']   ? (int)$_POST['region_id']   : null;
         $did = $_POST['division_id'] ? (int)$_POST['division_id'] : null;
@@ -246,6 +248,7 @@ dialog::backdrop { background:rgba(0,0,0,.45) }
     <button class="dlg-close" onclick="this.closest('dialog').close()">×</button>
   </div>
   <form method="post">
+  <?= csrf_field() ?>
     <div class="dlg-body">
       <input type="hidden" name="action" value="create_user">
       <div style="background:#fef3c7;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e">
@@ -253,7 +256,7 @@ dialog::backdrop { background:rgba(0,0,0,.45) }
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group"><label>Username <span style="color:var(--red)">*</span></label><input type="text" name="username" required autocomplete="off"></div>
-        <div class="form-group"><label>Password <span style="color:var(--red)">*</span></label><input type="password" name="password" required minlength="4" autocomplete="new-password"></div>
+        <div class="form-group"><label>Password <span style="color:var(--red)">*</span></label><input type="password" name="password" required minlength="7" placeholder="Min. 7 chars, Aa1! style" autocomplete="new-password"><small style="color:var(--muted);font-size:11px">Capital + small letter, special character, more than 6 characters.</small></div>
       </div>
       <div class="form-group"><label>Full Name <span style="color:var(--red)">*</span></label><input type="text" name="full_name" required></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">

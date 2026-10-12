@@ -171,6 +171,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="panel-drop" id="panel-new" style="min-width:440px">
         <h4>Record New Course</h4>
         <form method="post" style="display:flex;flex-direction:column;gap:10px">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="create">
           <div class="form-group"><label>Employee</label>
             <select name="employee_id" required><option value="">— select —</option>
@@ -252,10 +253,12 @@ include __DIR__ . '/../includes/header.php';
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Complete / withdraw"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
                 <div class="action-bar">
-                  <form method="post"><input type="hidden" name="id" value="<?= $r['id'] ?>">
+                  <form method="post">
+  <?= csrf_field() ?><input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <button class="btn-icon bi-green" name="action" value="complete" title="Mark completed"><?= ICO_OK ?></button>
                   </form>
-                  <form method="post"><input type="hidden" name="id" value="<?= $r['id'] ?>">
+                  <form method="post">
+  <?= csrf_field() ?><input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <button class="btn-icon bi-danger" name="action" value="withdraw" title="Withdraw from course"><?= ICO_REJECT ?></button>
                   </form>
                 </div>
@@ -287,6 +290,7 @@ include __DIR__ . '/../includes/header.php';
     <?php else: ?><p class="muted" style="font-size:12px">No courses yet — add the first one below.</p><?php endif; ?>
     <?php if (!$readonly): ?>
     <form method="post" class="form-row" style="margin:0">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="add_course">
       <div class="form-group" style="flex:2"><label>Course Name</label><input type="text" name="name" required placeholder="e.g. Inspectorate Course"></div>
       <div class="form-group"><label>Nature</label>
@@ -312,6 +316,7 @@ include __DIR__ . '/../includes/header.php';
     <?php else: ?><p class="muted" style="font-size:12px">No training schools yet — add the first one below.</p><?php endif; ?>
     <?php if (!$readonly): ?>
     <form method="post" class="form-row" style="margin:0">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="add_school">
       <div class="form-group" style="flex:2"><label>School / Institution</label><input type="text" name="name" required placeholder="e.g. Police Training School Kabalye"></div>
       <div class="form-group"><label>Place</label><input type="text" name="place" placeholder="e.g. Masindi"></div>

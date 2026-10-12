@@ -324,6 +324,32 @@ function migrate(PDO $pdo): void {
     if ($v < 13) {
         _migrate_v13($pdo);
     }
+
+    if ($v < 14) {
+        _migrate_v14($pdo);
+    }
+}
+
+/* ─── v14: login attempt throttling (brute-force protection) ─── */
+function _migrate_v14(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                username     TEXT NOT NULL,
+                ip_address   TEXT,
+                success      INTEGER NOT NULL DEFAULT 0,
+                attempted_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username, attempted_at);
+        ");
+        $pdo->exec("PRAGMA user_version = 14");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
 }
 
 /* ─── v13: configurable leave types + leave extension workflow ─── */

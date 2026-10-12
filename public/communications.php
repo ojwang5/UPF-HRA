@@ -183,6 +183,7 @@ include __DIR__ . '/../includes/header.php';
       <?php endif; ?>
     </div>
     <form method="post" id="compose-form">
+  <?= csrf_field() ?>
 
       <!-- Channel -->
       <div class="form-group" style="margin-bottom:14px">

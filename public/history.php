@@ -110,6 +110,7 @@ include __DIR__ . '/../includes/header.php';
     <summary><button type="button" class="btn-icon bi-secondary" title="Approve / Reject"><?= ICO_EYE ?></button></summary>
     <div class="form-body">
       <form method="post" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+  <?= csrf_field() ?>
         <input type="hidden" name="id" value="<?= $detail['id'] ?>"><input type="hidden" name="ret" value="<?= $detail['id'] ?>">
         <div class="form-group" style="flex:1"><label>Review Notes</label><input type="text" name="notes" placeholder="Optional notes"></div>
         <div class="action-bar">

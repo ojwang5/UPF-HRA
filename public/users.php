@@ -23,8 +23,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($role, creatable_roles($user), true)) {
             flash('err','You cannot assign that role.'); header('Location:/users.php'); exit;
         }
-        if ($uname===''||$fname===''||strlen($pw)<4) {
-            flash('err','Username, full name, and password (min 4 chars) are required.'); header('Location:/users.php'); exit;
+        if ($uname===''||$fname==='') {
+            flash('err','Username and full name are required.'); header('Location:/users.php'); exit;
+        }
+        if (!password_policy_ok($pw)) {
+            flash('err','Weak password — '.password_policy_hint()); header('Location:/users.php'); exit;
         }
 
         // Functional command accounts must be anchored to a directorate (and unit).
@@ -79,12 +82,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)$_POST['id'];
         $pw = $_POST['password'] ?? '';
         $t  = $pdo->query("SELECT * FROM users WHERE id=$id")->fetch();
-        if ($t && can_manage_user($user, $t) && strlen($pw) >= 4) {
+        if ($t && can_manage_user($user, $t) && password_policy_ok($pw)) {
             $pdo->prepare("UPDATE users SET password_hash=? WHERE id=?")->execute([password_hash($pw, PASSWORD_DEFAULT), $id]);
+            record_login_attempt($t['username'], true); // clear any lockout on password reset
             log_activity('Reset Password', 'user', $t['full_name'], $id);
             flash('msg', 'Password reset successfully.');
         } else {
-            flash('err', 'Password must be at least 4 characters.');
+            flash('err', password_policy_hint());
         }
 
     } elseif ($action === 'delete') {
@@ -210,11 +214,12 @@ include __DIR__ . '/../includes/header.php';
                   <h4><?= ICO_KEY ?> Reset Password</h4>
                   <div style="font-size:12px;color:var(--muted);margin-bottom:10px"><?= e($u['full_name']) ?></div>
                   <form method="post" style="display:flex;gap:8px;align-items:flex-end">
+  <?= csrf_field() ?>
                     <input type="hidden" name="action" value="reset">
                     <input type="hidden" name="id" value="<?= $u['id'] ?>">
                     <div class="form-group" style="flex:1">
                       <label>New Password</label>
-                      <input type="password" name="password" placeholder="Min. 4 characters" required minlength="4">
+                      <input type="password" name="password" placeholder="Min. 7 chars, Aa1! style" required minlength="7">
                     </div>
                     <button class="btn-icon bi-gold" type="submit" title="Save"><?= ICO_SAVE ?></button>
                   </form>
@@ -222,7 +227,8 @@ include __DIR__ . '/../includes/header.php';
               </div>
 
               <!-- Delete -->
-              <form method="post" style="display:contents" onsubmit="return confirm('Remove account for <?= e(addslashes($u['full_name'])) ?>?')">
+              <form method="post" style="display:contents" onsubmit="return confirm('Remove account for <?= e(addslashes($u['full_name'])) ?>
+  <?= csrf_field() ?>?')">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= $u['id'] ?>">
                 <button class="btn-icon bi-danger bi-sm" type="submit" title="Delete"><?= ICO_TRASH ?></button>
@@ -258,6 +264,7 @@ include __DIR__ . '/../includes/header.php';
       <!-- CREATE FORM -->
       <div id="form-create">
         <form method="post" id="create-user-form">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="create">
 
           <div class="modal-section">
@@ -278,7 +285,8 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-row">
               <div class="form-group" style="min-width:160px">
                 <label>Password <span style="color:var(--red)">*</span></label>
-                <input type="password" name="password" required minlength="4" placeholder="Min. 4 characters">
+                <input type="password" name="password" required minlength="7" placeholder="Min. 7 chars, Aa1! style">
+                <small style="color:var(--muted);font-size:11px">Capital + small letter, special character, more than 6 characters.</small>
               </div>
               <div class="form-group" style="flex:2;min-width:180px">
                 <label>Role <span style="color:var(--red)">*</span></label>
@@ -372,6 +380,7 @@ include __DIR__ . '/../includes/header.php';
       <!-- EDIT CONTACT FORM -->
       <div id="form-edit" style="display:none">
         <form method="post" id="edit-user-form">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="update">
           <input type="hidden" name="id" id="edit-uid">
           <div class="modal-section">

@@ -82,6 +82,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="panel-drop" id="panel-new" style="min-width:400px">
         <h4>Mark Undeployed</h4>
         <form method="post" style="display:flex;flex-direction:column;gap:10px">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="create">
           <div class="form-group"><label>Employee</label>
             <select name="employee_id" required><option value="">— select —</option>
@@ -137,6 +138,7 @@ include __DIR__ . '/../includes/header.php';
           <td>
             <?php if ($r['status']==='active'): ?>
             <form method="post">
+  <?= csrf_field() ?>
               <input type="hidden" name="id" value="<?= $r['id'] ?>">
               <button class="btn-icon bi-green bi-sm" name="action" value="redeploy" title="Mark redeployed"><?= ICO_OK_ALL ?></button>
             </form>

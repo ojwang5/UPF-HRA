@@ -222,6 +222,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="card" style="margin-bottom:20px">
   <div class="chr"><h3>Upload CSV File</h3></div>
   <form method="post" enctype="multipart/form-data">
+  <?= csrf_field() ?>
     <div class="form-row" style="align-items:flex-end;flex-wrap:wrap;gap:14px">
 
       <div class="form-group" style="flex:3;min-width:260px">

@@ -119,6 +119,7 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <form method="post">
+  <?= csrf_field() ?>
   <input type="hidden" name="date" value="<?= e($date) ?>">
 
   <?php foreach ($groups as $group): ?>

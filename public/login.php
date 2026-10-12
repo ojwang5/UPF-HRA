@@ -1,18 +1,31 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
-$error = null;
+$error = flash('err');
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
-    if (login($username, $_POST['password'] ?? '')) {
+    $locked   = login_lockout_minutes($username);
+    if ($locked > 0) {
+        $error = "Too many failed attempts. This account is locked. Please try again in {$locked} minute".($locked === 1 ? '' : 's').'.';
+        try {
+            db()->prepare("INSERT INTO activity_log (user_name,action,entity_type,entity_label,details,ip_address,created_at) VALUES (?,?,?,?,?,?,datetime('now','localtime'))")
+                ->execute([$username, 'Blocked Login', 'user', $username, 'Account locked (too many attempts)', $_SERVER['REMOTE_ADDR'] ?? null]);
+        } catch (\Throwable $e) {}
+    } elseif (login($username, $_POST['password'] ?? '')) {
+        record_login_attempt($username, true);
         log_activity('Login', 'user', $username, 0, 'Successful login');
         header('Location:/'); exit;
+    } else {
+        record_login_attempt($username, false);
+        $locked = login_lockout_minutes($username);
+        $error = $locked > 0
+            ? "Too many failed attempts. This account is locked for {$locked} minute".($locked === 1 ? '' : 's').'.'
+            : 'Invalid username or password.';
+        try {
+            db()->prepare("INSERT INTO activity_log (user_name,action,entity_type,entity_label,details,ip_address,created_at) VALUES (?,?,?,?,?,?,datetime('now','localtime'))")
+                ->execute([$username, 'Failed Login', 'user', $username, 'Invalid credentials', $_SERVER['REMOTE_ADDR'] ?? null]);
+        } catch (\Throwable $e) {}
     }
-    try {
-        db()->prepare("INSERT INTO activity_log (user_name,action,entity_type,entity_label,details,ip_address,created_at) VALUES (?,?,?,?,?,?,datetime('now','localtime'))")
-            ->execute([$username, 'Failed Login', 'user', $username, 'Invalid credentials', $_SERVER['REMOTE_ADDR'] ?? null]);
-    } catch (\Throwable $e) {}
-    $error = 'Invalid username or password.';
 }
 if (current_user()) { header('Location:/'); exit; }
 ?><!doctype html>
@@ -22,6 +35,7 @@ if (current_user()) { header('Location:/'); exit; }
 <link rel="stylesheet" href="/assets/style.css">
 </head><body class="login-page">
 <form class="login-card" method="post" action="/login.php">
+  <?= csrf_field() ?>
   <div class="brand-block">
     <img src="/assets/logo.jpg" alt="UPF">
     <div class="org"><?= e(APP_ORG) ?></div>

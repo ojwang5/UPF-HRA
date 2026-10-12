@@ -239,6 +239,7 @@ include __DIR__ . '/../includes/header.php';
       </div>
     </details>
     <form method="post" style="display:contents">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="generate">
       <button type="submit" class="btn-icon bi-primary" title="<?= is_superadmin($user) ? 'Save report' : 'Submit report for review' ?>"><?= ICO_GEN ?></button>
     </form>
@@ -378,6 +379,7 @@ include __DIR__ . '/../includes/header.php';
               <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Take action"><?= $r['status']==='approved' ? ICO_OK : ICO_SEND ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:320px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                   <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                   <?php if ($isReverted): ?>
                   <div class="alert" style="background:#fff4e5;border:1px solid #f0d9a8;border-radius:8px;padding:8px 10px;font-size:12px"><strong>Returned for correction</strong><?= $r['review_notes'] ? '<br>Note: '.e($r['review_notes']) : '' ?><br>Correct the figures then re-submit.</div>

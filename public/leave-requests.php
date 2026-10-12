@@ -151,6 +151,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="form-body">
         <h4 style="margin:0 0 14px;color:var(--navy-800)">New Leave Request</h4>
         <form method="post">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="submit">
           <div class="form-row">
             <div class="form-group" style="flex:2"><label>Employee</label>
@@ -223,6 +224,7 @@ $adjRows = $adjRows->fetchAll();
         <div class="panel-drop" id="panel-adjust" style="min-width:360px">
           <h4>Adjust Leave Days</h4>
           <form method="post" style="display:flex;flex-direction:column;gap:10px">
+  <?= csrf_field() ?>
             <input type="hidden" name="action" value="adjust">
             <div class="form-group"><label>Employee</label>
               <select name="employee_id" required><option value="">— select —</option>
@@ -338,6 +340,7 @@ $adjRows = $adjRows->fetchAll();
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review request"><?= ICO_EYE ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:260px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                   <input type="hidden" name="action" value="review"><input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <input type="text" name="notes" placeholder="Review notes (optional)">
                   <div class="action-bar">
@@ -353,6 +356,7 @@ $adjRows = $adjRows->fetchAll();
               <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Request leave extension"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:270px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                   <input type="hidden" name="action" value="submit_extension">
                   <input type="hidden" name="leave_request_id" value="<?= $r['id'] ?>">
                   <div style="font-size:12px;color:var(--muted)">Current end date: <strong><?= e($r['end_date']) ?></strong></div>
@@ -401,6 +405,7 @@ $adjRows = $adjRows->fetchAll();
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review extension"><?= ICO_EYE ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:260px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                   <input type="hidden" name="action" value="review_extension"><input type="hidden" name="id" value="<?= (int)$x['id'] ?>">
                   <input type="text" name="notes" placeholder="Review notes (optional)">
                   <div class="action-bar">

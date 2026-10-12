@@ -107,6 +107,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="panel-drop" id="panel-new" style="min-width:420px">
         <h4>Open New Case</h4>
         <form method="post" style="display:flex;flex-direction:column;gap:10px">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="create">
           <div class="form-group"><label>Employee</label>
             <select name="employee_id" required><option value="">— select —</option>
@@ -168,6 +169,7 @@ include __DIR__ . '/../includes/header.php';
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Close / reinstate"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:250px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                 <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                   <input type="hidden" name="id" value="<?= $r['id'] ?>">
                   <input type="text" name="outcome" placeholder="Outcome (optional)">
                   <div class="action-bar">

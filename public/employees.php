@@ -287,6 +287,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="panel-drop" id="panel-export" style="min-width:340px">
         <h4><?= ICO_DL ?> Export Personnel</h4>
         <form method="post" action="/export-personnel.php" target="_blank">
+  <?= csrf_field() ?>
           <input type="hidden" name="q" value="<?= e($search) ?>">
           <div class="form-group" style="margin-bottom:12px"><label>Format</label>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
@@ -333,6 +334,7 @@ include __DIR__ . '/../includes/header.php';
           <?= ICO_DL ?> <span>Download CSV Template</span>
         </a>
         <form method="post" action="/bulk-import.php" enctype="multipart/form-data" target="_blank">
+  <?= csrf_field() ?>
           <div class="drop-zone" id="bulk-drop-zone" onclick="document.getElementById('bulk-file').click()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
             <p><strong>Click to choose</strong> or drag &amp; drop your CSV file here</p>
@@ -436,12 +438,14 @@ include __DIR__ . '/../includes/header.php';
     <div class="detail-btn-row">
       <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span>Edit Record</span></a>
       <span class="detail-btn-sep" aria-hidden="true"></span>
-      <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>?')">
+      <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>
+  <?= csrf_field() ?>?')">
         <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $viewing['id'] ?>">
         <button class="btn-icon bi-danger" type="submit" title="Remove this personnel record"><?= ICO_TRASH ?> <span>Remove</span></button>
       </form>
     </div>
     <form method="post" enctype="multipart/form-data" class="detail-photo-form">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="update">
       <input type="hidden" name="id" value="<?= $viewing['id'] ?>">
       <input type="hidden" name="service_no" value="<?= e($viewing['service_no']) ?>">
@@ -536,7 +540,8 @@ include __DIR__ . '/../includes/header.php';
             <div style="display:flex;gap:3px;justify-content:center">
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?view=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="View details"><?= ICO_EYE ?></a>
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?edit=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit"><?= ICO_EDIT ?></a>
-              <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($emp['full_name'])) ?>?')">
+              <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($emp['full_name'])) ?>
+  <?= csrf_field() ?>?')">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= $emp['id'] ?>">
                 <button class="btn-icon bi-danger bi-sm" type="submit" title="Delete"><?= ICO_TRASH ?></button>
@@ -571,6 +576,7 @@ include __DIR__ . '/../includes/header.php';
 
     <div class="modal-body">
       <form method="post" enctype="multipart/form-data" id="personnel-form">
+  <?= csrf_field() ?>
         <input type="hidden" name="action" value="<?= $editing?'update':'create' ?>">
         <?php if ($editing): ?><input type="hidden" name="id" value="<?= $editing['id'] ?>"><?php endif; ?>
 

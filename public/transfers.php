@@ -298,6 +298,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="panel-drop" id="panel-new" style="min-width:640px">
         <h4>New Transfer Request</h4>
         <form method="post" style="display:flex;flex-direction:column;gap:10px">
+  <?= csrf_field() ?>
           <input type="hidden" name="action" value="create">
           <div class="form-row">
             <div class="form-group" style="flex:2"><label>Employee</label>
@@ -434,6 +435,7 @@ include __DIR__ . '/../includes/header.php';
                 <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review"><?= ICO_EYE ?></button></summary>
                 <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:250px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
                   <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <input type="text" name="notes" placeholder="Review notes (optional)">
                     <div class="action-bar">
@@ -448,6 +450,7 @@ include __DIR__ . '/../includes/header.php';
                 <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Execute / cancel"><?= ICO_EDIT ?></button></summary>
                 <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
                   <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <div class="action-bar">
                       <button class="btn-icon bi-green" name="action" value="execute" title="Execute transfer"><?= ICO_OK ?></button>
@@ -461,6 +464,7 @@ include __DIR__ . '/../includes/header.php';
                 <summary><button type="button" class="btn-icon bi-green bi-sm" title="Confirm reporting at new workplace"><?= ICO_OK ?></button></summary>
                 <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:230px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
                   <form method="post" style="display:flex;flex-direction:column;gap:8px">
+  <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= $r['id'] ?>">
                     <div style="font-size:12px;color:var(--navy-700)">Has <strong><?= e($r['emp_name']) ?></strong> reported at the new place of work?</div>
                     <input type="text" name="notes" placeholder="Reporting notes (optional)">

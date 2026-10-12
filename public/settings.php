@@ -113,6 +113,7 @@ include __DIR__ . '/../includes/header.php';
     skip the intermediate levels and wait only for the Super Admin's approval.
   </p>
   <form method="post">
+  <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_report_mode">
     <label class="switch">
       <input type="checkbox" name="report_submission_mode" value="direct" <?= $rmode==='direct' ? 'checked' : '' ?> onchange="this.form.submit()">
@@ -146,6 +147,7 @@ include __DIR__ . '/../includes/header.php';
   </summary>
   <div class="cfg-body">
   <form method="post">
+  <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_smtp">
     <div class="form-row">
       <div class="form-group" style="flex:3;min-width:200px">
@@ -195,6 +197,7 @@ include __DIR__ . '/../includes/header.php';
   <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--border)">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">Send Test Email</div>
     <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="test_smtp">
       <div class="form-group" style="flex:1;min-width:200px">
         <label>Recipient Email</label>
@@ -232,6 +235,7 @@ include __DIR__ . '/../includes/header.php';
   </summary>
   <div class="cfg-body">
   <form method="post">
+  <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_sms">
     <div class="form-row">
       <div class="form-group">
@@ -271,6 +275,7 @@ include __DIR__ . '/../includes/header.php';
   <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--border)">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">Send Test SMS</div>
     <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+  <?= csrf_field() ?>
       <input type="hidden" name="action" value="test_sms">
       <div class="form-group" style="flex:1;min-width:180px">
         <label>Recipient Phone</label>
@@ -316,11 +321,13 @@ include __DIR__ . '/../includes/header.php';
           <td><?= $lt['active'] ? '<span class="badge badge-present">Active</span>' : '<span class="badge badge-awol">Disabled</span>' ?></td>
           <td style="white-space:nowrap">
             <form method="post" style="display:inline">
+  <?= csrf_field() ?>
               <input type="hidden" name="action" value="toggle_leave_type">
               <input type="hidden" name="id" value="<?= (int)$lt['id'] ?>">
               <button class="btn-icon bi-secondary bi-sm" title="<?= $lt['active']?'Disable':'Enable' ?>"><?= $lt['active'] ? ICO_CANCEL : ICO_OK ?></button>
             </form>
             <form method="post" style="display:inline" onsubmit="return confirm('Remove this leave type?')">
+  <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete_leave_type">
               <input type="hidden" name="id" value="<?= (int)$lt['id'] ?>">
               <button class="btn-icon bi-danger bi-sm" title="Delete"><?= ICO_TRASH ?></button>
@@ -333,6 +340,7 @@ include __DIR__ . '/../includes/header.php';
     </table>
   </div>
   <form method="post" class="form-row" style="margin-top:14px;align-items:flex-end">
+  <?= csrf_field() ?>
     <input type="hidden" name="action" value="add_leave_type">
     <div class="form-group" style="flex:2"><label>New Leave Type</label><input type="text" name="name" required placeholder="e.g. Paternity Leave"></div>
     <div class="form-group" style="flex:2"><label>Minimum Approver Rank</label>
