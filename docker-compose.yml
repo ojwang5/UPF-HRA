@@ -1,0 +1,30 @@
+# UPF Human Resource Management System — single-service deployment.
+#
+#   docker compose up -d --build      # build + start on http://localhost:8080
+#   docker compose logs -f web        # follow logs
+#   docker compose down               # stop (named volumes are kept)
+#
+# The SQLite database and uploaded photos persist in the named volumes below.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: upf-hrm:latest
+    container_name: upf-hrm
+    ports:
+      - "8080:80"
+    environment:
+      # Idle session timeout in seconds (application default: 600 = 10 min).
+      UPF_SESSION_TIMEOUT: "600"
+      # Uncomment and set these to receive PHP fatal errors / Apache notices.
+      # PHP memory and upload limits are configured in docker/php.ini.
+    volumes:
+      - upf_data:/var/www/html/data
+      - upf_uploads:/var/www/html/public/uploads
+    restart: unless-stopped
+
+volumes:
+  upf_data:
+  upf_uploads:

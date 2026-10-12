@@ -1,0 +1,20 @@
+# ── Version control / local tooling ─────────────────────────────────────────
+.git
+.gitignore
+.vscode
+.idea
+.excalidraw-copilot
+
+# ── Documentation / assets not needed at runtime ────────────────────────────
+*.md
+attached_assets
+pages
+
+# ── Local runtime state: never bake the database or user uploads into an image
+data
+public/uploads
+
+# ── Container tooling (not part of the application image) ───────────────────
+Dockerfile
+docker-compose.yml
+.dockerignore
