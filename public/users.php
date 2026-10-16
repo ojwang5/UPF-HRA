@@ -228,7 +228,7 @@ include __DIR__ . '/../includes/header.php';
 
               <!-- Delete -->
               <form method="post" style="display:contents" onsubmit="return confirm('Remove account for <?= e(addslashes($u['full_name'])) ?>
-  <?= csrf_field() ?>?')">
+  <?= csrf_field() ?>
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= $u['id'] ?>">
                 <button class="btn-icon bi-danger bi-sm" type="submit" title="Delete"><?= ICO_TRASH ?></button>
