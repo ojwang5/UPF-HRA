@@ -51,19 +51,6 @@ if (current_user()) { header('Location:/'); exit; }
     <label>Password</label>
     <input type="password" name="password" required autocomplete="current-password">
   </div>
-  <button class="btn btn-block" type="submit">Sign in</button>
-  <details style="margin-top:14px">
-    <summary class="muted" style="font-size:11px;text-align:center;cursor:pointer">Demo accounts</summary>
-    <table style="font-size:11px;margin-top:8px;width:100%;border-collapse:collapse">
-      <tr><td class="muted">Super Admin</td><td><code>admin / admin123</code></td></tr>
-      <tr><td class="muted">Regional Cmd (KLA)</td><td><code>rcmd_kla / rcmd123</code></td></tr>
-      <tr><td class="muted">Directorate Cmd (Ops)</td><td><code>dir_ops / dir123</code></td></tr>
-      <tr><td class="muted">Unit Cmd (Gen. Duty)</td><td><code>unit_gd / unit123</code></td></tr>
-      <tr><td class="muted">Division Cmd</td><td><code>dcmd_kcd / dcmd123</code></td></tr>
-      <tr><td class="muted">Station Cmd</td><td><code>scmd_cps / scmd123</code></td></tr>
-      <tr><td class="muted">Post Commander</td><td><code>pcmd_cps1 / pcmd123</code></td></tr>
-      <tr><td class="muted">Field Officer</td><td><code>offr_cps1 / offr123</code></td></tr>
-    </table>
-  </details>
+   <button class="btn btn-block" type="submit">Sign in</button>
 </form>
 </body></html>

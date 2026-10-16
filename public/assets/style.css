@@ -1218,6 +1218,20 @@ tbody tr:hover td{
   width:20px;
   height:20px
 }
+/* Icons inside text contexts (buttons, card headers) — keep them compact */
+.btn .ico{
+  width:14px;
+  height:14px;
+  flex-shrink:0
+}
+.chr h3 .ico,.chr h2 .ico{
+  width:15px;
+  height:15px;
+  flex-shrink:0;
+  vertical-align:-2px;
+  opacity:.75;
+  margin-right:2px
+}
 /* Tooltip via title attr is native; also support data-tip */
 [title]{cursor:pointer}
 
@@ -1315,6 +1329,39 @@ label{
   text-transform:uppercase;
   letter-spacing:.8px
 }
+
+/* ===== Password strength meter ===== */
+.pw-strength{
+  margin-top:6px;
+  display:flex;
+  flex-direction:column;
+  gap:4px
+}
+.pw-strength-track{
+  height:5px;
+  border-radius:3px;
+  background:var(--border);
+  overflow:hidden
+}
+.pw-strength-fill{
+  height:100%;
+  width:0;
+  border-radius:3px;
+  background:transparent;
+  transition:width .18s ease, background .18s ease
+}
+.pw-strength-fill.is-weak{width:33%;background:#ef4444}
+.pw-strength-fill.is-medium{width:66%;background:#f59e0b}
+.pw-strength-fill.is-strong{width:100%;background:#22c55e}
+.pw-strength-label{
+  font-size:11px;
+  font-weight:600;
+  min-height:14px;
+  letter-spacing:.3px
+}
+.pw-strength-label.is-weak{color:#dc2626}
+.pw-strength-label.is-medium{color:#d97706}
+.pw-strength-label.is-strong{color:#16a34a}
 
 
 

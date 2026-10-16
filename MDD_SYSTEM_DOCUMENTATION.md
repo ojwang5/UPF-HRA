@@ -1042,7 +1042,7 @@ The following demo accounts are seeded on first run:
 
 | Username | Password | Role | Scope |
 |----------|----------|------|-------|
-| `admin` | `admin123` | Super Admin | National (all) |
+| `admin` | `Admin@123` | Super Admin | National (all) |
 | `rcmd_kla` | `rcmd123` | Regional Commander | Kampala Region |
 | `dir_ops` | `dir123` | Directorate Commander | Operations Directorate |
 | `unit_gd` | `unit123` | Unit Commander | General Duty (Operations) |

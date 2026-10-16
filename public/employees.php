@@ -541,7 +541,7 @@ include __DIR__ . '/../includes/header.php';
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?view=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="View details"><?= ICO_EYE ?></a>
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?edit=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit"><?= ICO_EDIT ?></a>
               <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($emp['full_name'])) ?>
-  <?= csrf_field() ?>?')">
+  <?= csrf_field() ?>
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= $emp['id'] ?>">
                 <button class="btn-icon bi-danger bi-sm" type="submit" title="Delete"><?= ICO_TRASH ?></button>
