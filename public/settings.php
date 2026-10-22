@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/mailer.php';
 require_once __DIR__ . '/../includes/sms.php';
+require_once __DIR__ . '/../includes/groq.php';
 $user = require_role(['superadmin']);
 $page = 'settings';
 $page_title = 'System Settings';
@@ -46,6 +47,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         else {
             $res = send_sms($testPhone, 'UPF MDD System: SMS integration test successful.');
             $res['ok'] ? flash('msg','Test SMS sent to '.$testPhone.'.') : flash('err','SMS error: '.$res['error']);
+        }
+
+    } elseif ($action === 'save_groq') {
+        $model = trim($_POST['groq_model'] ?? '');
+        if ($model === '') $model = GROQ_DEFAULT_MODEL;
+        save_setting('groq_model', $model);
+        // Only update the key when a new one is typed (never clear it on re-save).
+        if (trim($_POST['groq_api_key'] ?? '') !== '') {
+            save_setting('groq_api_key', trim($_POST['groq_api_key']));
+        }
+        save_setting('assistant_enabled', isset($_POST['assistant_enabled']) ? '1' : '0');
+        log_activity('Updated AI assistant settings', 'setting', 'groq_model='.$model);
+        flash('msg', 'AI assistant settings saved.');
+
+    } elseif ($action === 'clear_groq_key') {
+        save_setting('groq_api_key', '');
+        log_activity('Cleared the AI assistant API key', 'setting', 'groq_api_key');
+        flash('msg', 'The AI assistant API key has been removed.');
+
+    } elseif ($action === 'test_groq') {
+        $res = groq_test_connection();
+        if ($res['ok']) {
+            $msg = 'Connection successful — the AI assistant is answering as model ' . $res['model'] . '.';
+            if (!empty($res['served']) && $res['served'] !== $res['model']) {
+                $msg .= ' The service reported the model as ' . $res['served'] . '.';
+            }
+            flash('msg', $msg);
+        } else {
+            flash('err', 'Connection failed: ' . $res['error']);
         }
 
     } elseif ($action === 'add_leave_type') {
@@ -291,6 +321,93 @@ include __DIR__ . '/../includes/header.php';
     <strong style="color:var(--navy-700)">Africa's Talking:</strong> Use <em>sandbox</em> as username to test for free. Get keys at <strong>africastalking.com</strong>.
     <br><strong style="color:var(--navy-700)">OTP / 2FA:</strong> SMS can be wired to login verification once credentials are set.
   </div>
+  </div>
+</details>
+
+<!-- ══════════════════ AI ASSISTANT CARD ══════════════════ -->
+<details class="cfg-tile" open>
+  <summary class="cfg-sum">
+    <div class="chr" style="flex:1;border:none;padding:0">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 8v4"/><path d="M10 10h4"/></svg>
+        AI Assistant (Groq)
+      </h3>
+      <?php if (groq_enabled()): ?>
+        <span class="badge" style="background:#dcfce7;color:#166534">● Enabled</span>
+      <?php elseif (get_setting('assistant_enabled','1') === '0'): ?>
+        <span class="badge" style="background:#fee2e2;color:#991b1b">● Switched off</span>
+      <?php else: ?>
+        <span class="badge" style="background:#fef3c7;color:#92400e">● Not Configured</span>
+      <?php endif; ?>
+    </div>
+    <span class="cfg-chev"></span>
+  </summary>
+  <div class="cfg-body">
+    <p style="margin:0 0 14px;font-size:13px;color:var(--muted);max-width:760px">
+      The <strong>HRAS Assistant</strong> answers officers' questions about how to use the system.
+      It runs on Groq's API. The key is stored on the server only — it is never shown back to
+      users and never sent to the browser.
+    </p>
+    <form method="post">
+  <?= csrf_field() ?>
+      <input type="hidden" name="action" value="save_groq">
+      <div class="form-row">
+        <div class="form-group" style="flex:2;min-width:220px">
+          <label>Groq API Key <?= get_setting('groq_api_key') ? '<span style="font-size:10px;color:var(--green)">✓ Saved</span>' : '' ?></label>
+          <input type="password" name="groq_api_key" placeholder="<?= get_setting('groq_api_key') ? 'Leave blank to keep the current key' : 'gsk_…' ?>" autocomplete="new-password">
+        </div>
+        <div class="form-group" style="flex:2;min-width:220px">
+          <label>Model</label>
+          <select name="groq_model">
+            <?php foreach (GROQ_MODELS as $mid => $mlabel): ?>
+              <option value="<?= e($mid) ?>" <?= get_setting('groq_model', GROQ_DEFAULT_MODEL) === $mid ? 'selected' : '' ?>><?= e($mlabel) ?></option>
+            <?php endforeach; ?>
+            <?php $custom = get_setting('groq_model', GROQ_DEFAULT_MODEL); if (!isset(GROQ_MODELS[$custom])): ?>
+              <option value="<?= e($custom) ?>" selected><?= e($custom) ?> (custom)</option>
+            <?php endif; ?>
+          </select>
+        </div>
+      </div>
+      <div style="margin:4px 0 12px">
+        <label class="switch">
+          <input type="checkbox" name="assistant_enabled" value="1" <?= get_setting('assistant_enabled','1') !== '0' ? 'checked' : '' ?>>
+          <span class="slider"></span>
+          <span class="switch-label"><strong>HRAS Assistant available to all users</strong><br><small>When off, the assistant screen shows a notice and no questions are sent.</small></span>
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <button class="btn-icon bi-gold bi-lg" type="submit" style="gap:8px;padding:0 18px;width:auto;font-size:12px;font-weight:600">
+          <?= ICO_SAVE ?> <span>Save AI Settings</span>
+        </button>
+      </div>
+    </form>
+    <!-- Test connection -->
+    <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--border)">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">Test Connection</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <form method="post" style="display:inline">
+  <?= csrf_field() ?>
+          <input type="hidden" name="action" value="test_groq">
+          <button class="btn-icon bi-primary" type="submit" style="gap:8px;padding:0 16px;width:auto;font-size:12px">
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Test Connection
+          </button>
+        </form>
+        <?php if (get_setting('groq_api_key')): ?>
+        <form method="post" style="display:inline" onsubmit="return confirm('Remove the stored AI assistant API key?')">
+  <?= csrf_field() ?>
+          <input type="hidden" name="action" value="clear_groq_key">
+          <button class="btn-icon bi-danger" type="submit" title="Remove the stored key"><?= ICO_TRASH ?></button>
+        </form>
+        <?php endif; ?>
+      </div>
+    </div>
+    <div style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted)">
+      <strong style="color:var(--navy-700)">Get a key:</strong> create a free account at
+      <strong>console.groq.com</strong> → API Keys → Create API Key, then paste it above.
+      <br><strong style="color:var(--navy-700)">Server-side alternative:</strong> set the
+      <code>GROQ_API_KEY</code> environment variable, which takes precedence over the stored key.
+    </div>
   </div>
 </details>
 

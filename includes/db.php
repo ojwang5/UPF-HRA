@@ -328,6 +328,33 @@ function migrate(PDO $pdo): void {
     if ($v < 14) {
         _migrate_v14($pdo);
     }
+
+    if ($v < 15) {
+        _migrate_v15($pdo);
+    }
+}
+
+/* ─── v15: HRAS Assistant conversation store ─── */
+function _migrate_v15(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS assistant_messages (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role       TEXT NOT NULL CHECK(role IN ('user','assistant')),
+                content    TEXT NOT NULL,
+                model      TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_assistant_user ON assistant_messages(user_id, id);
+        ");
+        $pdo->exec("PRAGMA user_version = 15");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
 }
 
 /* ─── v14: login attempt throttling (brute-force protection) ─── */
