@@ -120,6 +120,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $empStmt = $pdo->prepare("SELECT id,service_no,full_name,rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $empStmt->execute($scopeP); $emps = $empStmt->fetchAll();
 [$lrW,$lrP] = scope_where_for($user,'lr');
+$today = date('Y-m-d');
+$statStmt = $pdo->prepare("SELECT
+        COUNT(DISTINCT CASE WHEN lr.status='approved' AND lr.start_date <= ? AND lr.end_date >= ? THEN lr.employee_id END) AS on_leave,
+        SUM(CASE WHEN lr.status='pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN lr.status='rejected' THEN 1 ELSE 0 END) AS rejected
+    FROM leave_requests lr WHERE $lrW");
+$statStmt->execute(array_merge([$today, $today], $lrP));
+$leaveStats = $statStmt->fetch() ?: [];
+$leaveStats = [
+    'on_leave' => (int)($leaveStats['on_leave'] ?? 0),
+    'pending'  => (int)($leaveStats['pending'] ?? 0),
+    'rejected' => (int)($leaveStats['rejected'] ?? 0),
+];
 $lrRows = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name, s.full_name AS submitter, rv.full_name AS reviewer, rg.name AS region_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id LEFT JOIN users s ON s.id=lr.submitted_by LEFT JOIN users rv ON rv.id=lr.reviewed_by LEFT JOIN regions rg ON rg.id=lr.region_id WHERE $lrW ORDER BY CASE lr.status WHEN 'pending' THEN 1 ELSE 2 END, lr.submitted_at DESC, " . personnel_order_sql('e') . " LIMIT 200");
 $lrRows->execute($lrP); $requests=$lrRows->fetchAll();
 
@@ -183,24 +196,158 @@ include __DIR__ . '/../includes/header.php';
 <?php
 /* ═══ Leave Counts & Adjustments ═══════════════════════════════════ */
 $balYear = (int)($_GET['byear'] ?? date('Y'));
-$balEmps = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.rank, e.annual_leave_days,
+if ($balYear < 2000 || $balYear > 2100) $balYear = (int)date('Y');
+$balQ = trim((string)($_GET['q'] ?? ''));
+$balRank = trim((string)($_GET['rank'] ?? ''));
+$balPerPage = 10;
+$pageNum = max(1, (int)($_GET['pg'] ?? 1));
+
+$balFilterSql = '';
+$balFilterParams = [];
+if ($balQ !== '') {
+    $balFilterSql .= " AND (e.full_name LIKE ? OR e.service_no LIKE ?)";
+    $like = '%' . $balQ . '%';
+    $balFilterParams[] = $like;
+    $balFilterParams[] = $like;
+}
+if ($balRank !== '') {
+    $balFilterSql .= " AND e.rank = ?";
+    $balFilterParams[] = $balRank;
+}
+
+$countStmt = $pdo->prepare("SELECT COUNT(*) FROM employees e WHERE e.active=1 AND $scopeW $balFilterSql");
+$countStmt->execute(array_merge($scopeP, $balFilterParams));
+$totalFiltered = (int)$countStmt->fetchColumn();
+$pages = max(1, (int)ceil($totalFiltered / $balPerPage));
+$pageNum = min($pageNum, $pages);
+$offset = ($pageNum - 1) * $balPerPage;
+
+$balEmpsStmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.rank, e.annual_leave_days,
                                  rg.name AS region_name, st.name AS station_name, pt.name AS post_name
                           FROM employees e
                           LEFT JOIN regions rg ON rg.id=e.region_id
                           LEFT JOIN stations st ON st.id=e.station_id
                           LEFT JOIN posts pt ON pt.id=e.post_id
-                          WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
-$balEmps->execute($scopeP); $balEmps = $balEmps->fetchAll();
-$balIds  = array_column($balEmps, 'id');
-$balances = leave_balances($pdo, $balIds, (string)$balYear);
+                          WHERE e.active=1 AND $scopeW $balFilterSql
+                          ORDER BY " . personnel_order_sql('e') . " LIMIT $balPerPage OFFSET $offset");
+$balEmpsStmt->execute(array_merge($scopeP, $balFilterParams));
+$balEmps = $balEmpsStmt->fetchAll();
+
+$allIdsStmt = $pdo->prepare("SELECT e.id FROM employees e WHERE e.active=1 AND $scopeW");
+$allIdsStmt->execute($scopeP);
+$allIds = array_map('intval', $allIdsStmt->fetchAll(PDO::FETCH_COLUMN));
+$balances = leave_balances($pdo, $allIds, (string)$balYear);
+$avgRemaining = $allIds
+    ? round(array_sum(array_column($balances, 'remaining')) / count($allIds), 1)
+    : 0;
+
+$adjIdsSql = empty($allIds) ? '0' : implode(',', $allIds);
 $adjSQL = "SELECT la.*, e.service_no, e.rank, e.full_name AS emp_name FROM leave_adjustments la
-                          JOIN employees e ON e.id=la.employee_id WHERE $scopeW AND la.employee_id IN (".
-                          (empty($balIds) ? '0' : implode(',', array_map('intval',$balIds))).
-                          ") ORDER BY la.created_at DESC LIMIT 100";
+                          JOIN employees e ON e.id=la.employee_id WHERE $scopeW AND la.employee_id IN ($adjIdsSql)
+                          ORDER BY la.created_at DESC LIMIT 100";
 $adjRows = $pdo->prepare($adjSQL);
 $adjRows->execute($scopeP);
 $adjRows = $adjRows->fetchAll();
+
+$rankStmt = $pdo->prepare("SELECT DISTINCT e.rank FROM employees e
+                           WHERE e.active=1 AND $scopeW AND e.rank IS NOT NULL AND e.rank <> ''
+                           ORDER BY " . rank_order_sql('e.rank'));
+$rankStmt->execute($scopeP);
+$rankChoices = $rankStmt->fetchAll(PDO::FETCH_COLUMN);
+
+$balQs = ['byear' => $balYear];
+if ($balQ !== '') $balQs['q'] = $balQ;
+if ($balRank !== '') $balQs['rank'] = $balRank;
+$balBaseUrl = '/leave-requests.php?' . http_build_query($balQs);
+$pageUrl = function (int $n) use ($balBaseUrl): string {
+    return $balBaseUrl . '&pg=' . max(1, $n);
+};
+$resetUrl = '/leave-requests.php?byear=' . $balYear;
+$hasBalFilters = $balQ !== '' || $balRank !== '';
+$start = $totalFiltered ? $offset + 1 : 0;
+$end = min($offset + $balPerPage, $totalFiltered);
+
+$pgNums = [1];
+$winFrom = max(2, $pageNum - 2);
+$winTo = min($pages - 1, $pageNum + 2);
+for ($i = $winFrom; $i <= $winTo; $i++) $pgNums[] = $i;
+if ($pages > 1) $pgNums[] = $pages;
+$pgNums = array_values(array_unique($pgNums));
+sort($pgNums);
 ?>
+
+<div class="grid grid-4" style="margin-bottom:12px">
+  <div class="stat stat-leave">
+    <div>
+      <div class="label">Total officers on leave</div>
+      <div class="value"><?= number_format($leaveStats['on_leave']) ?></div>
+      <div class="hint">Approved and active today</div>
+    </div>
+    <div class="icon" style="color:#2563eb">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    </div>
+  </div>
+  <div class="stat stat-sick">
+    <div>
+      <div class="label">Pending approval</div>
+      <div class="value"><?= number_format($leaveStats['pending']) ?></div>
+      <div class="hint">Requests awaiting a decision</div>
+    </div>
+    <div class="icon" style="color:#d97706">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+    </div>
+  </div>
+  <div class="stat stat-on_duty">
+    <div>
+      <div class="label">Avg remaining</div>
+      <div class="value"><?= number_format($avgRemaining, 1) ?></div>
+      <div class="hint">Average leave days · <?= $balYear ?></div>
+    </div>
+    <div class="icon" style="color:#0891b2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+    </div>
+  </div>
+  <div class="stat stat-awol">
+    <div>
+      <div class="label">Rejected</div>
+      <div class="value"><?= number_format($leaveStats['rejected']) ?></div>
+      <div class="hint">Rejected leave requests</div>
+    </div>
+    <div class="icon" style="color:#dc2626"><?= ICO_REJECT ?></div>
+  </div>
+</div>
+
+<div class="card filter-card" style="margin-bottom:12px">
+  <div class="filter-head">
+    <div class="fh-title"><?= ICO_SEARCH ?> Find Personnel</div>
+    <div class="fh-meta"><?= $hasBalFilters ? 'Filters applied' : 'All staff in your command scope' ?> — <?= number_format($totalFiltered) ?> record(s)</div>
+  </div>
+  <form method="get" action="/leave-requests.php" class="filter-bar">
+    <input type="hidden" name="byear" value="<?= $balYear ?>">
+    <div class="filter-field search">
+      <label for="lr-q">Name or File/Force No</label>
+      <div class="filter-search">
+        <?= ICO_SEARCH ?>
+        <input type="search" id="lr-q" name="q" value="<?= e($balQ) ?>" placeholder="Search by name or file/force no...">
+      </div>
+    </div>
+    <div class="filter-field">
+      <label for="lr-rank">Rank</label>
+      <select name="rank" id="lr-rank">
+        <option value="">All ranks</option>
+        <?php foreach ($rankChoices as $rank): ?>
+        <option value="<?= e($rank) ?>" <?= $balRank === $rank ? 'selected' : '' ?>><?= e($rank) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button class="btn-icon bi-primary btn-labeled" type="submit" title="Apply filters"><?= ICO_SEARCH ?><span>Apply</span></button>
+      <?php if ($hasBalFilters): ?>
+      <a class="btn-icon bi-secondary btn-labeled" href="<?= e($resetUrl) ?>" title="Clear filters"><?= ICO_CANCEL ?><span>Reset</span></a>
+      <?php endif; ?>
+    </div>
+  </form>
+</div>
 
 <div class="card" style="margin-bottom:12px">
   <div class="chr">
@@ -211,6 +358,8 @@ $adjRows = $adjRows->fetchAll();
         <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Leave year"><?= ICO_SEARCH ?></button></summary>
         <div class="form-body" style="padding:12px 16px">
           <form method="get" style="display:flex;gap:8px;align-items:flex-end">
+            <input type="hidden" name="q" value="<?= e($balQ) ?>">
+            <input type="hidden" name="rank" value="<?= e($balRank) ?>">
             <div class="form-group"><label>Leave Year</label>
               <input type="number" name="byear" value="<?= $balYear ?>" min="2000" max="2100">
             </div>
@@ -228,7 +377,7 @@ $adjRows = $adjRows->fetchAll();
             <input type="hidden" name="action" value="adjust">
             <div class="form-group"><label>Employee</label>
               <select name="employee_id" required><option value="">— select —</option>
-                <?php foreach ($balEmps as $e): ?><option value="<?= $e['id'] ?>"><?= e(personnel_label($e)) ?></option><?php endforeach; ?>
+                <?php foreach ($emps as $e): ?><option value="<?= $e['id'] ?>"><?= e(personnel_label($e)) ?></option><?php endforeach; ?>
               </select>
             </div>
             <div class="form-row">
@@ -272,9 +421,32 @@ $adjRows = $adjRows->fetchAll();
           <td><strong style="color:<?= $remColor ?>"><?= $remaining ?></strong></td>
         </tr>
         <?php endforeach; ?>
-        <?php if (!$balEmps): ?><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">No personnel in your command scope.</td></tr><?php endif; ?>
+        <?php if (!$balEmps): ?><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px"><?= $hasBalFilters ? 'No personnel match your filters.' : 'No personnel in your command scope.' ?></td></tr><?php endif; ?>
       </tbody>
     </table>
+  </div>
+  <div class="pager">
+    <div class="pager-info">Showing <strong><?= $start ?>-<?= $end ?></strong> of <strong><?= number_format($totalFiltered) ?></strong> — 10 per page</div>
+    <div class="pager-controls">
+      <?php if ($pageNum > 1): ?>
+      <a class="btn-icon bi-secondary pager-btn" href="<?= e($pageUrl($pageNum - 1)) ?>">&larr; Previous</a>
+      <?php else: ?>
+      <span class="btn-icon bi-secondary pager-btn is-disabled" aria-disabled="true">&larr; Previous</span>
+      <?php endif; ?>
+      <?php $lastPg = 0; foreach ($pgNums as $n): ?>
+        <?php if ($lastPg && $n - $lastPg > 1): ?><span class="pager-gap">&hellip;</span><?php endif; ?>
+        <?php if ($n === $pageNum): ?>
+        <span class="pager-num is-active" aria-current="page"><?= $n ?></span>
+        <?php else: ?>
+        <a class="pager-num" href="<?= e($pageUrl($n)) ?>"><?= $n ?></a>
+        <?php endif; ?>
+      <?php $lastPg = $n; endforeach; ?>
+      <?php if ($pageNum < $pages): ?>
+      <a class="btn-icon bi-secondary pager-btn" href="<?= e($pageUrl($pageNum + 1)) ?>">Next &rarr;</a>
+      <?php else: ?>
+      <span class="btn-icon bi-secondary pager-btn is-disabled" aria-disabled="true">Next &rarr;</span>
+      <?php endif; ?>
+    </div>
   </div>
 </div>
 

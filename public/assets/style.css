@@ -440,6 +440,15 @@ a:hover{
   color:#fff;
   font-weight:600;
 }
+/* Base size for every inline icon. Without this, an <svg class="ico"> used
+   outside a button/sidebar (e.g. inside an alert) falls back to its intrinsic
+   300x150 size and covers the page. */
+.ico{
+  width:16px;
+  height:16px;
+  flex-shrink:0;
+  vertical-align:middle
+}
 .sidebar a .ico{
   width:18px;
   height:18px;
@@ -1209,6 +1218,22 @@ tbody tr:hover td{
   height:13px
 }
 
+/* Icon + text buttons: the square .btn-icon becomes an auto-width chip */
+.btn-icon.btn-labeled{
+  width:auto;
+  height:36px;
+  padding:0 14px;
+  gap:7px;
+  font-size:12.5px;
+  font-weight:600;
+  white-space:nowrap
+}
+.btn-icon.btn-labeled .ico{
+  width:15px;
+  height:15px;
+  opacity:.9
+}
+
 .bi-lg{
   width:42px;
   height:42px;
@@ -1251,6 +1276,180 @@ tbody tr:hover td{
   gap:6px;
   align-items:center;
   flex-wrap:wrap
+}
+
+/* ===== Filter bar (Personnel register) ===== */
+.filter-card{padding:16px 18px}
+.filter-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px 14px;
+  flex-wrap:wrap;
+  margin-bottom:14px
+}
+.filter-head .fh-title{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  font-size:13px;
+  font-weight:700;
+  color:var(--navy-800)
+}
+.filter-head .fh-title .ico{
+  width:15px;
+  height:15px;
+  color:var(--primary)
+}
+.filter-head .fh-meta{font-size:12px;color:var(--muted)}
+.filter-bar{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  gap:10px 12px
+}
+.filter-field{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  flex:1 1 150px;
+  min-width:150px
+}
+.filter-field.search{flex:2 1 240px}
+.filter-field > label{
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.7px;
+  text-transform:uppercase;
+  color:var(--muted)
+}
+.filter-field select,
+.filter-field input[type=search]{
+  height:36px;
+  width:100%;
+  padding:0 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:#fff;
+  color:var(--text);
+  font-size:12.5px;
+  font-family:inherit;
+  min-width:0
+}
+.filter-field select:focus,
+.filter-field input[type=search]:focus{
+  outline:none;
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(31,53,89,.12)
+}
+.filter-search{position:relative}
+.filter-search .ico{
+  position:absolute;
+  left:10px;
+  top:50%;
+  transform:translateY(-50%);
+  width:14px;
+  height:14px;
+  color:var(--muted);
+  pointer-events:none
+}
+.filter-search input[type=search]{padding-left:32px}
+.filter-actions{
+  display:flex;
+  align-items:flex-end;
+  gap:8px;
+  flex:0 0 auto
+}
+:root[data-theme='dark'] .filter-field select,
+:root[data-theme='dark'] .filter-field input[type=search]{
+  background:#111827;
+  color:var(--text);
+  border-color:#2a3346
+}
+
+/* ===== Pagination ===== */
+.pager{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px 16px;
+  flex-wrap:wrap;
+  padding:14px 2px 0;
+  margin-top:12px;
+  border-top:1px solid var(--border)
+}
+.pager-info{font-size:12px;color:var(--muted)}
+.pager-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pager-page{
+  font-size:12px;
+  font-weight:600;
+  color:var(--navy-800);
+  padding:0 4px
+}
+.pager-num{
+  min-width:32px;
+  height:32px;
+  padding:0 8px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:#fff;
+  color:var(--navy-800);
+  font-size:12px;
+  font-weight:600;
+  text-decoration:none;
+  transition:background .12s,border-color .12s,color .12s
+}
+.pager-num:hover{
+  background:#eef3fb;
+  border-color:var(--primary);
+  text-decoration:none
+}
+.pager-num.is-active{
+  background:var(--primary);
+  border-color:var(--primary);
+  color:#fff;
+  cursor:default
+}
+.pager-gap{
+  color:var(--muted);
+  font-size:12px;
+  padding:0 2px
+}
+:root[data-theme='dark'] .pager-num{
+  background:#111827;
+  color:var(--text);
+  border-color:#2a3346
+}
+:root[data-theme='dark'] .pager-num:hover{
+  background:#1f2937;
+  border-color:var(--primary)
+}
+:root[data-theme='dark'] .pager-num.is-active{
+  background:var(--primary);
+  color:#fff
+}
+.pager-btn{
+  width:auto;
+  height:32px;
+  padding:0 12px;
+  gap:6px;
+  font-size:12px;
+  font-weight:600
+}
+.pager-btn.is-disabled{
+  opacity:.45;
+  pointer-events:none;
+  box-shadow:none;
+  transform:none
+}
+@media (max-width:560px){
+  .filter-field,.filter-field.search{flex:1 1 100%;min-width:0}
+  .filter-actions{width:100%}
+  .filter-actions .btn-icon{flex:1;justify-content:center}
+  .pager{justify-content:center;text-align:center}
 }
 
 /* ===== Panel-drop dropdown system ===== */

@@ -191,7 +191,7 @@ foreach ($geoSections as $sec):
           <div class="btn-grp">
             <button class="px px-edit" onclick='openGeoEdit("<?= $lvl ?>",<?= $jEnc ?>)'><?= ICO_EDIT ?> Edit</button>
             <form method="post" style="display:contents" onsubmit="return confirm('Delete this <?= $lvl ?>
-  <?= csrf_field() ?>? This cannot be undone.')">
+  <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete"><input type="hidden" name="level" value="<?= $lvl ?>">
               <input type="hidden" name="id" value="<?= $pid ?>"><input type="hidden" name="tab" value="geography">
               <button type="submit" class="px px-del"><?= ICO_TRASH ?></button>

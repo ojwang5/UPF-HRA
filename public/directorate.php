@@ -63,9 +63,15 @@ include __DIR__ . '/../includes/header.php';
     </div>
   </div>
   <div class="action-bar">
-    <a class="btn-icon bi-secondary" href="/employees.php" title="All personnel"><?= ICO_EYE ?> Personnel</a>
-    <a class="btn-icon bi-secondary" href="/reports.php" title="Generate report"><?= ICO_GEN ?> Reports</a>
-    <a class="btn-icon bi-secondary" href="/users.php" title="Manage accounts"><?= ICO_KEY ?> Users</a>
+    <a class="btn-icon bi-secondary btn-labeled" href="/employees.php" title="All personnel">
+      <?= ICO_EYE ?><span>Personnel</span>
+    </a>
+    <a class="btn-icon bi-secondary btn-labeled" href="/reports.php" title="Generate report">
+      <?= ICO_GEN ?><span>Reports</span>
+    </a>
+    <a class="btn-icon bi-secondary btn-labeled" href="/users.php" title="Manage accounts">
+      <?= ICO_KEY ?><span>Users</span>
+    </a>
   </div>
 </div>
 

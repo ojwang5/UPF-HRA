@@ -21,6 +21,8 @@ function all_nav(): array {
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>'],
   'employees'    => ['href'=>'/employees.php','label'=>'Personnel','min_rank'=>1,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 1 1 0 7.75"/></svg>'],
+  'statistics'   => ['href'=>'/statistics.php','label'=>'Statistics','min_rank'=>1,
+    'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>'],
   'daily'        => ['href'=>'/daily-status.php','label'=>'Daily Status','min_rank'=>1,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y="2" x2="16" y2="6"/><line x1="8" y="2" x2="8" y2="6"/><line x1="3" y="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/></svg>'],
   'reports'      => ['href'=>'/reports.php','label'=>'Reports','min_rank'=>2,

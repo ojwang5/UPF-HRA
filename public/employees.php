@@ -142,8 +142,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location:/employees.php'); exit;
 }
 
-/* ── Fetch ── */
-$search = trim($_GET['q'] ?? '');
+/* ── Filters, search, sort & paging ── */
+$search    = trim($_GET['q'] ?? '');
+$fRegion   = (int)($_GET['region_id'] ?? 0);
+$fDivision = (int)($_GET['division_id'] ?? 0);
+$fStation  = (int)($_GET['station_id'] ?? 0);
+$fPost     = (int)($_GET['post_id'] ?? 0);
+$fDir      = trim($_GET['directorate'] ?? '');
+$fUnit     = trim($_GET['unit'] ?? '');
+$sort      = $_GET['sort'] ?? '';
+$perPage   = 10;
+$pageNum   = max(1, (int)($_GET['pg'] ?? 1));
+
 $where  = "e.active=1 AND $scopeW";
 $params = $scopeP;
 if ($search !== '') {
@@ -151,6 +161,30 @@ if ($search !== '') {
     $s = "%$search%";
     array_push($params, $s, $s, $s, $s, $s);
 }
+if ($fRegion)   { $where .= ' AND e.region_id = ?';   $params[] = $fRegion; }
+if ($fDivision) { $where .= ' AND e.division_id = ?'; $params[] = $fDivision; }
+if ($fStation)  { $where .= ' AND e.station_id = ?';  $params[] = $fStation; }
+if ($fPost)     { $where .= ' AND e.post_id = ?';     $params[] = $fPost; }
+if ($fDir !== '')  { $where .= ' AND e.directorate = ?'; $params[] = $fDir; }
+if ($fUnit !== '') { $where .= ' AND e.unit = ?';        $params[] = $fUnit; }
+
+$cnt = $pdo->prepare("SELECT COUNT(*) FROM employees e WHERE $where");
+$cnt->execute($params);
+$totalFiltered = (int)$cnt->fetchColumn();
+$pages   = max(1, (int)ceil($totalFiltered / $perPage));
+$pageNum = min($pageNum, $pages);
+$offset  = ($pageNum - 1) * $perPage;
+$start   = $totalFiltered ? $offset + 1 : 0;
+$end     = min($offset + $perPage, $totalFiltered);
+
+$orderBy = match($sort) {
+    'name'        => 'e.full_name, e.service_no',
+    'service_no'  => 'e.service_no, e.full_name',
+    'rank'        => personnel_order_sql('e'),
+    'directorate' => 'e.directorate, e.unit, ' . personnel_order_sql('e'),
+    'region'      => 'rg.name, dv.name, st.name, pt.name, ' . personnel_order_sql('e'),
+    default       => personnel_order_sql('e'),
+};
 
 $stmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.gender, e.rank, e.directorate, e.unit,
                               e.email, e.phone, e.photo_path,
@@ -163,9 +197,38 @@ $stmt = $pdo->prepare("SELECT e.id, e.service_no, e.full_name, e.gender, e.rank,
                        LEFT JOIN stations  st ON st.id=e.station_id
                        LEFT JOIN posts     pt ON pt.id=e.post_id
                        WHERE $where
-                       ORDER BY " . personnel_order_sql('e'));
+                       ORDER BY $orderBy
+                       LIMIT $perPage OFFSET $offset");
 $stmt->execute($params);
 $employees = $stmt->fetchAll();
+
+/* Filter option lists (values actually present in the visible scope) */
+$filterDirs = [];
+try {
+    $fd = $pdo->prepare("SELECT DISTINCT e.directorate FROM employees e
+                         WHERE e.active=1 AND $scopeW AND e.directorate IS NOT NULL AND e.directorate <> ''
+                         ORDER BY e.directorate");
+    $fd->execute($scopeP);
+    $filterDirs = $fd->fetchAll(PDO::FETCH_COLUMN);
+} catch (\Throwable $e) { $filterDirs = []; }
+
+$filterUnits = [];
+try {
+    $fu = $pdo->prepare("SELECT DISTINCT e.directorate, e.unit FROM employees e
+                         WHERE e.active=1 AND $scopeW AND e.unit IS NOT NULL AND e.unit <> ''
+                         ORDER BY e.directorate, e.unit");
+    $fu->execute($scopeP);
+    $filterUnits = $fu->fetchAll();
+} catch (\Throwable $e) { $filterUnits = []; }
+
+$hasFilters = $search !== '' || $fRegion || $fDivision || $fStation || $fPost
+    || $fDir !== '' || $fUnit !== '' || $sort !== '';
+$qsBase = http_build_query(array_filter([
+    'q' => $search, 'region_id' => $fRegion ?: null, 'division_id' => $fDivision ?: null,
+    'station_id' => $fStation ?: null, 'post_id' => $fPost ?: null,
+    'directorate' => $fDir, 'unit' => $fUnit, 'sort' => $sort,
+], fn($v) => $v !== null && $v !== ''));
+$pageUrl = fn(int $n): string => '/employees.php?' . ($qsBase ? $qsBase . '&' : '') . 'pg=' . $n;
 
 /* ── Edit / View mode ── */
 $editId  = isset($_GET['edit']) ? (int)$_GET['edit'] : 0;
@@ -257,7 +320,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="page-header">
   <div>
     <h1>Personnel</h1>
-    <div class="desc"><?= is_superadmin($user) ? 'All force personnel' : e(user_scope_label($user)) ?> — <?= count($employees) ?> record(s)</div>
+    <div class="desc"><?= is_superadmin($user) ? 'All force personnel' : e(user_scope_label($user)) ?> — <?= number_format($totalFiltered) ?> record(s)</div>
   </div>
   <div class="action-bar">
 
@@ -275,7 +338,7 @@ include __DIR__ . '/../includes/header.php';
           <a class="btn-icon bi-secondary" href="/employees.php" title="Clear"><?= ICO_CANCEL ?></a>
           <?php endif; ?>
         </form>
-        <?php if ($search): ?><div style="margin-top:8px;font-size:12px;color:var(--muted)"><?= count($employees) ?> result(s) for "<strong><?= e($search) ?></strong>"</div><?php endif; ?>
+        <?php if ($search): ?><div style="margin-top:8px;font-size:12px;color:var(--muted)"><?= number_format($totalFiltered) ?> result(s) for "<strong><?= e($search) ?></strong>"</div><?php endif; ?>
       </div>
     </div>
 
@@ -289,6 +352,11 @@ include __DIR__ . '/../includes/header.php';
         <form method="post" action="/export-personnel.php" target="_blank">
   <?= csrf_field() ?>
           <input type="hidden" name="q" value="<?= e($search) ?>">
+          <?php foreach (['region_id'=>$fRegion, 'division_id'=>$fDivision, 'station_id'=>$fStation, 'post_id'=>$fPost] as $fk=>$fv): ?>
+          <?php if ($fv): ?><input type="hidden" name="<?= $fk ?>" value="<?= (int)$fv ?>"><?php endif; ?>
+          <?php endforeach; ?>
+          <?php if ($fDir !== ''): ?><input type="hidden" name="directorate" value="<?= e($fDir) ?>"><?php endif; ?>
+          <?php if ($fUnit !== ''): ?><input type="hidden" name="unit" value="<?= e($fUnit) ?>"><?php endif; ?>
           <div class="form-group" style="margin-bottom:12px"><label>Format</label>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px">
               <?php foreach (['csv'=>'CSV','excel'=>'Excel','pdf'=>'Print / PDF'] as $k=>$lbl): ?>
@@ -363,7 +431,7 @@ include __DIR__ . '/../includes/header.php';
 
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 <?php if ($m=flash('err')): ?><div class="alert alert-error"><?= e($m) ?></div><?php endif; ?>
-<?php if ($search): ?><div class="alert" style="background:var(--navy-50);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px">Search: <strong><?= e($search) ?></strong> — <?= count($employees) ?> result(s) &nbsp;<a href="/employees.php" style="color:var(--primary)">Clear</a></div><?php endif; ?>
+<?php if ($search): ?><div class="alert" style="background:var(--navy-50);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px">Search: <strong><?= e($search) ?></strong> — <?= number_format($totalFiltered) ?> result(s) &nbsp;<a href="/employees.php" style="color:var(--primary)">Clear</a></div><?php endif; ?>
 
 <!-- ════════════════════════════ DETAIL VIEW PANEL ════════════════════════════ -->
 <?php if ($viewing): ?>
@@ -491,10 +559,150 @@ include __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
+<!-- ════════════════════════════ FILTER BAR ════════════════════════════ -->
+<div class="card filter-card">
+  <div class="filter-head">
+    <div class="fh-title"><?= ICO_SEARCH ?> Filter Personnel</div>
+    <div class="fh-meta"><?= $hasFilters ? 'Filters applied' : 'All staff' ?> · <?= number_format($totalFiltered) ?> record(s)</div>
+  </div>
+  <form method="get" action="/employees.php" class="filter-bar">
+    <div class="filter-field search">
+      <label for="flt-q">Search</label>
+      <div class="filter-search">
+        <?= ICO_SEARCH ?>
+        <input type="search" id="flt-q" name="q" value="<?= e($search) ?>" placeholder="Name, file/force no, rank…">
+      </div>
+    </div>
+    <div class="filter-field">
+      <label for="flt-region">Region</label>
+      <select name="region_id" id="flt-region">
+        <option value="">All regions</option>
+        <?php foreach ($hier['regions'] as $rg): ?>
+        <option value="<?= (int)$rg['id'] ?>" <?= $fRegion===(int)$rg['id']?'selected':'' ?>><?= e($rg['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="flt-division">Division / District</label>
+      <select name="division_id" id="flt-division">
+        <option value="">All divisions</option>
+        <?php foreach ($hier['divisions'] as $dv): ?>
+        <option value="<?= (int)$dv['id'] ?>" <?= $fDivision===(int)$dv['id']?'selected':'' ?>><?= e($dv['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="flt-station">Station</label>
+      <select name="station_id" id="flt-station">
+        <option value="">All stations</option>
+        <?php foreach ($hier['stations'] as $st): ?>
+        <option value="<?= (int)$st['id'] ?>" <?= $fStation===(int)$st['id']?'selected':'' ?>><?= e($st['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="flt-post">Post</label>
+      <select name="post_id" id="flt-post">
+        <option value="">All posts</option>
+        <?php foreach ($hier['posts'] as $po): ?>
+        <option value="<?= (int)$po['id'] ?>" <?= $fPost===(int)$po['id']?'selected':'' ?>><?= e($po['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="flt-directorate">Directorate</label>
+      <select name="directorate" id="flt-directorate">
+        <option value="">All directorates</option>
+        <?php foreach ($filterDirs as $dName): ?>
+        <option value="<?= e($dName) ?>" <?= $fDir===$dName?'selected':'' ?>><?= e($dName) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="flt-unit">Unit</label>
+      <select name="unit" id="flt-unit">
+        <option value="">All units</option>
+        <?php foreach ($filterUnits as $u): ?>
+        <option value="<?= e($u['unit']) ?>" data-dir="<?= e($u['directorate'] ?? '') ?>" <?= $fUnit===$u['unit']?'selected':'' ?>><?= e($u['unit']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div class="filter-field">
+      <label for="flt-sort">Sort by</label>
+      <select name="sort" id="flt-sort">
+        <option value="">Default (rank)</option>
+        <option value="name" <?= $sort==='name'?'selected':'' ?>>Name (A–Z)</option>
+        <option value="service_no" <?= $sort==='service_no'?'selected':'' ?>>File / Force No</option>
+        <option value="rank" <?= $sort==='rank'?'selected':'' ?>>Rank</option>
+        <option value="directorate" <?= $sort==='directorate'?'selected':'' ?>>Directorate → Unit</option>
+        <option value="region" <?= $sort==='region'?'selected':'' ?>>Region → Post</option>
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button class="btn-icon bi-primary btn-labeled" type="submit" title="Apply filters"><?= ICO_SEARCH ?><span>Apply</span></button>
+      <?php if ($hasFilters): ?>
+      <a class="btn-icon bi-secondary btn-labeled" href="/employees.php" title="Clear all filters"><?= ICO_CANCEL ?><span>Reset</span></a>
+      <?php endif; ?>
+    </div>
+  </form>
+  <script>
+  (function(){
+    var HIER = <?= json_encode($hier) ?>;
+    var $r = document.getElementById('flt-region'),
+        $d = document.getElementById('flt-division'),
+        $s = document.getElementById('flt-station'),
+        $p = document.getElementById('flt-post');
+    if(!$r || !$d || !$s || !$p) return;
+
+    function esc(v){ return String(v).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+    function fill(sel, list, label, keep){
+      var html = '<option value="">' + label + '</option>', valid = false;
+      list.forEach(function(o){
+        html += '<option value="' + o.id + '">' + esc(o.name) + '</option>';
+        if (String(o.id) === String(keep)) valid = true;
+      });
+      sel.innerHTML = html;
+      sel.value = valid ? String(keep) : '';
+    }
+    function build(){
+      var r = String($r.value || ''), d = String($d.value || ''),
+          s = String($s.value || ''), p = String($p.value || '');
+      var divs = HIER.divisions.filter(function(x){ return !r || String(x.region_id) === r; });
+      fill($d, divs, 'All divisions', d);
+      d = String($d.value || '');
+      var stas = HIER.stations.filter(function(x){ return !d || String(x.division_id) === d; });
+      fill($s, stas, 'All stations', s);
+      s = String($s.value || '');
+      var posts = HIER.posts.filter(function(x){ return !s || String(x.station_id) === s; });
+      fill($p, posts, 'All posts', p);
+    }
+    $r.addEventListener('change', function(){ $d.value=''; $s.value=''; $p.value=''; build(); });
+    $d.addEventListener('change', function(){ $s.value=''; $p.value=''; build(); });
+    $s.addEventListener('change', function(){ $p.value=''; build(); });
+    build();
+
+    var $dir = document.getElementById('flt-directorate'),
+        $unit = document.getElementById('flt-unit');
+    if($dir && $unit){
+      var syncUnits = function(){
+        var dv = $dir.value;
+        Array.prototype.forEach.call($unit.options, function(o){
+          if(!o.value) return;
+          o.hidden = !!(dv && o.getAttribute('data-dir') !== dv);
+        });
+        if($unit.selectedIndex > 0 && $unit.options[$unit.selectedIndex].hidden) $unit.value = '';
+      };
+      $dir.addEventListener('change', syncUnits);
+      syncUnits();
+    }
+  })();
+  </script>
+</div>
+
 <!-- ════════════════════════════ PERSONNEL TABLE ════════════════════════════ -->
 <div class="card">
   <div class="chr">
-    <h3>Personnel Register <span class="badge badge-admin"><?= count($employees) ?></span></h3>
+    <h3>Personnel Register <span class="badge badge-admin"><?= number_format($totalFiltered) ?></span></h3>
   </div>
   <div class="table-wrap">
     <table>
@@ -553,12 +761,30 @@ include __DIR__ . '/../includes/header.php';
         <?php if (!$employees): ?>
         <tr><td colspan="12" style="text-align:center;color:var(--muted);padding:40px 20px">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32" style="display:block;margin:0 auto 10px;opacity:.4"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <?= $search ? 'No results for "'.e($search).'". <a href="/employees.php">Clear search</a>' : 'No personnel found. Click <strong>Add Personnel</strong> to get started.' ?>
+          <?= ($search || $hasFilters) ? 'No personnel match the selected filters. <a href="/employees.php">Clear filters</a>' : 'No personnel found. Click <strong>Add Personnel</strong> to get started.' ?>
         </td></tr>
         <?php endif; ?>
       </tbody>
     </table>
   </div>
+  <?php if ($totalFiltered > 0): ?>
+  <div class="pager">
+    <div class="pager-info">Showing <strong><?= $start ?>–<?= $end ?></strong> of <strong><?= number_format($totalFiltered) ?></strong> · 10 per page</div>
+    <div class="pager-controls">
+      <?php if ($pageNum > 1): ?>
+      <a class="btn-icon bi-secondary pager-btn" href="<?= e($pageUrl($pageNum - 1)) ?>">&larr; Previous</a>
+      <?php else: ?>
+      <span class="btn-icon bi-secondary pager-btn is-disabled" aria-disabled="true">&larr; Previous</span>
+      <?php endif; ?>
+      <span class="pager-page">Page <?= $pageNum ?> of <?= $pages ?></span>
+      <?php if ($pageNum < $pages): ?>
+      <a class="btn-icon bi-secondary pager-btn" href="<?= e($pageUrl($pageNum + 1)) ?>">Next &rarr;</a>
+      <?php else: ?>
+      <span class="btn-icon bi-secondary pager-btn is-disabled" aria-disabled="true">Next &rarr;</span>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 </div>
 
 <!-- ════════════════════════════ ADD / EDIT MODAL DRAWER ════════════════════════════ -->

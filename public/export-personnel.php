@@ -7,6 +7,12 @@ $pdo  = db();
 
 $format        = $_POST['format'] ?? $_GET['format'] ?? 'csv';
 $search        = trim($_POST['q'] ?? $_GET['q'] ?? '');
+$filterRegion   = (int)($_POST['region_id']   ?? $_GET['region_id']   ?? 0);
+$filterDivision = (int)($_POST['division_id'] ?? $_GET['division_id'] ?? 0);
+$filterStation  = (int)($_POST['station_id']  ?? $_GET['station_id']  ?? 0);
+$filterPost     = (int)($_POST['post_id']     ?? $_GET['post_id']     ?? 0);
+$filterDir      = trim($_POST['directorate']  ?? $_GET['directorate'] ?? '');
+$filterUnit     = trim($_POST['unit']         ?? $_GET['unit']        ?? '');
 $requestedCols = $_POST['cols'] ?? $_GET['cols'] ?? null;
 $statusFilter  = $_GET['status'] ?? $_POST['status'] ?? '';   // e.g. present, awol, sick …
 $dateFilter    = $_GET['date']   ?? $_POST['date']   ?? date('Y-m-d');
@@ -72,6 +78,12 @@ if ($search !== '') {
     $s = "%$search%";
     array_push($params, $s, $s, $s, $s);
 }
+if ($filterRegion)   { $where .= ' AND e.region_id = ?';   $params[] = $filterRegion; }
+if ($filterDivision) { $where .= ' AND e.division_id = ?'; $params[] = $filterDivision; }
+if ($filterStation)  { $where .= ' AND e.station_id = ?';  $params[] = $filterStation; }
+if ($filterPost)     { $where .= ' AND e.post_id = ?';     $params[] = $filterPost; }
+if ($filterDir !== '')  { $where .= ' AND e.directorate = ?'; $params[] = $filterDir; }
+if ($filterUnit !== '') { $where .= ' AND e.unit = ?';        $params[] = $filterUnit; }
 
 $extraSel = $dsSelect ? ", $dsSelect" : "";
 $sql = "SELECT e.service_no, e.rank, e.full_name, e.gender, e.directorate, e.unit,
