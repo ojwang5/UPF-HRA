@@ -2,57 +2,60 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
-$user = require_min_rank('post_commander');
+require_once __DIR__ . '/../includes/communications.php';
+$user = require_login();
 $page = 'courses';
 $page_title = 'On Course Management';
 $pdo = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
-$readonly = role_rank($user['role']) < role_rank('station_commander');
+$canWrite = is_hrd_user($user);
+$recordWhere  = $canWrite ? '1=1' : $scopeW;
+$recordParams = $canWrite ? [] : $scopeP;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if ($readonly) { flash('err', 'Your role has view-only access to course records.'); header('Location: /courses.php'); exit; }
+    if (!$canWrite) { flash('err', 'Only Human Resource Development (HRD) can manage course records. You have view-only access.'); header('Location: /courses.php'); exit; }
     $action = $_POST['action'] ?? '';
     $id     = (int)($_POST['id'] ?? 0);
     if ($action === 'create') {
         $eid = (int)$_POST['employee_id'];
-        $emp = $pdo->prepare("SELECT id, service_no, rank, full_name FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
-        $emp->execute(array_merge([$eid], $scopeP));
+        $emp = $pdo->prepare("SELECT id, service_no, rank, full_name FROM employees e WHERE e.id=? AND e.active=1");
+        $emp->execute([$eid]);
         $empRow = $emp->fetch();
         if ($empRow && valid_date($_POST['start_date'] ?? '') && valid_date($_POST['end_date'] ?? '')) {
             if ($_POST['end_date'] < $_POST['start_date']) {
                 flash('err', 'End date cannot be before start date.');
             } else {
-                // Duplicate prevention: officers who already completed (or are currently on)
-                // the same course are flagged so the course is not repeated by mistake.
                 $rawCourse = trim($_POST['course_name']);
-                $dup = $pdo->prepare("SELECT oc.course_name, oc.status FROM on_courses oc
-                                      JOIN employees e ON e.id=oc.employee_id
-                                      WHERE e.id=? AND LOWER(oc.course_name)=LOWER(?) AND oc.status IN ('completed','active')");
+                $natureRaw = (string)($_POST['course_nature'] ?? 'Professional');
+
+                // An officer cannot be on the same course twice at the same time,
+                // but completed courses may be repeated as refreshers.
+                $dup = $pdo->prepare("SELECT oc.course_name FROM on_courses oc
+                                      WHERE oc.employee_id=? AND LOWER(oc.course_name)=LOWER(?) AND oc.status='active'");
                 $dup->execute([$eid, $rawCourse]);
-                $already = $dup->fetchAll();
-                if ($already) {
-                    $notes = [];
-                    foreach ($already as $a) {
-                        if ($a['status'] === 'completed') {
-                            $notes[] = '"'.$a['course_name'].'" already COMPLETED — do not repeat.';
-                        } else {
-                            $notes[] = '"'.$a['course_name'].'" currently ON COURSE / not yet completed.';
-                        }
-                    }
-                    notify(personnel_label($empRow).' — duplicate course', implode(' ', $notes), 'user',
+                $activeDup = $dup->fetch();
+                if ($activeDup) {
+                    notify(personnel_label($empRow).' — duplicate course', '"'.$activeDup['course_name'].'" is already active for this officer.', 'user',
                         ['target_user_id'=>(int)$user['id'], 'kind'=>'course', 'link'=>'/courses.php']);
-                    flash('err', 'Duplicate course not recorded: '.implode(' ', $notes));
+                    flash('err', 'This officer is already on "' . $activeDup['course_name'] . '". Complete it before recording another.');
                 } else {
+                    $prior = $pdo->prepare("SELECT COUNT(*) FROM on_courses
+                                            WHERE employee_id=? AND LOWER(course_name)=LOWER(?) AND status='completed'");
+                    $prior->execute([$eid, $rawCourse]);
+                    $priorCount = (int)$prior->fetchColumn();
+
                     $duration = leave_days_between($_POST['start_date'], $_POST['end_date']);
                     $pdo->prepare("INSERT INTO on_courses (employee_id,course_name,course_nature,school,place,start_date,end_date,duration_days,sponsor,status,notes,created_by)
                                    VALUES (?,?,?,?,?,?,?,?,?,'active',?,?)")
-                        ->execute([$eid, $rawCourse, $_POST['course_nature'] ?? 'Professional',
+                        ->execute([$eid, $rawCourse, $natureRaw,
                                    trim($_POST['school'] ?? '') ?: null, trim($_POST['place'] ?? '') ?: null,
                                    $_POST['start_date'], $_POST['end_date'], $duration,
                                    trim($_POST['sponsor'] ?? '') ?: null,
                                    trim($_POST['notes'] ?? '') ?: null, $user['id']]);
                     log_activity('Recorded on-course', 'on_course', $rawCourse, 0, personnel_label($empRow).' · '.$duration.' days');
-                    flash('msg', 'Course recorded — daily status will show "On Course" for its duration.');
+                    flash('msg', $priorCount > 0
+                        ? 'Repeat/refresher course recorded — this officer has completed "' . $rawCourse . '" ' . $priorCount . ' time(s) before.'
+                        : 'Course recorded — daily status will show "On Course" for its duration.');
                 }
             }
         }
@@ -83,9 +86,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (\PDOException $ex) { flash('err', 'That training school already exists.'); }
         }
     } elseif ($id && in_array($action, ['complete','withdraw'], true)) {
-        $chk = $pdo->prepare("SELECT oc.id FROM on_courses oc JOIN employees e ON e.id=oc.employee_id
-                              WHERE oc.id=? AND oc.status='active' AND $scopeW");
-        $chk->execute(array_merge([$id], $scopeP));
+        $chk = $pdo->prepare("SELECT oc.id FROM on_courses oc WHERE oc.id=? AND oc.status='active'");
+        $chk->execute([$id]);
         if ($chk->fetch()) {
             if ($action === 'complete') {
                 $pdo->prepare("UPDATE on_courses SET status='completed', completed_at=datetime('now','localtime') WHERE id=?")->execute([$id]);
@@ -99,22 +101,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: /courses.php'); exit;
 }
 
-$emps = $pdo->prepare("SELECT id, service_no, full_name, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
-$emps->execute($scopeP); $emps = $emps->fetchAll();
+$empWhere  = $canWrite ? '1=1' : $scopeW;
+$empParams = $canWrite ? [] : $scopeP;
+$emps = $pdo->prepare("SELECT id, service_no, full_name, rank FROM employees e WHERE e.active=1 AND $empWhere ORDER BY " . personnel_order_sql('e'));
+$emps->execute($empParams); $emps = $emps->fetchAll();
 
 $rows = $pdo->prepare("SELECT oc.*, e.full_name, e.service_no, e.rank,
                               rg.name AS region_name, dv.name AS division_name,
-                              st.name AS station_name, pt.name AS post_name
+                              st.name AS station_name, pt.name AS post_name,
+                              (SELECT COUNT(*) FROM on_courses p
+                                WHERE p.employee_id=oc.employee_id
+                                  AND LOWER(p.course_name)=LOWER(oc.course_name)
+                                  AND p.status='completed' AND p.id<>oc.id) AS prior_completed
                        FROM on_courses oc
                        JOIN employees e ON e.id=oc.employee_id
                        LEFT JOIN regions rg ON rg.id=e.region_id
                        LEFT JOIN divisions dv ON dv.id=e.division_id
                        LEFT JOIN stations st ON st.id=e.station_id
                        LEFT JOIN posts pt ON pt.id=e.post_id
-                       WHERE $scopeW
+                       WHERE $recordWhere
                        ORDER BY CASE oc.status WHEN 'active' THEN 1 ELSE 2 END, oc.start_date DESC, " . personnel_order_sql('e') . "
                        LIMIT 300");
-$rows->execute(array_merge($scopeP)); $rows = $rows->fetchAll();
+$rows->execute($recordParams); $rows = $rows->fetchAll();
 
 $today = date('Y-m-d');
 $activeCount = count(array_filter($rows, fn($r) => $r['status'] === 'active'));
@@ -127,8 +135,8 @@ try {
 
 /* ── Completed course records (training history per officer) ── */
 $doneSearch = trim($_GET['done'] ?? '');
-$doneWhere  = "$scopeW AND oc.status='completed'";
-$doneParams = $scopeP;
+$doneWhere  = "$recordWhere AND oc.status='completed'";
+$doneParams = $recordParams;
 if ($doneSearch !== '') {
     $doneWhere .= ' AND (oc.course_name LIKE ? OR e.full_name LIKE ? OR e.service_no LIKE ? OR oc.school LIKE ?)';
     $ds = "%$doneSearch%";
@@ -159,13 +167,14 @@ include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
   <div><h1>On Course Management</h1>
-    <div class="desc">Training &amp; course records — auto-sets "On Course" status for the duration · <?= $activeCount ?> active</div></div>
+    <div class="desc">HRD training registry — auto-sets "On Course" status for the duration · <?= $activeCount ?> active</div></div>
   <div class="action-bar">
+    <span class="badge <?= $canWrite ? 'badge-present' : 'badge-leave' ?>"><?= $canWrite ? 'HRD — can manage' : 'View only' ?></span>
     <a class="btn-icon bi-secondary" href="/records-export.php?module=courses" title="Export courses to CSV"><?= ICO_DL ?></a>
-    <?php if (!$readonly): ?>
+    <?php if ($canWrite): ?>
     <a class="btn-icon bi-secondary" href="/records-import.php?module=courses" title="Bulk import courses (CSV)"><?= ICO_GEN ?></a>
     <?php endif; ?>
-    <?php if (!$readonly): ?>
+    <?php if ($canWrite): ?>
     <div class="panel-wrap">
       <button class="btn-icon bi-primary" data-panel="panel-new" title="Record course"><?= ICO_PLUS ?></button>
       <div class="panel-drop" id="panel-new" style="min-width:440px">
@@ -248,7 +257,7 @@ include __DIR__ . '/../includes/header.php';
           </td>
           <td><?= oc_pill($r['status']) ?></td>
           <td>
-            <?php if ($r['status']==='active' && !$readonly): ?>
+            <?php if ($r['status']==='active' && $canWrite): ?>
             <details class="form-panel" style="position:relative">
               <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Complete / withdraw"><?= ICO_EDIT ?></button></summary>
               <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:200px;z-index:20;padding:12px;box-shadow:var(--shadow-md)">
@@ -288,7 +297,7 @@ include __DIR__ . '/../includes/header.php';
       <?php endforeach; ?>
     </div>
     <?php else: ?><p class="muted" style="font-size:12px">No courses yet — add the first one below.</p><?php endif; ?>
-    <?php if (!$readonly): ?>
+    <?php if ($canWrite): ?>
     <form method="post" class="form-row" style="margin:0">
   <?= csrf_field() ?>
       <input type="hidden" name="action" value="add_course">
@@ -314,7 +323,7 @@ include __DIR__ . '/../includes/header.php';
       <?php endforeach; ?>
     </div>
     <?php else: ?><p class="muted" style="font-size:12px">No training schools yet — add the first one below.</p><?php endif; ?>
-    <?php if (!$readonly): ?>
+    <?php if ($canWrite): ?>
     <form method="post" class="form-row" style="margin:0">
   <?= csrf_field() ?>
       <input type="hidden" name="action" value="add_school">

@@ -14,8 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date = $_POST['date'] ?? date('Y-m-d');
     $statuses = $_POST['status'] ?? [];
     $notes    = $_POST['notes'] ?? [];
-    $stmt = $pdo->prepare("INSERT INTO daily_status (employee_id,date,status,notes,recorded_by) VALUES (?,?,?,?,?)
-        ON CONFLICT(employee_id,date) DO UPDATE SET status=excluded.status,notes=excluded.notes,recorded_by=excluded.recorded_by");
+    $stmt = $pdo->prepare("INSERT INTO daily_status (employee_id,date,status,notes,recorded_by,auto_status) VALUES (?,?,?,?,?,0)
+        ON CONFLICT(employee_id,date) DO UPDATE SET status=excluded.status,notes=excluded.notes,recorded_by=excluded.recorded_by,auto_status=0");
     $check = $pdo->prepare("SELECT COUNT(*) FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
     foreach ($statuses as $eid => $st) {
         $eid = (int)$eid;

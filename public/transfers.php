@@ -72,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'create') {
         $eid    = (int)$_POST['employee_id'];
         $scope  = (int)$_POST['transfer_scope'] === 2 ? 'directorate' : 'hierarchy';
+        $movement = ($_POST['movement_type'] ?? 'transfer') === 'attachment' ? 'attachment' : 'transfer';
         $emp = $pdo->prepare("SELECT * FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
         $emp->execute(array_merge([$eid], $scopeP)); $e = $emp->fetch();
         $tDate = $_POST['transfer_date'] ?? date('Y-m-d');
@@ -95,11 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     flash('err', 'Please select a valid destination post.');
                 } else {
                     $pdo->prepare("INSERT INTO transfers
-                            (employee_id, transfer_scope, from_region_id, from_division_id, from_station_id, from_post_id,
+                            (employee_id, movement_type, transfer_scope, from_region_id, from_division_id, from_station_id, from_post_id,
                              to_region_id, to_division_id, to_station_id, to_post_id, reason, transfer_date, effective_date,
-                             status, requested_by) VALUES (?,? ,?,?,?,?, ?,?,?,?, ?,?,?, 'pending', ?)")
+                             status, requested_by) VALUES (?,?,? ,?,?,?,?, ?,?,?,?, ?,?,?, 'pending', ?)")
                         ->execute([
-                            $eid, $scope,
+                            $eid, $movement, $scope,
                             $e['region_id'], $e['division_id'], $e['station_id'], $e['post_id'],
                             $toRegionId, $toDivision, $toStation, $toPost,
                             trim($_POST['reason'] ?? '') ?: null, $tDate, $effDate, $user['id']
@@ -133,11 +134,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $fu->execute([$e['unit']]); $fromUnitId = (int)($fu->fetchColumn() ?: 0) ?: null;
                     }
                     $pdo->prepare("INSERT INTO transfers
-                            (employee_id, transfer_scope, from_directorate_id, from_unit_id,
+                            (employee_id, movement_type, transfer_scope, from_directorate_id, from_unit_id,
                              to_directorate_id, to_unit_id, reason, transfer_date, effective_date,
-                             status, requested_by) VALUES (?,?, ?,?, ?,?, ?,?,?, 'pending', ?)")
+                             status, requested_by) VALUES (?,?,?, ?,?, ?,?, ?,?,?, 'pending', ?)")
                         ->execute([
-                            $eid, $scope,
+                            $eid, $movement, $scope,
                             $fromDirId, $fromUnitId,
                             $toDirId ?: null, $toUnitId ?: null,
                             trim($_POST['reason'] ?? '') ?: null, $tDate, $effDate, $user['id']
@@ -228,9 +229,14 @@ $empStmt->execute($scopeP); $selectEmps = $empStmt->fetchAll();
 
 $scopeFilter = $_GET['scope'] ?? '';
 $statusFilter = $_GET['status'] ?? '';
+$movementFilter = $_GET['movement'] ?? '';
+$employeeFilter = (int)($_GET['employee_id'] ?? 0);
 $extra = '';
+$extraParams = $scopeP;
 if (in_array($scopeFilter, ['hierarchy','directorate'], true)) $extra .= " AND t.transfer_scope='$scopeFilter'";
 if ($statusFilter !== '' && preg_match('/^(pending|approved|rejected|executed|cancelled)$/', $statusFilter)) $extra .= " AND t.status='$statusFilter'";
+if (in_array($movementFilter, ['transfer','attachment'], true)) $extra .= " AND t.movement_type='$movementFilter'";
+if ($employeeFilter > 0) { $extra .= " AND t.employee_id=?"; $extraParams[] = $employeeFilter; }
 
 $rows = $pdo->prepare("
     SELECT t.*, e.full_name AS emp_name, e.service_no, e.rank,
@@ -257,7 +263,14 @@ $rows = $pdo->prepare("
     ORDER BY CASE t.status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, t.requested_at DESC, " . personnel_order_sql('e') . "
     LIMIT 300
 ");
-$rows->execute($scopeP); $transfers = $rows->fetchAll();
+$rows->execute($extraParams); $transfers = $rows->fetchAll();
+
+$historyEmp = null;
+if ($employeeFilter > 0) {
+    $hs = $pdo->prepare("SELECT id, service_no, rank, full_name FROM employees e WHERE e.id=? AND $scopeW");
+    $hs->execute(array_merge([$employeeFilter], $scopeP));
+    $historyEmp = $hs->fetch() ?: null;
+}
 
 $pendingCount = count(array_filter($transfers, fn($t)=>$t['status']==='pending'));
 $approvedCount = count(array_filter($transfers, fn($t)=>$t['status']==='approved'));
@@ -287,6 +300,13 @@ include __DIR__ . '/../includes/header.php';
               <?php endforeach; ?>
             </select>
           </div>
+          <div class="form-group"><label>Movement</label>
+            <select name="movement"><option value="">All</option>
+              <option value="transfer" <?= $movementFilter==='transfer'?'selected':'' ?>>Transfer</option>
+              <option value="attachment" <?= $movementFilter==='attachment'?'selected':'' ?>>Attachment</option>
+            </select>
+          </div>
+          <?php if ($employeeFilter > 0): ?><input type="hidden" name="employee_id" value="<?= $employeeFilter ?>"><?php endif; ?>
           <button class="btn-icon bi-primary" type="submit" title="Apply"><?= ICO_SAVE ?></button>
         </form>
       </div>
@@ -314,6 +334,12 @@ include __DIR__ . '/../includes/header.php';
               <select name="transfer_scope" id="tr-scope">
                 <option value="1">Geographic (Region / Station / Post)</option>
                 <option value="2">Directorate / Unit</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Movement Type</label>
+              <select name="movement_type">
+                <option value="transfer">Transfer (permanent)</option>
+                <option value="attachment">Attachment (temporary)</option>
               </select>
             </div>
           </div>
@@ -389,12 +415,28 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 <?php if ($e=flash('err')): ?><div class="alert alert-danger"><?= e($e) ?></div><?php endif; ?>
 
+<?php if ($employeeFilter > 0): ?>
+<div class="card" style="border-left:4px solid var(--primary)">
+  <div class="chr">
+    <div>
+      <h3 style="margin:0 0 4px">Movement History<?= $historyEmp ? ' — ' . e(personnel_label($historyEmp)) : '' ?></h3>
+      <div class="muted" style="font-size:12px">
+        <?= count($transfers) ?> recorded movement<?= count($transfers) === 1 ? '' : 's' ?>
+        · transfers and attachments shown in date order
+      </div>
+    </div>
+    <a class="btn-icon bi-secondary bi-sm" href="/transfers.php" title="Clear history filter"><?= ICO_CANCEL ?></a>
+  </div>
+  <?php if (!$transfers): ?><div class="muted" style="padding:8px 0">No movements recorded for this officer.</div><?php endif; ?>
+</div>
+<?php endif; ?>
+
 <div class="card">
   <div class="chr"><h3>Transfer Records</h3></div>
   <div class="table-wrap">
     <table>
       <thead><tr>
-        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Type</th><th>From</th><th>To</th>
+        <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Type / Movement</th><th>From</th><th>To</th>
         <th>Effective</th><th>Reason</th><th>Status</th><th>Reporting</th><th style="width:150px"></th>
       </tr></thead>
       <tbody>
@@ -412,8 +454,11 @@ include __DIR__ . '/../includes/header.php';
         <tr>
           <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
           <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
-          <td><strong><?= e($r['emp_name']) ?></strong></td>
-          <td><span class="badge <?= $r['transfer_scope']==='hierarchy'?'badge-special_assignment':'badge-undeployed' ?>"><?= $type ?></span></td>
+          <td><a href="/transfers.php?employee_id=<?= (int)$r['employee_id'] ?>" title="View movement history" style="text-decoration:none"><strong><?= e($r['emp_name']) ?></strong></a></td>
+          <td>
+            <span class="badge <?= $r['transfer_scope']==='hierarchy'?'badge-special_assignment':'badge-undeployed' ?>"><?= $type ?></span>
+            <span class="badge <?= ($r['movement_type'] ?? 'transfer')==='attachment'?'badge-leave':'badge-present' ?>"><?= ($r['movement_type'] ?? 'transfer')==='attachment' ? 'Attachment' : 'Transfer' ?></span>
+          </td>
           <td style="font-size:12px;max-width:150px"><?= e($from) ?></td>
           <td style="font-size:12px;max-width:150px"><strong><?= e($to) ?></strong></td>
           <td style="white-space:nowrap;font-size:12px"><?= e(date('j M y', strtotime($r['effective_date']))) ?><br>

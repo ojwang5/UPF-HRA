@@ -332,6 +332,148 @@ function migrate(PDO $pdo): void {
     if ($v < 15) {
         _migrate_v15($pdo);
     }
+
+    if ($v < 16) {
+        _migrate_v16($pdo);
+    }
+
+    if ($v < 17) {
+        _migrate_v17($pdo);
+    }
+
+    if ($v < 18) {
+        _migrate_v18($pdo);
+    }
+
+    if ($v < 19) {
+        _migrate_v19($pdo);
+    }
+}
+
+/* ─── v19: identify individual leave extension SMS events ─── */
+function _migrate_v19(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $cols = array_column($pdo->query("PRAGMA table_info(leave_sms_log)")->fetchAll(), 'name');
+        if (!in_array('event_id', $cols, true)) {
+            $pdo->exec("ALTER TABLE leave_sms_log ADD COLUMN event_id INTEGER");
+        }
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_leave_sms_event ON leave_sms_log(event_type, event_id)");
+        $pdo->exec("PRAGMA user_version = 19");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
+}
+
+/* ─── v18: SMS provider reference and delivery status ─── */
+function _migrate_v18(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $cols = array_column($pdo->query("PRAGMA table_info(leave_sms_log)")->fetchAll(), 'name');
+        if (!in_array('provider_ref', $cols, true)) {
+            $pdo->exec("ALTER TABLE leave_sms_log ADD COLUMN provider_ref TEXT");
+        }
+        if (!in_array('provider_status', $cols, true)) {
+            $pdo->exec("ALTER TABLE leave_sms_log ADD COLUMN provider_status TEXT");
+        }
+        $pdo->exec("PRAGMA user_version = 18");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
+}
+
+/* ─── v17: leave status SMS notification log ─── */
+function _migrate_v17(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS leave_sms_log (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                leave_request_id INTEGER REFERENCES leave_requests(id) ON DELETE CASCADE,
+                employee_id      INTEGER REFERENCES employees(id) ON DELETE CASCADE,
+                phone            TEXT,
+                status           TEXT NOT NULL,
+                event_type       TEXT NOT NULL DEFAULT 'leave',
+                message          TEXT NOT NULL,
+                provider         TEXT,
+                response         TEXT,
+                sent_at          TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_leave_sms_request ON leave_sms_log(leave_request_id);
+            CREATE INDEX IF NOT EXISTS idx_leave_sms_employee ON leave_sms_log(employee_id);
+        ");
+        $pdo->exec("PRAGMA user_version = 17");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
+}
+
+/* ─── v16: inbound communications, signal/HRD org seeds, transfer movement type ─── */
+function _migrate_v16(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        // Inbound messages sent through the signals chain. Attachments live in
+        // the database and the file itself is kept outside the web root.
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS comm_messages (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id   INTEGER REFERENCES users(id),
+                title       TEXT NOT NULL,
+                body        TEXT NOT NULL,
+                target_type TEXT NOT NULL DEFAULT 'all',
+                target_id   INTEGER,
+                target_role TEXT,
+                target_label TEXT,
+                priority    TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal','high','urgent')),
+                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE TABLE IF NOT EXISTS comm_attachments (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id  INTEGER NOT NULL REFERENCES comm_messages(id) ON DELETE CASCADE,
+                file_name   TEXT NOT NULL,
+                stored_name TEXT NOT NULL,
+                mime_type   TEXT,
+                size_bytes  INTEGER NOT NULL DEFAULT 0,
+                kind        TEXT,
+                created_at  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE TABLE IF NOT EXISTS comm_reads (
+                message_id INTEGER NOT NULL REFERENCES comm_messages(id) ON DELETE CASCADE,
+                user_id    INTEGER NOT NULL,
+                read_at    TEXT NOT NULL,
+                PRIMARY KEY(message_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_comm_messages_created ON comm_messages(created_at);
+            CREATE INDEX IF NOT EXISTS idx_comm_attachments_message ON comm_attachments(message_id);
+        ");
+
+        // Distinguish a permanent transfer from a temporary attachment.
+        $tCols = array_column($pdo->query("PRAGMA table_info(transfers)")->fetchAll(), 'name');
+        if (!in_array('movement_type', $tCols, true)) {
+            $pdo->exec("ALTER TABLE transfers ADD COLUMN movement_type TEXT NOT NULL DEFAULT 'transfer' CHECK(movement_type IN ('transfer','attachment'))");
+        }
+
+        // Ensure the HRD and Signals structures exist on fresh installations.
+        $pdo->exec("INSERT OR IGNORE INTO directorates (name,code,description) VALUES ('Human Resource Development','HRD','Training and courses management')");
+        $pdo->exec("INSERT OR IGNORE INTO directorates (name,code,description) VALUES ('ICT','ICT','Information and Communication Technology')");
+        $ict = (int)$pdo->query("SELECT id FROM directorates WHERE code='ICT'")->fetchColumn();
+        if ($ict) {
+            $pdo->prepare("INSERT OR IGNORE INTO units (directorate_id,name,code,description) VALUES (?, 'SIGNAL','SIG','Communication and signal transmission')")
+                ->execute([$ict]);
+        }
+
+        $pdo->exec("PRAGMA user_version = 16");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
 }
 
 /* ─── v15: HRAS Assistant conversation store ─── */

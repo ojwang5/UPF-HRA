@@ -30,8 +30,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     } elseif ($action === 'save_sms') {
-        $keys = ['sms_provider','sms_api_key','sms_api_secret','sms_username','sms_sender_id'];
+        $keys = ['sms_provider','sms_api_key','sms_api_secret','sms_username','sms_sender_id','sms_infobip_base_url'];
         foreach ($keys as $k) save_setting($k, trim($_POST[$k] ?? ''));
+
+        $provider = strtolower(trim($_POST['sms_provider'] ?? 'infobip'));
+        if (!in_array($provider, SMS_PROVIDERS, true)) {
+            $provider = 'infobip';
+            save_setting('sms_provider', $provider);
+        }
+
+        // Accept an Infobip key typed into the generic API-secret field.
+        $typedKey = trim($_POST['sms_api_key'] ?? '');
+        $typedSecret = trim($_POST['sms_api_secret'] ?? '');
+        if ($provider === 'infobip' && $typedKey === '' && $typedSecret !== '') {
+            save_setting('sms_api_key', $typedSecret);
+        }
+
+        // Infobip base URLs are often copied without a scheme.
+        $baseUrl = trim($_POST['sms_infobip_base_url'] ?? '');
+        if ($provider === 'infobip' && $baseUrl !== '' && !preg_match('#^https?://#i', $baseUrl)) {
+            save_setting('sms_infobip_base_url', 'https://' . $baseUrl);
+        }
+
         flash('msg', 'SMS settings saved.');
 
     } elseif ($action === 'save_report_mode') {
@@ -39,15 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         save_setting('report_submission_mode', $mode);
         log_activity('Changed report submission mode', 'setting', $mode);
         flash('msg', $mode === 'direct' ? 'Reports now go DIRECTLY to HQ for approval.' : 'Reports now flow hierarchically (post → station → division → region → HQ).');
-
-    } elseif ($action === 'test_sms') {
-        require_once __DIR__ . '/../includes/sms.php';
-        $testPhone = trim($_POST['test_phone'] ?? $user['phone'] ?? '');
-        if (!$testPhone) { flash('err','Enter a phone number to test.'); }
-        else {
-            $res = send_sms($testPhone, 'UPF MDD System: SMS integration test successful.');
-            $res['ok'] ? flash('msg','Test SMS sent to '.$testPhone.'.') : flash('err','SMS error: '.$res['error']);
-        }
 
     } elseif ($action === 'save_groq') {
         $model = trim($_POST['groq_model'] ?? '');
@@ -271,55 +282,47 @@ include __DIR__ . '/../includes/header.php';
       <div class="form-group">
         <label>SMS Provider</label>
         <select name="sms_provider">
-          <?php foreach (['africas_talking'=>"Africa's Talking",'twilio'=>'Twilio','nexmo'=>'Vonage (Nexmo)'] as $v=>$l): ?>
-          <option value="<?= $v ?>" <?= get_setting('sms_provider','africas_talking')===$v?'selected':'' ?>><?= $l ?></option>
+          <?php foreach (['infobip'=>'Infobip','africas_talking'=>"Africa's Talking",'twilio'=>'Twilio','nexmo'=>'Vonage (Nexmo)'] as $v=>$l): ?>
+          <option value="<?= $v ?>" <?= get_setting('sms_provider','infobip')===$v?'selected':'' ?>><?= $l ?></option>
           <?php endforeach; ?>
         </select>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group" style="flex:2">
-        <label>API Key</label>
+        <label>API Key <span style="font-size:10px;color:var(--muted)">(Infobip App key)</span></label>
         <input type="text" name="sms_api_key" value="<?= $s('sms_api_key') ?>" placeholder="Your API key" autocomplete="off">
       </div>
-      <div class="form-group" style="flex:2">
-        <label>API Secret / Auth Token</label>
+      <div class="form-group sms-secret-field" style="flex:2">
+        <label>API Secret / Auth Token <span style="font-size:10px;color:var(--muted)">(Twilio / Vonage)</span></label>
         <input type="password" name="sms_api_secret" placeholder="<?= get_setting('sms_api_secret') ? '••••••••' : 'API secret or token' ?>" autocomplete="new-password">
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group sms-username-field">
         <label>Username <span style="font-size:10px;color:var(--muted)">(Africa's Talking)</span></label>
         <input type="text" name="sms_username" value="<?= $s('sms_username') ?>" placeholder="sandbox or your AT username">
       </div>
       <div class="form-group">
-        <label>Sender ID / From Number</label>
-        <input type="text" name="sms_sender_id" value="<?= $s('sms_sender_id') ?>" placeholder="UPF-MDD or +256...">
+        <label>Sender ID / From Number <span style="font-size:10px;color:var(--muted)">(use a sender registered with your provider)</span></label>
+        <input type="text" name="sms_sender_id" value="<?= $s('sms_sender_id') ?>" placeholder="447491163443 or UPF-MDD">
+      </div>
+    </div>
+    <div class="form-row sms-infobip-field">
+      <div class="form-group" style="flex:2">
+        <label>Infobip Base URL <span style="font-size:10px;color:var(--muted)">(Infobip only)</span></label>
+        <input type="text" name="sms_infobip_base_url" value="<?= $s('sms_infobip_base_url') ?>" placeholder="https://xxxxx.api.infobip.com">
       </div>
     </div>
     <button class="btn-icon bi-gold bi-lg" type="submit" style="gap:8px;padding:0 18px;width:auto;font-size:12px;font-weight:600;margin-top:4px">
       <?= ICO_SAVE ?> <span>Save SMS Settings</span>
     </button>
   </form>
-  <!-- Test SMS -->
-  <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--border)">
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px">Send Test SMS</div>
-    <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-  <?= csrf_field() ?>
-      <input type="hidden" name="action" value="test_sms">
-      <div class="form-group" style="flex:1;min-width:180px">
-        <label>Recipient Phone</label>
-        <input type="tel" name="test_phone" value="<?= e($user['phone'] ?? '') ?>" placeholder="+256 700 000000">
-      </div>
-      <button class="btn-icon bi-primary" type="submit" style="gap:8px;padding:0 14px;width:auto;font-size:12px">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Send Test
-      </button>
-    </form>
-  </div>
   <div style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted)">
-    <strong style="color:var(--navy-700)">Africa's Talking:</strong> Use <em>sandbox</em> as username to test for free. Get keys at <strong>africastalking.com</strong>.
-    <br><strong style="color:var(--navy-700)">OTP / 2FA:</strong> SMS can be wired to login verification once credentials are set.
+    <strong style="color:var(--navy-700)">Infobip:</strong> Enter your API key and your personal base URL (e.g. <em>https://xxxxx.api.infobip.com</em>) from the Infobip portal.
+    <br><strong style="color:var(--navy-700)">Sender ID:</strong> Use a sender registered on the Infobip account (see its purchased numbers). Leave it blank to use the account default sender.
+    <br><strong style="color:var(--navy-700)">Credit balance:</strong> Infobip must have sufficient SMS credit; messages are accepted but not delivered when the balance is zero.
+    <br><strong style="color:var(--navy-700)">Leave SMS:</strong> Personnel are notified by SMS as soon as a leave request or extension is approved or rejected. Approved leave messages include the effective end date.
   </div>
   </div>
 </details>
@@ -470,5 +473,23 @@ include __DIR__ . '/../includes/header.php';
     <button class="btn-icon bi-gold" type="submit" title="Add leave type"><?= ICO_PLUS ?></button>
   </form>
 </div>
+
+<script>
+(function () {
+  var provider = document.querySelector('select[name="sms_provider"]');
+  if (!provider) return;
+  var secret = document.querySelector('.sms-secret-field');
+  var username = document.querySelector('.sms-username-field');
+  var infobip = document.querySelector('.sms-infobip-field');
+  function sync() {
+    var isInfobip = provider.value === 'infobip';
+    if (secret) secret.style.display = isInfobip ? 'none' : '';
+    if (username) username.style.display = provider.value === 'africas_talking' ? '' : 'none';
+    if (infobip) infobip.style.display = isInfobip ? '' : 'none';
+  }
+  provider.addEventListener('change', sync);
+  sync();
+})();
+</script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

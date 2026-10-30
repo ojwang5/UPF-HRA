@@ -2,8 +2,8 @@
 
 **Engine:** SQLite (WAL mode, `PRAGMA foreign_keys = ON`)
 **Database file:** `data/mdd.sqlite`
-**Schema source of truth:** `includes/db.php` (`init_schema()` + `migrate()`, migrations v1 → v12)
-**Current schema version:** 12 (`PRAGMA user_version`)
+**Schema source of truth:** `includes/db.php` (`init_schema()` + `migrate()`, migrations v1 → v19)
+**Current schema version:** 19 (`PRAGMA user_version`)
 
 ---
 
@@ -296,6 +296,25 @@ erDiagram
 | expiry_notified | INTEGER | NOT NULL DEFAULT 0 (v11) |
 | directorate_id | INTEGER | FK → `directorates.id` (v12) |
 | unit_id | INTEGER | FK → `units.id` (v12) |
+
+#### `leave_sms_log`
+| Column | Type | Constraints |
+|---|---|---|
+| id | INTEGER | PK AUTOINCREMENT |
+| leave_request_id | INTEGER | FK → `leave_requests.id` **ON DELETE CASCADE** |
+| employee_id | INTEGER | FK → `employees.id` **ON DELETE CASCADE** |
+| phone | TEXT | Personnel phone number used for the attempt |
+| status | TEXT | NOT NULL (`approved` or `rejected`) |
+| event_type | TEXT | NOT NULL DEFAULT `'leave'` (`leave` or `extension`) |
+| event_id | INTEGER | Extension ID for extension notifications (v19); NULL for leave decisions |
+| message | TEXT | NOT NULL |
+| provider | TEXT | SMS provider used |
+| response | TEXT | Provider result or failure reason |
+| provider_ref | TEXT | Provider message ID (v18) |
+| provider_status | TEXT | Provider delivery status (v18) |
+| sent_at | TEXT | NOT NULL |
+
+**Indexes:** `idx_leave_sms_request`, `idx_leave_sms_employee` (v17); `idx_leave_sms_event` on `(event_type, event_id)` (v19)
 
 #### `leave_adjustments`
 | Column | Type | Constraints |
@@ -615,6 +634,13 @@ Known keys: `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from_email
 | v10 | `users.directorate_id`; `transfers.report_status/reported_*`; `notifications.target_directorate_id` |
 | v11 | `reports.current_level`, `.revision`; `report_actions`; `leave_requests.destination`, `.expiry_notified`; `courses`; `training_schools` |
 | v12 | `users.unit_id`; `reports.directorate_id`, `.unit_id`; `leave_requests.directorate_id`, `.unit_id`; functional commander accounts |
+| v13 | Configurable leave types and leave extension workflow |
+| v14 | Login attempt throttling |
+| v15 | Assistant conversation store |
+| v16 | Inbound communications, signal/HRD organization seeds, transfer movement type |
+| v17 | Leave SMS notification log |
+| v18 | Provider message references and delivery statuses for leave SMS |
+| v19 | Extension event IDs for distinct leave extension SMS notifications |
 
 ---
 

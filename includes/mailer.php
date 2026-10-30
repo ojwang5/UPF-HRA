@@ -188,12 +188,12 @@ body{margin:0;padding:0;background:#f1f4f9;font-family:Arial,sans-serif}
   <div class="head">
     <div>
       <div class="head-title">UGANDA POLICE FORCE</div>
-      <div class="head-sub">MDD Management System — Official Communication</div>
+      <div class="head-sub">HRAS — Official Communication</div>
     </div>
   </div>
   <div class="body">{$htmlBody}</div>
   <div class="footer">
-    This is an official communication from the UPF MDD Management System.<br>
+    This is an official communication from the UPF HRAS.<br>
     &copy; Uganda Police Force &mdash; Protect &amp; Serve
   </div>
 </div>

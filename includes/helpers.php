@@ -173,7 +173,7 @@ const STATUS_LABELS = [
     'leave'             => 'On Leave',
     'sick'              => 'Sick',
     'suspended'         => 'Suspended',
-    'disciplinary'      => 'Disciplinary',
+    'disciplinary'      => 'Under Disciplinary',
     'on_duty'           => 'On Duty',
     'on_course'         => 'On Course',
     'deserted'          => 'Deserted',
@@ -319,6 +319,18 @@ function sum_totals(array $rows): array {
     return $t;
 }
 
+/**
+ * Personnel still available for duty. Officers under disciplinary action remain
+ * part of the working strength; suspended/deserted/AWOL/leave/sick do not.
+ */
+function working_strength(array $row): int {
+    return (int)($row['present'] ?? 0)
+         + (int)($row['on_duty'] ?? 0)
+         + (int)($row['on_course'] ?? 0)
+         + (int)($row['special_assignment'] ?? 0)
+         + (int)($row['disciplinary'] ?? 0);
+}
+
 function flash(string $key, ?string $msg = null): ?string {
     if ($msg !== null) { $_SESSION['_flash'][$key] = $msg; return null; }
     $val = $_SESSION['_flash'][$key] ?? null;
@@ -418,7 +430,7 @@ function run_auto_status(PDO $pdo, string $date, array $user): int {
 
     // Existing rows for this date
     $existing = [];
-    foreach ($pdo->query("SELECT id, employee_id, status, auto_status FROM daily_status WHERE date='$date'") as $r) {
+    foreach ($pdo->query("SELECT id, employee_id, status, auto_status, recorded_by FROM daily_status WHERE date='$date'") as $r) {
         $existing[(int)$r['employee_id']] = $r;
     }
 
@@ -429,7 +441,9 @@ function run_auto_status(PDO $pdo, string $date, array $user): int {
     $n = 0;
     foreach ($derived as $eid => $st) {
         $cur = $existing[$eid] ?? null;
-        if ($cur && !(int)$cur['auto_status']) continue;      // manual entry wins
+        // Manual entries win. Rows with a recorder were edited by a user even
+        // if an older version of the page left auto_status=1 behind.
+        if ($cur && (!(int)$cur['auto_status'] || $cur['recorded_by'] !== null)) continue;
         if ($cur && (string)$cur['status'] === (string)$st) continue; // already correct
         if ($st === null) { $clear->execute([$eid, $date]); $n++; }
         else { $upsert->execute([':eid'=>$eid, ':d'=>$date, ':st'=>$st]); $n++; }

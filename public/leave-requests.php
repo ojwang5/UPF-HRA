@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/leave-sms.php';
 $user = require_login();
 $page = 'leave';
 $page_title = 'Leave Management';
@@ -58,14 +59,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'review') {
         $id=(int)$_POST['id']; $decision=$_POST['decision']; $notes=$_POST['notes']??'';
-        $req = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=?");
+        $req = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name, e.phone FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=?");
         $req->execute([$id]); $req=$req->fetch();
         if ($req && $req['status']==='pending' && can_approve_leave($user, $req['leave_type'])) {
             $newStatus = $decision==='approve' ? 'approved' : 'rejected';
             $pdo->prepare("UPDATE leave_requests SET status=?,reviewed_by=?,reviewed_at=?,review_notes=? WHERE id=?")->execute([$newStatus,$user['id'],date('c'),$notes,$id]);
             $pdo->prepare("INSERT INTO notifications (title,message,link,kind,audience,target_user_id,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)")
                 ->execute(["Leave request $newStatus",personnel_label(['service_no'=>$req['service_no'],'rank'=>$req['rank'],'full_name'=>$req['emp_name']])." — $newStatus by ".$user['full_name'],'/leave-requests.php#lr-'.$id,'leave','user',(int)$req['submitted_by'],$user['id'],date('c')]);
-            flash('msg','Decision recorded.');
+            $sms = send_leave_status_sms($pdo, $id, $newStatus);
+            $flash = 'Decision recorded.';
+            if (!empty($sms['ok'])) {
+                $flash .= !empty($sms['skipped'])
+                    ? ' SMS notification already sent.'
+                    : ' SMS notification submitted to the provider.';
+            } else {
+                $flash .= ' SMS not sent: ' . ($sms['error'] ?? 'unknown error') . '.';
+            }
+            flash('msg', $flash);
         }
     } elseif ($action === 'submit_extension') {
         $lrId   = (int)($_POST['leave_request_id'] ?? 0);
@@ -111,7 +121,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ->execute(["Leave extension $newStatus", $label." — extension to ".$x['new_end_date']." $newStatus by ".$user['full_name'],'/leave-requests.php#le-'.$id,'leave','user',(int)$x['submitted_by'],$user['id'],date('c')]);
             }
             notify_superadmins('Leave extension '.$newStatus, $label.' — '.$x['new_end_date'].' ('.$newStatus.')', ['created_by'=>$user['id'],'kind'=>'leave','link'=>'/leave-requests.php']);
-            flash('msg','Extension decision recorded.');
+            $sms = send_leave_status_sms($pdo, (int)$x['leave_request_id'], $newStatus, 'extension', $id);
+            $flash = 'Extension decision recorded.';
+            if (!empty($sms['ok'])) {
+                $flash .= !empty($sms['skipped'])
+                    ? ' SMS notification already sent.'
+                    : ' SMS notification submitted to the provider.';
+            } else {
+                $flash .= ' SMS not sent: ' . ($sms['error'] ?? 'unknown error') . '.';
+            }
+            flash('msg', $flash);
+        }
+    } elseif ($action === 'refresh_sms_status') {
+        $n = refresh_leave_sms_delivery($pdo, 50);
+        flash('msg', $n
+            ? "Delivery status updated for {$n} SMS message".($n === 1 ? '' : 's').'.'
+            : 'No pending SMS delivery status to update.');
+    } elseif ($action === 'retry_leave_sms') {
+        $logId = (int)($_POST['id'] ?? 0);
+        $retryStmt = $pdo->prepare("SELECT l.leave_request_id, l.status, l.event_type, l.event_id,
+                                           lr.status AS leave_status, lr.leave_type,
+                                           le.status AS extension_status
+                                    FROM leave_sms_log l
+                                    JOIN leave_requests lr ON lr.id = l.leave_request_id
+                                    JOIN employees e ON e.id = l.employee_id
+                                    LEFT JOIN leave_extensions le ON l.event_type = 'extension' AND le.id = l.event_id
+                                    WHERE l.id = ? AND $scopeW");
+        $retryStmt->execute(array_merge([$logId], $scopeP));
+        $retry = $retryStmt->fetch();
+        $eventType = $retry && $retry['event_type'] === 'extension' ? 'extension' : 'leave';
+        $currentStatus = $retry
+            ? ($eventType === 'extension' ? $retry['extension_status'] : $retry['leave_status'])
+            : null;
+        if ($retry && can_approve_leave($user, $retry['leave_type']) && $currentStatus === $retry['status']) {
+            $sms = send_leave_status_sms(
+                $pdo,
+                (int)$retry['leave_request_id'],
+                (string)$retry['status'],
+                $eventType,
+                $eventType === 'extension' ? (int)$retry['event_id'] : null,
+                true
+            );
+            flash('msg', !empty($sms['ok'])
+                ? 'SMS resend submitted to the provider.'
+                : 'SMS resend failed: ' . ($sms['error'] ?? 'unknown error') . '.');
+        } else {
+            flash('err', 'You are not authorized to resend this SMS, or its leave decision has changed.');
         }
     }
     header('Location:/leave-requests.php'); exit;
@@ -147,6 +202,14 @@ $extRows = $pdo->prepare("SELECT le.*, e.service_no, e.rank, e.full_name AS emp_
                           ORDER BY CASE le.status WHEN 'pending' THEN 1 ELSE 2 END, le.requested_at DESC
                           LIMIT 100");
 $extRows->execute($scopeP); $extensions = $extRows->fetchAll();
+
+$smsLogStmt = $pdo->prepare("SELECT l.*, e.service_no, e.rank, e.full_name AS emp_name, lr.leave_type
+                            FROM leave_sms_log l
+                            JOIN leave_requests lr ON lr.id = l.leave_request_id
+                            JOIN employees e ON e.id = l.employee_id
+                            WHERE $scopeW
+                            ORDER BY l.id DESC LIMIT 100");
+$smsLogStmt->execute($scopeP); $smsLog = $smsLogStmt->fetchAll();
 
 function lr_pill(string $s): string {
     $map=['pending'=>['Pending','badge-sick'],'approved'=>['Approved','badge-present'],'rejected'=>['Rejected','badge-awol']];
@@ -592,6 +655,71 @@ sort($pgNums);
         </tr>
         <?php endforeach; ?>
         <?php if (!$extensions): ?><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">No leave extension requests.</td></tr><?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="chr">
+    <h3>Leave SMS Notifications <span class="badge badge-admin"><?= count($smsLog) ?></span></h3>
+    <form method="post" style="margin:0">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="refresh_sms_status">
+      <button class="btn-icon bi-secondary bi-sm" type="submit" title="Refresh delivery status from provider" style="width:auto;padding:0 12px;gap:6px;font-size:11px">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <span>Refresh status</span>
+      </button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Phone</th><th>Decision</th><th>Event</th><th>Delivery</th><th>Sent</th><th></th></tr></thead>
+      <tbody>
+        <?php foreach ($smsLog as $s): ?>
+        <tr>
+          <td style="font-family:monospace;font-size:12px"><?= e($s['service_no'] ?? '—') ?></td>
+          <td style="white-space:nowrap"><?= e($s['rank'] ?? '—') ?></td>
+          <td><strong><?= e($s['emp_name'] ?? '—') ?></strong></td>
+          <td style="font-size:12px"><?= e($s['phone'] ?? '—') ?></td>
+          <td><?= lr_pill((string)$s['status']) ?></td>
+          <td style="font-size:12px;text-transform:capitalize"><?= e($s['event_type']) ?></td>
+          <td style="font-size:12px">
+            <?php
+              $resp  = (string)$s['response'];
+              $pstat = strtoupper((string)($s['provider_status'] ?? ''));
+              if (leave_sms_delivery_failed($pstat)):
+            ?>
+              <span class="badge badge-awol" title="<?= e($resp !== 'ok' ? $resp : $pstat) ?>">Undeliverable</span>
+              <div class="muted" style="font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= e($resp) ?>"><?= e($resp !== 'ok' ? $resp : $pstat) ?></div>
+            <?php elseif ($resp !== 'ok'): ?>
+              <span class="badge badge-awol" title="<?= e($resp) ?>">Not delivered</span>
+              <div class="muted" style="font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= e($resp) ?>"><?= e($resp) ?></div>
+            <?php elseif ($pstat === 'DELIVERED'): ?>
+              <span class="badge badge-present" title="<?= e($pstat) ?>">Delivered</span>
+            <?php elseif (str_starts_with($pstat, 'PENDING')): ?>
+              <span class="badge badge-sick" title="<?= e($pstat) ?>">Pending</span>
+            <?php else: ?>
+              <span class="badge badge-sick" title="<?= e($pstat !== '' ? $pstat : 'No delivery report received') ?>">Accepted; delivery unconfirmed</span>
+            <?php endif; ?>
+            <?php if (!empty($s['provider_ref'])): ?>
+              <div class="muted" style="font-size:10px" title="Provider message ID">ID: <?= e($s['provider_ref']) ?></div>
+            <?php endif; ?>
+          </td>
+          <td class="muted" style="font-size:11px"><?= e(date('M j, Y H:i', strtotime($s['sent_at']))) ?></td>
+          <td>
+            <?php if (can_approve_leave($user, $s['leave_type'])): ?>
+            <form method="post" style="margin:0" onsubmit="return confirm('Resend this SMS to the current personnel phone number?')">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="retry_leave_sms">
+              <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
+              <button class="btn-icon bi-secondary bi-sm" type="submit" title="Resend SMS to the current personnel phone number"><?= ICO_SEND ?></button>
+            </form>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        <?php if (!$smsLog): ?><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">No leave SMS notifications sent yet.</td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>

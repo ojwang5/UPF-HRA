@@ -285,15 +285,16 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <div class="table-wrap" style="margin-bottom:16px">
     <table>
-      <thead><tr><th>Unit</th><th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th><th>Sick</th><th>Suspended</th><th>Disciplinary</th><th>On Duty</th><th>On Course</th><th>Unrecorded</th></tr></thead>
+      <thead><tr><th>Unit</th><th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th><th>Sick</th><th>Suspended</th><th>Under Disciplinary</th><th>Working</th><th>On Duty</th><th>On Course</th><th>Unrecorded</th></tr></thead>
       <tbody>
         <?php foreach ($viewSummary as $vu): ?>
         <tr><td><?= e($vu['unit_name']??'') ?></td><td><?= (int)($vu['total']??0) ?></td><td><?= (int)($vu['present']??0) ?></td>
           <td><?= (int)($vu['awol']??0) ?></td><td><?= (int)($vu['on_leave']??0) ?></td><td><?= (int)($vu['sick']??0) ?></td>
           <td><?= (int)($vu['suspended']??0) ?></td><td><?= (int)($vu['disciplinary']??0) ?></td>
+          <td><strong><?= working_strength($vu) ?></strong></td>
           <td><?= (int)($vu['on_duty']??0) ?></td><td><?= (int)($vu['on_course']??0) ?></td><td><?= (int)($vu['unrecorded']??0) ?></td></tr>
         <?php endforeach; ?>
-        <?php if (!$viewSummary): ?><tr><td colspan="11" style="text-align:center;color:var(--muted);padding:18px">No summary rows.</td></tr><?php endif; ?>
+        <?php if (!$viewSummary): ?><tr><td colspan="12" style="text-align:center;color:var(--muted);padding:18px">No summary rows.</td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>
@@ -327,18 +328,20 @@ include __DIR__ . '/../includes/header.php';
   <div class="chr"><h3>Attendance Report — <?= e(date('j F Y',strtotime($date))) ?></h3></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Unit</th><th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th><th>Sick</th><th>Suspended</th><th>Disciplinary</th><th>On Duty</th><th>On Course</th><th>Unrecorded</th></tr></thead>
+      <thead><tr><th>Unit</th><th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th><th>Sick</th><th>Suspended</th><th>Under Disciplinary</th><th>Working</th><th>On Duty</th><th>On Course</th><th>Unrecorded</th></tr></thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
         <tr><td><?= e($r['unit_name']) ?></td><td><?= $r['total'] ?></td><td><?= $r['present'] ?></td>
           <td><?= $r['awol'] ?></td><td><?= $r['on_leave'] ?></td><td><?= $r['sick'] ?></td>
           <td><?= $r['suspended'] ?></td><td><?= $r['disciplinary'] ?></td>
+          <td><strong><?= working_strength($r) ?></strong></td>
           <td><?= $r['on_duty'] ?></td><td><?= $r['on_course'] ?></td><td><?= $r['unrecorded'] ?></td></tr>
         <?php endforeach; ?>
         <tr style="font-weight:700;background:var(--navy-50)">
           <td>TOTAL</td><td><?= $tot['total'] ?></td><td><?= $tot['present'] ?></td>
           <td><?= $tot['awol'] ?></td><td><?= $tot['on_leave'] ?></td><td><?= $tot['sick'] ?></td>
           <td><?= $tot['suspended'] ?></td><td><?= $tot['disciplinary'] ?></td>
+          <td><?= working_strength($tot) ?></td>
           <td><?= $tot['on_duty'] ?></td><td><?= $tot['on_course'] ?></td><td><?= $tot['unrecorded'] ?></td>
         </tr>
       </tbody>

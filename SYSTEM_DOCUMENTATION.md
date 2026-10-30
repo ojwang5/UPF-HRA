@@ -469,9 +469,9 @@ The dashboard provides a real-time strength summary scoped to the logged-in user
 
 ### 7.3 Personnel Management
 
-**File:** `public/employees.php`, `public/export-personnel.php`  
+**File:** `public/employees.php`, `public/export-personnel.php`, `public/phone-validation.php`
 **Access:** All roles (min rank 1)  
-**URL:** `/employees.php`
+**URLs:** `/employees.php`, `/phone-validation.php`
 
 Central register of all police personnel. Each record stores biography, rank, assignment, contact, and duty directorate.
 
@@ -502,6 +502,9 @@ See [§7.14 Bulk Import](#714-bulk-import).
 
 #### Export
 A separate export page (`/export-personnel.php`) generates a printable/downloadable personnel list.
+
+#### Phone Validation
+The Phone Validation module checks saved numbers for a valid international format and previews the normalized E.164 number. Command staff can correct a number and save it in normalized format. Ugandan local numbers such as `07XXXXXXXX` are converted to `+2567XXXXXXXX`. Format validation does not verify ownership, whether the SIM is active, or guarantee carrier delivery.
 
 ---
 
@@ -594,6 +597,8 @@ set to 'leave' automatically
 ```
 
 **Leave statuses:** `pending` → `approved` / `rejected`
+
+Leave decision SMS is sent to the personnel phone on file. The Leave SMS Notifications table shows provider delivery status and any reported error code. An Infobip `UNDELIVERABLE_NOT_DELIVERED` / code 32 is a handset delivery failure, not an application-send failure: check that the number belongs to an active handset, the device is powered on and reachable, and the mobile operator permits incoming SMS. The application cannot force delivery when a handset or carrier rejects the message.
 
 ---
 
@@ -947,6 +952,7 @@ workspace/
 │   ├── logout.php                  ← Session destruction + redirect
 │   ├── index.php                   ← Dashboard
 │   ├── employees.php               ← Personnel register
+│   ├── phone-validation.php        ← Personnel phone format validation
 │   ├── bulk-import.php             ← CSV bulk import
 │   ├── export.php                  ← Data export
 │   ├── export-personnel.php        ← Personnel list export

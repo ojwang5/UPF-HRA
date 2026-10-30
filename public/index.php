@@ -85,9 +85,9 @@ $cards = [
   ['suspended',    'Suspended',    'stat-suspended',    '#7c3aed', '#ede9fe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
    'Under suspension order'],
-  ['disciplinary', 'Disciplinary', 'stat-disciplinary', '#dc2626', '#fee2e2',
+  ['disciplinary', 'Under Disciplinary', 'stat-disciplinary', '#dc2626', '#fee2e2',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-   'Facing disciplinary action'],
+   'Facing disciplinary action · counted in working strength'],
   ['on_duty',      'On Duty',      'stat-on_duty',      '#0891b2', '#cffafe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
    'Deployed / operational duty'],
@@ -191,6 +191,10 @@ $cards = [
   <div class="ds-cell">
     <div class="ds-label">Attendance Rate</div>
     <div class="ds-val" style="color:#22c55e"><?= $tot['total'] ? round(($tot['present']/$tot['total'])*100) : 0 ?>%</div>
+  </div>
+  <div class="ds-cell">
+    <div class="ds-label">Working Strength</div>
+    <div class="ds-val" style="color:#0891b2"><?= working_strength($tot) ?></div>
   </div>
   <div class="ds-cell">
     <div class="ds-label">Recorded</div>
@@ -313,7 +317,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
       <thead><tr>
         <th><?= ucfirst($rows[0]['unit_level'] ?? 'Unit') ?></th>
         <th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th>
-        <th>Sick</th><th>Susp.</th><th>Disc.</th>
+        <th>Sick</th><th>Susp.</th><th>Under Disc.</th><th>Working</th>
         <th>On Duty</th><th>On Course</th><th>Deserted</th><th>Unrecorded</th>
       </tr></thead>
       <tbody>
@@ -327,6 +331,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
           <td><?= $r['sick'] ?: '—' ?></td>
           <td><?= $r['suspended'] ? '<span style="color:#7c3aed;font-weight:600">'.$r['suspended'].'</span>' : '—' ?></td>
           <td><?= $r['disciplinary'] ? '<span style="color:#dc2626;font-weight:600">'.$r['disciplinary'].'</span>' : '—' ?></td>
+          <td><span style="color:#0891b2;font-weight:600"><?= working_strength($r) ?></span></td>
           <td><?= $r['on_duty'] ?: '—' ?></td>
           <td><?= $r['on_course'] ?: '—' ?></td>
           <td><?= $r['deserted'] ? '<span style="color:#be185d;font-weight:600">'.$r['deserted'].'</span>' : '—' ?></td>

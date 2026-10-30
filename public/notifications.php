@@ -11,6 +11,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'mark_all') { mark_all_read($user); }
     elseif ($action === 'mark_one') { mark_notification_read((int)$_POST['id'],(int)$user['id']); }
+    elseif ($action === 'delete_one') { delete_notification((int)$_POST['id'],(int)$user['id']); }
+    elseif ($action === 'delete_all') { delete_all_notifications($user); }
     elseif ($action === 'broadcast' && is_superadmin($user)) {
         $title=$_POST['title']??''; $msg=$_POST['message']??''; $aud=$_POST['audience']??'all';
         if ($title && $msg) {
@@ -74,6 +76,12 @@ include __DIR__ . '/../includes/header.php';
       </div>
     </details>
     <?php endif; ?>
+    <!-- Delete all -->
+    <form method="post" style="display:contents" onsubmit="return confirm('Delete all notifications?');">
+  <?= csrf_field() ?>
+      <input type="hidden" name="action" value="delete_all">
+      <button type="submit" class="btn-icon bi-danger" title="Delete all notifications"><?= ICO_REJECT ?></button>
+    </form>
     <!-- Mark all read -->
     <form method="post" style="display:contents">
   <?= csrf_field() ?>
@@ -100,13 +108,20 @@ include __DIR__ . '/../includes/header.php';
         <?php if ($n['link']): ?> · <a href="<?= e($n['link']) ?>">Open →</a><?php endif; ?>
       </div>
     </div>
-    <?php if ($unread): ?>
-    <form method="post" style="display:contents">
-  <?= csrf_field() ?>
-      <input type="hidden" name="action" value="mark_one"><input type="hidden" name="id" value="<?= $n['id'] ?>">
-      <button type="submit" class="btn-icon bi-secondary bi-sm" title="Mark as read" style="align-self:flex-start;margin-top:4px"><?= ICO_SAVE ?></button>
-    </form>
-    <?php endif; ?>
+    <div style="display:flex;gap:6px;align-items:flex-start;margin-top:4px">
+      <?php if ($unread): ?>
+      <form method="post" style="display:contents">
+    <?= csrf_field() ?>
+        <input type="hidden" name="action" value="mark_one"><input type="hidden" name="id" value="<?= $n['id'] ?>">
+        <button type="submit" class="btn-icon bi-secondary bi-sm" title="Mark as read"><?= ICO_SAVE ?></button>
+      </form>
+      <?php endif; ?>
+      <form method="post" style="display:contents" onsubmit="return confirm('Delete this notification?');">
+    <?= csrf_field() ?>
+        <input type="hidden" name="action" value="delete_one"><input type="hidden" name="id" value="<?= $n['id'] ?>">
+        <button type="submit" class="btn-icon bi-danger bi-sm" title="Delete notification"><?= ICO_REJECT ?></button>
+      </form>
+    </div>
   </div>
   <?php endforeach; ?>
 </div>

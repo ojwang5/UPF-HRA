@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            trim($_POST['offence']), $_POST['start_date'], $endDate,
                            trim($_POST['notes'] ?? '') ?: null, $user['id']]);
             log_activity('Opened '.ucfirst($type).' case', 'discipline_case', trim($_POST['case_ref']) ?: '', 0, personnel_label_by_id($pdo, $eid));
-            flash('msg', ucfirst($type).' case opened — daily status will show "'.($type==='disciplinary'?'Disciplinary':'Suspended').'" while open.');
+            flash('msg', ucfirst($type).' case opened — daily status will show "'.($type==='disciplinary'?'Under Disciplinary':'Suspended').'" while open.');
         }
     } elseif ($id && in_array($action, ['close','reinstate'], true)) {
         $chk = $pdo->prepare("SELECT dc.id FROM discipline_cases dc JOIN employees e ON e.id=dc.employee_id
@@ -83,7 +83,7 @@ include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
   <div><h1>Suspension &amp; Disciplinary Cases</h1>
-    <div class="desc"><?= $openSusp ?> open suspensions · <?= $openDisc ?> open disciplinary cases — auto-sets daily status while open</div></div>
+    <div class="desc"><?= $openSusp ?> open suspensions · <?= $openDisc ?> open disciplinary cases — disciplinary officers still count in working strength; suspensions do not</div></div>
   <div class="action-bar">
     <!-- Type filter -->
     <details class="form-panel">
@@ -156,7 +156,7 @@ include __DIR__ . '/../includes/header.php';
           <td style="font-family:monospace;font-size:12px"><?= e($r['service_no']) ?></td>
           <td style="white-space:nowrap"><?= e($r['rank']) ?></td>
           <td><strong><?= e($r['full_name']) ?></strong></td>
-          <td><span class="badge <?= $r['case_type']==='suspension' ? 'badge-suspended' : 'badge-disciplinary' ?>"><?= $r['case_type']==='suspension' ? 'Suspension' : 'Disciplinary' ?></span></td>
+          <td><span class="badge <?= $r['case_type']==='suspension' ? 'badge-suspended' : 'badge-disciplinary' ?>"><?= $r['case_type']==='suspension' ? 'Suspension' : 'Under Disciplinary' ?></span></td>
           <td style="font-family:monospace;font-size:11px"><?= e($r['case_ref'] ?? '—') ?></td>
           <td style="max-width:260px;font-size:12px"><?= e($r['offence']) ?><?= $r['notes'] ? '<br><span class="muted">'.e($r['notes']).'</span>' : '' ?>
               <?php if ($r['outcome']): ?><br><span style="color:#166534">Outcome: <?= e($r['outcome']) ?></span><?php endif; ?></td>
