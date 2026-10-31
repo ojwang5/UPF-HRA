@@ -134,9 +134,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'refresh_sms_status') {
         $n = refresh_leave_sms_delivery($pdo, 50);
-        flash('msg', $n
+        $retry = retry_undeliverable_leave_sms($pdo, 10);
+        $msg = $n
             ? "Delivery status updated for {$n} SMS message".($n === 1 ? '' : 's').'.'
-            : 'No pending SMS delivery status to update.');
+            : 'No pending SMS delivery status to update.';
+        if ($retry['sent'] + $retry['failed'] > 0) {
+            $msg .= " Automatic handset retry: {$retry['sent']} sent, {$retry['failed']} failed.";
+        }
+        flash('msg', $msg);
     } elseif ($action === 'retry_leave_sms') {
         $logId = (int)($_POST['id'] ?? 0);
         $retryStmt = $pdo->prepare("SELECT l.leave_request_id, l.status, l.event_type, l.event_id,

@@ -348,6 +348,91 @@ function migrate(PDO $pdo): void {
     if ($v < 19) {
         _migrate_v19($pdo);
     }
+
+    if ($v < 20) {
+        _migrate_v20($pdo);
+    }
+
+    if ($v < 21) {
+        _migrate_v21($pdo);
+    }
+}
+
+/* ─── v21: course intake and lifecycle statuses ─── */
+function _migrate_v21(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $pdo->exec("
+            CREATE TABLE on_courses_v21 (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id     INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                course_name     TEXT NOT NULL,
+                course_nature   TEXT NOT NULL DEFAULT 'Professional',
+                school          TEXT,
+                place           TEXT,
+                intake          TEXT,
+                start_date      TEXT NOT NULL,
+                end_date        TEXT NOT NULL,
+                duration_days   INTEGER,
+                sponsor         TEXT,
+                status          TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','ongoing','halted','completed')),
+                notes           TEXT,
+                created_by      INTEGER REFERENCES users(id),
+                created_at      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                completed_at    TEXT
+            )
+        ");
+        $pdo->exec("
+            INSERT INTO on_courses_v21
+                (id, employee_id, course_name, course_nature, school, place, intake,
+                 start_date, end_date, duration_days, sponsor, status, notes, created_by,
+                 created_at, completed_at)
+            SELECT id, employee_id, course_name, course_nature, school, place, NULL,
+                   start_date, end_date, duration_days, sponsor,
+                   CASE status
+                       WHEN 'active' THEN CASE WHEN start_date > date('now','localtime') THEN 'pending' ELSE 'ongoing' END
+                       WHEN 'withdrawn' THEN 'halted'
+                       ELSE status
+                   END,
+                   notes, created_by, created_at, completed_at
+            FROM on_courses
+        ");
+        $pdo->exec("DROP TABLE on_courses");
+        $pdo->exec("ALTER TABLE on_courses_v21 RENAME TO on_courses");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_on_courses_status_dates ON on_courses(status, start_date, end_date)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_on_courses_employee_name ON on_courses(employee_id, course_name)");
+        $pdo->exec("PRAGMA user_version = 21");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
+}
+
+/* ─── v20: retry metadata for undeliverable SMS ─── */
+function _migrate_v20(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $cols = array_column($pdo->query("PRAGMA table_info(leave_sms_log)")->fetchAll(), 'name');
+        if (!in_array('retry_count', $cols, true)) {
+            $pdo->exec("ALTER TABLE leave_sms_log ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0");
+        }
+        if (!in_array('last_retry_at', $cols, true)) {
+            $pdo->exec("ALTER TABLE leave_sms_log ADD COLUMN last_retry_at TEXT");
+        }
+        if (!in_array('failure_code', $cols, true)) {
+            $pdo->exec("ALTER TABLE leave_sms_log ADD COLUMN failure_code INTEGER");
+        }
+        if (!in_array('failure_reason', $cols, true)) {
+            $pdo->exec("ALTER TABLE leave_sms_log ADD COLUMN failure_reason TEXT");
+        }
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_leave_sms_retry ON leave_sms_log(failure_code, retry_count, response)");
+        $pdo->exec("PRAGMA user_version = 20");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
 }
 
 /* ─── v19: identify individual leave extension SMS events ─── */

@@ -73,7 +73,7 @@ The **MDD Manager System** (Morning Duty Deployment Manager) is a web-based Huma
 │  Icons               │  Inline SVG                  │
 │  Auth                │  PHP sessions + bcrypt       │
 │  Email               │  Pure-PHP SMTP (no Composer) │
-│  SMS                 │  Africa's Talking / Twilio   │
+│  SMS                 │  Infobip / Africa's Talking  │
 │  Package Manager     │  None (zero dependencies)    │
 │  Port                │  5000                        │
 └──────────────────────┴──────────────────────────────┘
@@ -206,7 +206,7 @@ In addition to geography, UPF is organised into functional directorates:
 └─────────────────────────────────────────────────────┘
 ```
 
-**Default Directorates (15):** Operations, Criminal Investigations, Special Branch, Traffic, Fire Brigade, Marine, Administration, Finance, Human Resource, Training, Logistics, Media, Legal, ICT, Other.
+**Default Directorates (15):** Operations, Criminal Investigations, Special Branch, Traffic, Fire Brigade, Marine, Administration, Finance, Human Resource, Training, Logistics, Media, Legal, ICT, Other. Human Resource (HR) is the HRM directorate for undeployment management; Human Resource Development (HRD) manages course and training records.
 
 **Default Operations Units (9):** General Duty, Flying Squad, Anti-Stock Theft, Anti-Terrorism, Border Security, K9 Unit, Rapid Response, VIP Protection, Community Policing.
 
@@ -286,7 +286,7 @@ Unit Cmd          → sees only their directorate + unit's personnel (any region
 
 ## 6. Database Schema
 
-The database file is stored at `data/mdd.sqlite`. Migration is handled automatically by `includes/db.php` using `PRAGMA user_version` (currently v12).
+The database file is stored at `data/mdd.sqlite`. Migration is handled automatically by `includes/db.php` using `PRAGMA user_version` (currently v21).
 
 ### Entity Relationship Diagram
 
@@ -500,6 +500,9 @@ Personnel are always listed in **UPF seniority order** (IGP first, CIVILIAN last
 #### Bulk Import
 See [§7.14 Bulk Import](#714-bulk-import).
 
+#### Undeployment and training records
+Undeployment records are managed only by the Human Resource (HR/HRM) directorate, while existing personnel region/directorate assignments remain unchanged. Human Resource Development (HRD) manages course enrollments and training registries. Course records track course type, training school, intake, dates, status (`pending`, `ongoing`, `halted`, or `completed`), and the employee's current working region/directorate. Ongoing courses can drive the daily "On Course" status.
+
 #### Export
 A separate export page (`/export-personnel.php`) generates a printable/downloadable personnel list.
 
@@ -598,7 +601,7 @@ set to 'leave' automatically
 
 **Leave statuses:** `pending` → `approved` / `rejected`
 
-Leave decision SMS is sent to the personnel phone on file. The Leave SMS Notifications table shows provider delivery status and any reported error code. An Infobip `UNDELIVERABLE_NOT_DELIVERED` / code 32 is a handset delivery failure, not an application-send failure: check that the number belongs to an active handset, the device is powered on and reachable, and the mobile operator permits incoming SMS. The application cannot force delivery when a handset or carrier rejects the message.
+Leave decision SMS is sent to the personnel phone on file. The Leave SMS Notifications table shows provider delivery status, any reported error code, a plain-language failure reason, and the recommended action. An Infobip `UNDELIVERABLE_NOT_DELIVERED` / code 32 or `ABSENT_SUBSCRIBER` / code 9 is treated as a temporary handset/network failure. When an authorized user refreshes SMS delivery status, the system makes one automatic retry after a 30-minute cooldown, reusing the original log row so the leave decision keeps a single delivery record. Invalid phone numbers are not retried blindly. Permanent failures such as rejected, expired, or invalid destinations require the number or sender configuration to be corrected before a manual retry.
 
 ---
 
@@ -763,7 +766,7 @@ Broadcast messages to personnel via email and/or SMS. Powered by the system's bu
 
 **Channels:** Email, SMS, Both
 
-**Configuration** (via Settings): SMTP host/port/credentials, SMS provider (Africa's Talking, Twilio, or Vonage), API keys.
+**Configuration** (via Settings): SMTP host/port/credentials, SMS provider (Infobip, Africa's Talking, Twilio, or Vonage), API keys.
 
 ---
 
@@ -780,7 +783,7 @@ System configuration stored as key-value pairs in the `settings` table.
 | Category | Setting |
 |----------|---------|
 | **Email** | SMTP host, port, username, password, from address, from name |
-| **SMS** | Provider (Africa's Talking / Twilio / Vonage), API key, sender ID |
+| **SMS** | Provider (Infobip / Africa's Talking / Twilio / Vonage), API key, sender ID |
 | **System** | Organisation name, timezone, date format |
 
 ---

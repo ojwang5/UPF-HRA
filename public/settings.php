@@ -8,6 +8,7 @@ $user = require_role(['superadmin']);
 $page = 'settings';
 $page_title = 'System Settings';
 $pdo = db();
+$configuredGroqModel = groq_model();
 
 /* ── POST: save settings ── */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -62,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($action === 'save_groq') {
         $model = trim($_POST['groq_model'] ?? '');
-        if ($model === '') $model = GROQ_DEFAULT_MODEL;
+        if ($model === '') $model = groq_model();
         save_setting('groq_model', $model);
         // Only update the key when a new one is typed (never clear it on re-save).
         if (trim($_POST['groq_api_key'] ?? '') !== '') {
@@ -363,12 +364,13 @@ include __DIR__ . '/../includes/header.php';
           <label>Model</label>
           <select name="groq_model">
             <?php foreach (GROQ_MODELS as $mid => $mlabel): ?>
-              <option value="<?= e($mid) ?>" <?= get_setting('groq_model', GROQ_DEFAULT_MODEL) === $mid ? 'selected' : '' ?>><?= e($mlabel) ?></option>
+              <option value="<?= e($mid) ?>" <?= $configuredGroqModel === $mid ? 'selected' : '' ?>><?= e($mlabel) ?></option>
             <?php endforeach; ?>
-            <?php $custom = get_setting('groq_model', GROQ_DEFAULT_MODEL); if (!isset(GROQ_MODELS[$custom])): ?>
+            <?php $custom = $configuredGroqModel; if (!isset(GROQ_MODELS[$custom])): ?>
               <option value="<?= e($custom) ?>" selected><?= e($custom) ?> (custom)</option>
             <?php endif; ?>
           </select>
+          <small class="muted">If this model is unavailable to your Groq key, the assistant checks available chat models and retries with a supported option.</small>
         </div>
       </div>
       <div style="margin:4px 0 12px">

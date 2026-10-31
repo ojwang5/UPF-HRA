@@ -1,11 +1,16 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
-$user = require_min_rank('post_commander');
+require_once __DIR__ . '/../includes/communications.php';
+$user = require_login();
 $pdo  = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
 
 $module = $_GET['module'] ?? '';
+if ($module !== 'courses' && role_rank($user['role']) < role_rank('post_commander')) {
+    http_response_code(403);
+    exit('Access denied.');
+}
 $today  = date('Y-m-d');
 
 /** Open a CSV download handle with a UTF-8 BOM (Excel-friendly). */
@@ -18,6 +23,8 @@ function csv_begin(string $filename) {
 }
 
 if ($module === 'courses') {
+    $courseWhere = is_hrd_user($user) ? '1=1' : $scopeW;
+    $courseParams = is_hrd_user($user) ? [] : $scopeP;
     $stmt = $pdo->prepare("SELECT oc.*, e.service_no, e.rank, e.full_name, e.directorate, e.unit,
                                   rg.name AS region_name, dv.name AS division_name,
                                   st.name AS station_name, pt.name AS post_name
@@ -27,17 +34,17 @@ if ($module === 'courses') {
                            LEFT JOIN divisions dv ON dv.id=e.division_id
                            LEFT JOIN stations  st ON st.id=e.station_id
                            LEFT JOIN posts     pt ON pt.id=e.post_id
-                           WHERE $scopeW
+                           WHERE $courseWhere
                            ORDER BY oc.start_date DESC, " . personnel_order_sql('e') . "
                            LIMIT 5000");
-    $stmt->execute($scopeP);
+    $stmt->execute($courseParams);
     $out = csv_begin('courses-'.$today.'.csv');
-    fputcsv($out, ['service_no','rank','full_name','course_name','course_nature','school','place',
+    fputcsv($out, ['service_no','rank','full_name','course_name','course_nature','school','place','intake',
                    'start_date','end_date','duration_days','sponsor','status','notes',
                    'directorate','unit','region','division','station','post']);
     foreach ($stmt as $r) {
         fputcsv($out, [$r['service_no'],$r['rank'],$r['full_name'],$r['course_name'],$r['course_nature'],
-                       $r['school'],$r['place'],$r['start_date'],$r['end_date'],$r['duration_days'],
+                       $r['school'],$r['place'],$r['intake'],$r['start_date'],$r['end_date'],$r['duration_days'],
                        $r['sponsor'],$r['status'],$r['notes'],$r['directorate'],$r['unit'],
                        $r['region_name'],$r['division_name'],$r['station_name'],$r['post_name']]);
     }

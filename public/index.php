@@ -208,7 +208,7 @@ $cards = [
     <div class="ds-label">Flags (AWOL+Susp+Disc+Des)</div>
     <div class="ds-val" style="color:#ef4444"><?= $tot['awol'] + $tot['suspended'] + $tot['disciplinary'] + $tot['deserted'] ?></div>
   </div>
-  <div class="ds-cell" style="border-right:none">
+  <div class="ds-cell">
     <div class="ds-label">On Course</div>
     <div class="ds-val" style="color:#059669"><?= $tot['on_course'] ?></div>
   </div>
@@ -441,16 +441,28 @@ foreach ($chartData as [$ck, $cl, $cc]) {
 .cmp-row-val{width:34px;flex-shrink:0;font-weight:700;font-size:12px;color:var(--navy-800);text-align:right}
 /* Summary strip */
 .dash-summary{
-  display:flex;flex-wrap:wrap;background:var(--card);
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--card);
   border:1px solid var(--border);border-radius:10px;
   margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow-sm);
 }
-.ds-cell{flex:1;min-width:110px;padding:12px 16px;border-right:1px solid var(--border);text-align:center}
-.ds-label{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:600;margin-bottom:4px}
-.ds-val{font-size:22px;font-weight:700;color:var(--navy-800);line-height:1}
-@media(max-width:768px){
-  .ds-cell{min-width:calc(50% - 1px);flex-basis:50%}
+.ds-cell{min-width:0;padding:12px 10px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center}
+.ds-cell:nth-child(5n){border-right:none}
+.ds-cell:nth-child(n+6){border-bottom:none}
+.ds-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;line-height:1.3;color:var(--muted);font-weight:600;margin-bottom:5px;overflow-wrap:anywhere}
+.ds-val{font-size:22px;font-weight:700;color:var(--navy-800);line-height:1.1}
+@media(max-width:1000px){
+  .dash-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ds-cell:nth-child(5n){border-right:1px solid var(--border)}
+  .ds-cell:nth-child(3n){border-right:none}
+  .ds-cell:nth-child(n+6){border-bottom:1px solid var(--border)}
+  .ds-cell:nth-child(n+7){border-bottom:none}
+}
+@media(max-width:600px){
+  .dash-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ds-cell:nth-child(3n){border-right:1px solid var(--border)}
   .ds-cell:nth-child(2n){border-right:none}
+  .ds-cell:nth-child(n+7){border-bottom:1px solid var(--border)}
+  .ds-cell:nth-child(n+9){border-bottom:none}
 }
 </style>
 

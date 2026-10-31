@@ -217,6 +217,71 @@ function parse_infobip_delivery_report(array $result): array {
     ];
 }
 
+/**
+ * Classify a provider delivery failure so callers can decide whether a retry
+ * is worthwhile and show a useful explanation to the user.
+ */
+function sms_failure_details(?int $code, string $statusName = '', string $description = ''): array {
+    $name = strtoupper(trim($statusName));
+    $desc = strtoupper(trim($description));
+    $code = ($code !== null && $code > 0) ? $code : null;
+
+    if ($code === 32 || str_contains($name, 'UNDELIVERABLE_NOT_DELIVERED')
+        || (str_contains($desc, 'HANDSET') && str_contains($desc, 'ERROR'))) {
+        return [
+            'code'      => 32,
+            'category'  => 'handset',
+            'retriable' => true,
+            'reason'    => 'The handset was unreachable. It may be switched off, out of network coverage, or have a full inbox.',
+            'action'    => 'The system will retry once automatically. If it still fails, confirm the number with the officer or ask them to switch on the phone.',
+        ];
+    }
+    if ($code === 9 || str_contains($name, 'ABSENT_SUBSCRIBER')) {
+        return [
+            'code'      => 9,
+            'category'  => 'subscriber_unavailable',
+            'retriable' => true,
+            'reason'    => 'The subscriber was temporarily unavailable on the mobile network.',
+            'action'    => 'The system will retry once automatically. If it still fails, confirm the number is active.',
+        ];
+    }
+    if ($code === 10 || str_contains($name, 'EXPIRED')) {
+        return [
+            'code'      => 10,
+            'category'  => 'expired',
+            'retriable' => false,
+            'reason'    => 'The network could not deliver the message before it expired.',
+            'action'    => 'Check that the handset is reachable, then retry manually.',
+        ];
+    }
+    if (in_array($code, [11, 12, 13], true) || str_starts_with($name, 'REJECTED')) {
+        return [
+            'code'      => $code,
+            'category'  => 'rejected',
+            'retriable' => false,
+            'reason'    => 'The mobile network rejected the message. This is often caused by DND, an invalid route, or an invalid sender.',
+            'action'    => 'Verify the number, sender ID and provider account permissions before retrying.',
+        ];
+    }
+    if (str_starts_with($name, 'UNDELIVERABLE')) {
+        return [
+            'code'      => $code,
+            'category'  => 'undeliverable',
+            'retriable' => false,
+            'reason'    => $description !== '' ? $description : 'The mobile network reported the message as undeliverable.',
+            'action'    => 'Confirm the number with the officer before retrying.',
+        ];
+    }
+
+    return [
+        'code'      => $code,
+        'category'  => 'unknown',
+        'retriable' => false,
+        'reason'    => $description !== '' ? $description : ($statusName !== '' ? $statusName : 'The provider reported a delivery failure.'),
+        'action'    => 'Check the provider delivery report before retrying.',
+    ];
+}
+
 function _sms_africas_talking(string $to, string $message, string $apiKey, string $username, string $from): array {
     $url  = 'https://api.africastalking.com/version1/messaging';
     $data = http_build_query([

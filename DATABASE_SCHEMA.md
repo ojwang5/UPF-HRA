@@ -2,8 +2,8 @@
 
 **Engine:** SQLite (WAL mode, `PRAGMA foreign_keys = ON`)
 **Database file:** `data/mdd.sqlite`
-**Schema source of truth:** `includes/db.php` (`init_schema()` + `migrate()`, migrations v1 → v19)
-**Current schema version:** 19 (`PRAGMA user_version`)
+**Schema source of truth:** `includes/db.php` (`init_schema()` + `migrate()`, migrations v1 → v21)
+**Current schema version:** 21 (`PRAGMA user_version`)
 
 ---
 
@@ -28,7 +28,7 @@
 | `transfers.status` | `pending`, `approved`, `rejected`, `executed`, `cancelled` | ✅ |
 | `transfers.report_status` | `pending`, `reported` | ✅ |
 | `special_assignments.status` | `active`, `completed`, `cancelled` | ✅ |
-| `on_courses.status` | `active`, `completed`, `withdrawn` | ✅ |
+| `on_courses.status` | `pending`, `ongoing`, `halted`, `completed` | ✅ |
 | `discipline_cases.case_type` | `suspension`, `disciplinary` | ✅ |
 | `discipline_cases.status` | `open`, `closed`, `reinstated` | ✅ |
 | `undeployments.status` | `active`, `redeployed` | ✅ |
@@ -312,9 +312,13 @@ erDiagram
 | response | TEXT | Provider result or failure reason |
 | provider_ref | TEXT | Provider message ID (v18) |
 | provider_status | TEXT | Provider delivery status (v18) |
+| failure_code | INTEGER | Numeric provider failure code (v20); e.g. `32` for handset failure |
+| failure_reason | TEXT | Human-readable failure reason and recommended action (v20) |
+| retry_count | INTEGER | NOT NULL DEFAULT `0`; automatic retry attempts (v20) |
+| last_retry_at | TEXT | Timestamp of the last automatic/manual retry decision (v20) |
 | sent_at | TEXT | NOT NULL |
 
-**Indexes:** `idx_leave_sms_request`, `idx_leave_sms_employee` (v17); `idx_leave_sms_event` on `(event_type, event_id)` (v19)
+**Indexes:** `idx_leave_sms_request`, `idx_leave_sms_employee` (v17); `idx_leave_sms_event` on `(event_type, event_id)` (v19); `idx_leave_sms_retry` on `(failure_code, retry_count, response)` (v20)
 
 #### `leave_adjustments`
 | Column | Type | Constraints |
@@ -424,14 +428,15 @@ erDiagram
 | id | INTEGER | PK AUTOINCREMENT |
 | employee_id | INTEGER | NOT NULL, FK → `employees.id` **ON DELETE CASCADE** |
 | course_name | TEXT | NOT NULL — **free text**, not FK to `courses` |
-| course_nature | TEXT | NOT NULL DEFAULT `'Professional'` |
+| course_nature | TEXT | Course type; NOT NULL DEFAULT `'Professional'` |
 | school | TEXT | — **free text**, not FK to `training_schools` |
 | place | TEXT | |
+| intake | TEXT | Course intake / cohort |
 | start_date | TEXT | NOT NULL |
 | end_date | TEXT | NOT NULL |
 | duration_days | INTEGER | |
 | sponsor | TEXT | |
-| status | TEXT | NOT NULL DEFAULT `'active'`, CHECK (`active`,`completed`,`withdrawn`) |
+| status | TEXT | NOT NULL DEFAULT `'pending'`, CHECK (`pending`,`ongoing`,`halted`,`completed`) |
 | notes | TEXT | |
 | created_by | INTEGER | FK → `users.id` |
 | created_at | TEXT | DEFAULT `datetime('now','localtime')` |
@@ -641,6 +646,8 @@ Known keys: `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from_email
 | v17 | Leave SMS notification log |
 | v18 | Provider message references and delivery statuses for leave SMS |
 | v19 | Extension event IDs for distinct leave extension SMS notifications |
+| v20 | Leave SMS failure codes, reasons, and automatic retry metadata |
+| v21 | Course intake field and pending/ongoing/halted/completed lifecycle statuses |
 
 ---
 

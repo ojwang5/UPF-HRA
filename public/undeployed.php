@@ -1,11 +1,13 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
-$user = require_min_rank('station_commander');
+$user = require_login();
+if (!is_hrm_user($user)) { http_response_code(403); exit('Access denied.'); }
 $page = 'undeployed';
 $page_title = 'Undeployed Personnel';
 $pdo = db();
-[$scopeW, $scopeP] = scope_where($user, 'e');
+$scopeW = '1=1';
+$scopeP = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';

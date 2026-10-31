@@ -154,6 +154,102 @@ function send_leave_status_sms(PDO $pdo, int $leaveRequestId, string $status, st
 }
 
 /**
+ * Retry recent handset/network delivery failures once. Reuses the existing log
+ * row so the leave decision keeps a single delivery record.
+ *
+ * @return array{attempted:int,sent:int,failed:int}
+ */
+function retry_undeliverable_leave_sms(PDO $pdo, int $limit = 10): array {
+    $result = ['attempted' => 0, 'sent' => 0, 'failed' => 0];
+    if (!sms_configured()) return $result;
+
+    $limit = max(1, min(50, $limit));
+    $stmt = $pdo->prepare("SELECT l.*, lr.leave_type, lr.end_date, lr.status AS leave_status,
+                                  e.service_no, e.rank, e.full_name, e.phone,
+                                  le.status AS extension_status, le.new_end_date
+                           FROM leave_sms_log l
+                           JOIN leave_requests lr ON lr.id = l.leave_request_id
+                           JOIN employees e ON e.id = l.employee_id
+                           LEFT JOIN leave_extensions le ON l.event_type = 'extension' AND le.id = l.event_id
+                           WHERE l.provider = 'infobip'
+                             AND l.response LIKE 'undelivered:%'
+                             AND l.failure_code IN (9, 32)
+                             AND l.retry_count < 1
+                             AND (l.last_retry_at IS NULL OR l.last_retry_at <= datetime('now','localtime','-30 minutes'))
+                             AND (
+                                 (l.event_type = 'leave' AND lr.status = l.status)
+                                 OR (l.event_type = 'extension' AND le.status = l.status)
+                             )
+                             AND NOT EXISTS (
+                                 SELECT 1 FROM leave_sms_log newer
+                                 WHERE newer.leave_request_id = l.leave_request_id
+                                   AND newer.status = l.status
+                                   AND newer.event_type = l.event_type
+                                   AND newer.event_id IS l.event_id
+                                   AND newer.id > l.id
+                                   AND newer.response = 'ok'
+                             )
+                           ORDER BY l.id ASC LIMIT {$limit}");
+    $stmt->execute();
+    $rows = $stmt->fetchAll();
+    if (!$rows) return $result;
+
+    $upd = $pdo->prepare("UPDATE leave_sms_log
+                          SET phone = ?, message = ?, response = ?, provider_ref = ?, provider_status = ?,
+                              sent_at = ?, retry_count = retry_count + 1, last_retry_at = datetime('now','localtime'),
+                              failure_code = NULL, failure_reason = NULL
+                          WHERE id = ?");
+    $mark = $pdo->prepare("UPDATE leave_sms_log
+                           SET last_retry_at = datetime('now','localtime'), failure_reason = ?
+                           WHERE id = ?");
+
+    foreach ($rows as $row) {
+        $phone = trim((string)($row['phone'] ?? ''));
+        $normalized = normalize_sms_phone($phone);
+        if ($normalized === null) {
+            $mark->execute([
+                'Automatic retry could not run because no valid phone number is on record.',
+                (int)$row['id'],
+            ]);
+            $result['failed']++;
+            continue;
+        }
+
+        $extensionEnd = $row['event_type'] === 'extension' ? (string)($row['new_end_date'] ?? '') : null;
+        $message = leave_sms_message($row, (string)$row['status'], (string)$row['event_type'], $extensionEnd);
+        $res = send_sms($normalized, $message);
+        $result['attempted']++;
+
+        if (!empty($res['ok'])) {
+            $result['sent']++;
+            $response = 'ok';
+        } else {
+            $result['failed']++;
+            $response = (string)($res['error'] ?? 'failed');
+        }
+
+        $upd->execute([
+            $normalized,
+            $message,
+            $response,
+            $res['provider_ref'] ?? null,
+            $res['provider_status'] ?? null,
+            date('c'),
+            (int)$row['id'],
+        ]);
+
+        log_activity(
+            'Automatic leave SMS retry ' . (!empty($res['ok']) ? 'sent' : 'failed'),
+            'leave',
+            trim((string)$row['rank'] . ' ' . (string)$row['full_name']),
+            (int)$row['leave_request_id'],
+            $normalized . (!empty($res['error']) ? ' — ' . $res['error'] : '')
+        );
+    }
+    return $result;
+}
+
+/**
  * Refresh delivery status for recent Infobip leave SMS messages.
  * Returns the number of log rows whose status was updated.
  */
@@ -161,13 +257,7 @@ function refresh_leave_sms_delivery(PDO $pdo, int $limit = 25): int {
     if (!sms_configured() || sms_provider() !== 'infobip') return 0;
 
     $limit = max(1, min(100, $limit));
-    $pdo->exec("UPDATE leave_sms_log
-                SET response = 'undelivered: ' || provider_status
-                WHERE provider = 'infobip' AND response = 'ok'
-                  AND (UPPER(provider_status) LIKE 'UNDELIVERABLE%'
-                    OR UPPER(provider_status) LIKE 'EXPIRED%'
-                    OR UPPER(provider_status) LIKE 'REJECTED%')");
-    $stmt = $pdo->prepare("SELECT id, provider_ref, provider_status, response
+    $stmt = $pdo->prepare("SELECT id, provider_ref, provider_status, response, failure_code, failure_reason
                            FROM leave_sms_log
                            WHERE provider = 'infobip'
                              AND provider_ref IS NOT NULL AND provider_ref <> ''
@@ -179,15 +269,16 @@ function refresh_leave_sms_delivery(PDO $pdo, int $limit = 25): int {
                                   AND UPPER(provider_status) NOT LIKE 'EXPIRED%'
                                   AND UPPER(provider_status) NOT LIKE 'REJECTED%')
                                  OR (response LIKE 'undelivered:%'
-                                     AND UPPER(provider_status) LIKE 'UNDELIVERABLE%'
-                                     AND UPPER(provider_status) NOT LIKE '%(CODE %')
+                                     AND (failure_code IS NULL OR failure_reason IS NULL))
                              )
                            ORDER BY id DESC LIMIT {$limit}");
     $stmt->execute();
     $rows = $stmt->fetchAll();
     if (!$rows) return 0;
 
-    $upd = $pdo->prepare("UPDATE leave_sms_log SET provider_status = ?, response = ? WHERE id = ?");
+    $upd = $pdo->prepare("UPDATE leave_sms_log
+                          SET provider_status = ?, response = ?, failure_code = ?, failure_reason = ?
+                          WHERE id = ?");
     $updated = 0;
     foreach ($rows as $row) {
         $state = sms_delivery_status((string)$row['provider_ref'], 'infobip');
@@ -199,12 +290,28 @@ function refresh_leave_sms_delivery(PDO $pdo, int $limit = 25): int {
         if (!empty($state['code'])) {
             $newStatus .= ' (code ' . (int)$state['code'] . ')';
         }
-        $response  = 'ok';
+
+        $failureCode = null;
+        $failureReason = null;
+        $response = 'ok';
         if (leave_sms_delivery_failed($newStatus)) {
-            $response = 'undelivered: ' . $newStatus . ($desc !== '' ? ' — ' . $desc : '');
+            $failure = sms_failure_details(
+                isset($state['code']) ? (int)$state['code'] : null,
+                $name,
+                $desc
+            );
+            $failureCode = $failure['code'];
+            $failureReason = trim($failure['reason'] . ' ' . $failure['action']);
+            $response = 'undelivered: ' . $newStatus
+                . ($desc !== '' ? ' — ' . $desc : '')
+                . ' — ' . $failure['reason'];
         }
-        if ($newStatus !== (string)$row['provider_status'] || $response !== (string)$row['response']) {
-            $upd->execute([$newStatus, $response, (int)$row['id']]);
+
+        if ($newStatus !== (string)$row['provider_status']
+            || $response !== (string)$row['response']
+            || (string)$failureCode !== (string)$row['failure_code']
+            || (string)$failureReason !== (string)$row['failure_reason']) {
+            $upd->execute([$newStatus, $response, $failureCode, $failureReason, (int)$row['id']]);
             $updated++;
         }
     }

@@ -21,6 +21,7 @@ function is_hrd_user(array $user): bool {
 
 function is_signal_user(array $user): bool {
     if (($user['role'] ?? '') === 'superadmin') return true;
+    if (($user['role'] ?? '') === 'signal_incharge') return true;
     $uc = strtoupper((string)($user['unit_code'] ?? ''));
     $un = strtolower((string)($user['unit_name'] ?? ''));
     $dc = strtoupper((string)($user['directorate_code'] ?? ''));
@@ -29,6 +30,39 @@ function is_signal_user(array $user): bool {
         || in_array($dc, ['SIG', 'SIGNAL'], true)
         || str_contains($un, 'signal')
         || str_contains($dn, 'signal');
+}
+
+function is_signal_incharge(array $user): bool {
+    return ($user['role'] ?? '') === 'signal_incharge';
+}
+
+/** Target types a Signaler Incharge may post to, mapped to their attached ID. */
+function comm_incharge_targets(array $user): array {
+    $targets = [];
+    if ((int)($user['region_id'] ?? 0) > 0) {
+        $targets['region'] = (int)$user['region_id'];
+    }
+    if ((int)($user['directorate_id'] ?? 0) > 0) {
+        $targets['directorate'] = (int)$user['directorate_id'];
+    }
+    if ((int)($user['unit_id'] ?? 0) > 0) {
+        $targets['unit'] = (int)$user['unit_id'];
+    }
+    return $targets;
+}
+
+function comm_incharge_target_allowed(array $user, string $type, ?int $id): bool {
+    if (!is_signal_incharge($user)) return true;
+    $targets = comm_incharge_targets($user);
+    return isset($targets[$type]) && (int)$targets[$type] === (int)$id;
+}
+
+function comm_incharge_employee_allowed(PDO $pdo, array $user, int $employeeId): bool {
+    if (!is_signal_incharge($user)) return true;
+    [$where, $params] = scope_where($user, 'e');
+    $stmt = $pdo->prepare("SELECT 1 FROM employees e WHERE e.id=? AND ({$where})");
+    $stmt->execute(array_merge([$employeeId], $params));
+    return (bool)$stmt->fetchColumn();
 }
 
 /* ─── Inbound message targeting & visibility ─── */
@@ -60,7 +94,8 @@ function comm_target_label(PDO $pdo, string $type, ?int $id, ?string $role = nul
 
 /** SQL predicate + params for messages visible to a non-signal user. */
 function comm_visibility_where(array $user): array {
-    $parts = ["m.target_type='all'", 'm.sender_id=?'];
+    $parts = is_signal_incharge($user) ? [] : ["m.target_type='all'"];
+    $parts[] = 'm.sender_id=?';
     $params = [(int)$user['id']];
 
     $scope = [
@@ -153,10 +188,10 @@ function comm_message_tracking(PDO $pdo, int $messageId, array $message): array 
 }
 
 function comm_can_view_message(array $user, array $message): bool {
-    if (is_signal_user($user)) return true;
+    if (is_signal_user($user) && !is_signal_incharge($user)) return true;
     if ((int)($message['sender_id'] ?? 0) === (int)$user['id']) return true;
     $type = (string)($message['target_type'] ?? 'all');
-    if ($type === 'all') return true;
+    if ($type === 'all') return !is_signal_incharge($user);
     if ($type === 'role') return (string)($message['target_role'] ?? '') === (string)($user['role'] ?? '');
     $value = match ($type) {
         'region'      => $user['region_id']      ?? null,
@@ -177,7 +212,7 @@ function comm_can_view_message(array $user, array $message): bool {
  */
 function inbound_messages_for(array $user, int $limit = 100, bool $unreadOnly = false, bool $allInbox = false): array {
     $db = db();
-    if ($allInbox && is_signal_user($user)) {
+    if ($allInbox && is_signal_user($user) && !is_signal_incharge($user)) {
         $where = '1=1';
         $params = [];
     } else {

@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
-$user = require_min_rank('station_commander');
+require_once __DIR__ . '/../includes/communications.php';
+$user = require_login();
 $pdo  = db();
 [$scopeW, $scopeP] = scope_where($user, 'e');
 
@@ -14,11 +15,13 @@ $MODULES = [
         'columns'  => [
             'service_no'    => 'Required · File/Force No of an active officer in your scope',
             'course_name'   => 'Required · e.g. Junior Staff Course',
-            'course_nature' => 'e.g. Professional, Promotional, Refresher',
+            'course_nature' => 'Course type, e.g. Professional, Promotional, Refresher',
             'school'        => 'School / training school',
             'place'         => 'Place / town',
+            'intake'        => 'Course intake / cohort',
             'start_date'    => 'YYYY-MM-DD',
             'end_date'      => 'YYYY-MM-DD',
+            'status'        => 'pending, ongoing, halted, or completed (default based on start date)',
             'sponsor'       => 'e.g. UPF / Self / Government',
             'notes'         => 'Optional free text',
         ],
@@ -59,7 +62,18 @@ if (!isset($MODULES[$module])) {
     flash('err', 'Unknown import module.');
     header('Location: /index.php'); exit;
 }
+if ($module === 'courses') {
+    if (!is_hrd_user($user)) {
+        http_response_code(403);
+        exit('Only Human Resource Development (HRD) can import course records.');
+    }
+} elseif (role_rank($user['role']) < role_rank('station_commander')) {
+    http_response_code(403);
+    exit('Access denied.');
+}
 $cfg = $MODULES[$module];
+$importScopeW = $module === 'courses' ? '1=1' : $scopeW;
+$importScopeP = $module === 'courses' ? [] : $scopeP;
 
 /* ── Reference data ───────────────────────────────────────────────── */
 $allPosts = $pdo->query("SELECT p.id, p.name, s.name AS sta, d.name AS div, r.name AS reg
@@ -81,7 +95,7 @@ if (isset($_GET['tpl'])) {
     fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
     fputcsv($out, array_keys($cfg['columns']));
     if ($module === 'courses') {
-        fputcsv($out, ['UPF-00001','Junior Staff Course','Promotional','Police Training School Kabalye','Masindi','2026-02-01','2026-05-30','UPF','']);
+        fputcsv($out, ['UPF-00001','Junior Staff Course','Promotional','Police Training School Kabalye','Masindi','2026 Intake 1','2026-02-01','2026-05-30','pending','UPF','']);
     } elseif ($module === 'assignments') {
         fputcsv($out, ['UPF-00001','Election Duty Task Team','Election Duty','Mbale','2026-01-10','2026-01-25','']);
     } else {
@@ -136,30 +150,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
             } else {
                 $es = $pdo->prepare("SELECT id, service_no, rank, full_name, directorate, unit,
                                             region_id, division_id, station_id, post_id
-                                     FROM employees e WHERE e.service_no=? AND e.active=1 AND $scopeW");
-                $es->execute(array_merge([$sno], $scopeP));
+                                     FROM employees e WHERE e.service_no=? AND e.active=1 AND $importScopeW");
+                $es->execute(array_merge([$sno], $importScopeP));
                 $emp = $es->fetch() ?: null;
-                if (!$emp) $rowErrs[] = "No active officer with service_no '{$sno}' found in your scope";
+                if (!$emp) {
+                    $location = $module === 'courses' ? 'in the personnel registry' : 'in your scope';
+                    $rowErrs[] = "No active officer with service_no '{$sno}' found {$location}";
+                }
             }
 
             if ($module === 'courses') {
                 $cname = $cell('course_name');
                 $start = $cell('start_date');
                 $end   = $cell('end_date');
+                $courseStatus = strtolower($cell('status'));
+                if ($courseStatus === '') $courseStatus = $start > date('Y-m-d') ? 'pending' : 'ongoing';
                 if ($cname === '')        $rowErrs[] = 'course_name is required';
                 if (!valid_date($start))  $rowErrs[] = "invalid start_date '{$start}' (use YYYY-MM-DD)";
                 if (!valid_date($end))    $rowErrs[] = "invalid end_date '{$end}' (use YYYY-MM-DD)";
                 if (valid_date($start) && valid_date($end) && $end < $start) $rowErrs[] = 'end_date cannot be before start_date';
+                if (!in_array($courseStatus, ['pending','ongoing','halted','completed'], true)) $rowErrs[] = "invalid status '{$courseStatus}' (use pending, ongoing, halted, or completed)";
 
                 if ($rowErrs) { $results[] = ['err', "Row {$rowNum} [{$sno}]: ".implode('; ', $rowErrs)]; $errors++; continue; }
 
                 $duration = leave_days_between($start, $end);
                 if (!$dryRun) {
-                    $pdo->prepare("INSERT INTO on_courses (employee_id,course_name,course_nature,school,place,start_date,end_date,duration_days,sponsor,status,notes,created_by)
-                                   VALUES (?,?,?,?,?,?,?,?,?,'active',?,?)")
+                    $pdo->prepare("INSERT INTO on_courses (employee_id,course_name,course_nature,school,place,intake,start_date,end_date,duration_days,sponsor,status,notes,created_by,completed_at)
+                                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='completed' THEN ? ELSE NULL END)")
                         ->execute([(int)$emp['id'], $cname, $cell('course_nature') ?: 'Professional',
-                                   $cell('school') ?: null, $cell('place') ?: null, $start, $end, $duration,
-                                   $cell('sponsor') ?: null, $cell('notes') ?: null, $user['id']]);
+                                   $cell('school') ?: null, $cell('place') ?: null, $cell('intake') ?: null,
+                                   $start, $end, $duration, $cell('sponsor') ?: null, $courseStatus,
+                                   $cell('notes') ?: null, $user['id'], $courseStatus, $end]);
                     log_activity('Bulk Import On-Course', 'on_course', $cname, (int)$pdo->lastInsertId(), personnel_label($emp));
                 }
                 $results[] = ['ok', "Row {$rowNum} [{$sno}]: ".e(personnel_label($emp))." → {$cname} ({$duration} days)".($dryRun ? ' <em>[dry run]</em>' : '')];

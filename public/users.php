@@ -56,6 +56,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sid = $sid ?: ($user['station_id']  ? (int)$user['station_id']  : null);
             $pid = $pid ?: ($user['post_id']     ? (int)$user['post_id']     : null);
         }
+
+        // Signaler Incharge accounts are attached to one region, directorate or unit.
+        if ($role === 'signal_incharge') {
+            if (!is_superadmin($user)) {
+                if ((int)($user['unit_id'] ?? 0) > 0) {
+                    $unitId = (int)$user['unit_id'];
+                    $dirId  = (int)($user['directorate_id'] ?? 0) ?: null;
+                    $rid    = null;
+                } elseif ((int)($user['directorate_id'] ?? 0) > 0) {
+                    $dirId  = (int)$user['directorate_id'];
+                    $unitId = null;
+                    $rid    = null;
+                } else {
+                    $rid    = (int)($user['region_id'] ?? 0) ?: $rid;
+                    $dirId  = null;
+                    $unitId = null;
+                }
+            }
+            if ($unitId) {
+                $ownDir = (int)$pdo->query("SELECT directorate_id FROM units WHERE id=$unitId")->fetchColumn();
+                if (!$ownDir) {
+                    flash('err','The selected unit does not exist.'); header('Location:/users.php'); exit;
+                }
+                $dirId = $ownDir;
+            }
+            if (!$rid && !$dirId && !$unitId) {
+                flash('err','Attach the Signaler Incharge account to a region, directorate or unit.');
+                header('Location:/users.php'); exit;
+            }
+            $did = $sid = $pid = null;
+        }
         try {
             $pdo->prepare("INSERT INTO users (username,password_hash,full_name,role,region_id,division_id,station_id,post_id,email,phone,directorate_id,unit_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([$uname, password_hash($pw, PASSWORD_DEFAULT), $fname, $role, $rid, $did, $sid, $pid, $email ?: null, $phone ?: null, $dirId, $unitId]);
@@ -474,6 +505,7 @@ include __DIR__ . '/../includes/header.php';
     else if(r==='station_commander')    show={reg:1,div:1,sta:1,pst:0,unit:0};
     else if(r==='directorate_commander')show={reg:0,div:0,sta:0,pst:0,unit:0};
     else if(r==='unit_commander')       show={reg:0,div:0,sta:0,pst:0,unit:1};
+    else if(r==='signal_incharge')      show={reg:1,div:0,sta:0,pst:0,unit:1};
     Object.entries(show).forEach(function([k,v]){ if(f[k]) f[k].style.display=v?'':'none'; });
     if(f.unit && show.unit) filterUnitsByDir();
   }

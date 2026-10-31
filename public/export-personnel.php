@@ -276,7 +276,8 @@ tr:nth-child(even) td{
 .page-footer{
   margin-top:22px;
   border-top:1px solid #ccc;
-  padding-top:6px;text-align:center;
+  padding-top:6px;
+  text-align:center;
   font-size:8.5px;
   color:#888
 }

@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'That question is too long. Please keep it under ' . ASSISTANT_MAX_MESSAGE_LENGTH . ' characters.';
     } elseif (get_setting('assistant_enabled', '1') === '0') {
         $error = 'The HRAS Assistant is currently switched off by the administrator.';
-    } elseif (!groq_configured()) {
+    } elseif (!assistant_is_greeting($question) && !groq_configured()) {
         $error = 'The HRAS Assistant is not configured yet. Ask your administrator to add the Groq API key under Settings → AI Assistant.';
     } elseif (!assistant_rate_ok($uid)) {
         $error = 'You have asked ' . ASSISTANT_RATE_MAX . ' questions in the last '
@@ -43,12 +43,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($error === '') {
         $clean = assistant_redact($question);
+        if (assistant_is_greeting($clean)) {
+            $reply = 'Hello! How may I help you?';
+            assistant_store_message($uid, 'user', $clean);
+            assistant_store_message($uid, 'assistant', $reply);
+            if ($json) {
+                assistant_json([
+                    'ok'    => true,
+                    'reply' => assistant_format($reply),
+                    'text'  => $reply,
+                ]);
+            }
+            header('Location:/assistant.php'); exit;
+        }
 
-        // Build the context before the question is stored, so the question is
-        // sent once (as the final user message) and not replayed from history.
+        // Build context before storing so the incoming question appears once.
         $messages = assistant_build_context($user, $clean);
         assistant_store_message($uid, 'user', $clean);
-
         $res = groq_chat($messages);
 
         if ($res['ok']) {
@@ -142,10 +153,10 @@ include __DIR__ . '/../includes/header.php';
   <div class="as-chat" id="as-chat">
     <?php if (!$history): ?>
       <div class="as-welcome">
-        <h3>Karibu. How can I help you today?</h3>
+        <h3>Which part of HRAS would you like help with?</h3>
         <p>
-          Ask me how to use any part of the system — personnel, daily status, leave, reports,
-          notifications, users or structure. I answer in plain English and only within your role
+          Tell me the module or task you need help with, such as Personnel, Daily Status,
+          Leave Management, Reports or another part of the system. I answer within your role
           (<strong><?= e($roleLabel) ?></strong>).
         </p>
         <p class="muted" style="font-size:12px">

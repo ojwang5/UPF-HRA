@@ -379,7 +379,7 @@ function derive_auto_statuses(PDO $pdo, string $date, array $scopeEmployees): ar
         $leave[(int)$r['employee_id']] = true;
     }
     $course = [];
-    foreach ($pdo->query("SELECT employee_id FROM on_courses WHERE status='active' AND '$date' BETWEEN start_date AND end_date AND employee_id IN ($in)") as $r) {
+    foreach ($pdo->query("SELECT employee_id FROM on_courses WHERE status='ongoing' AND '$date' BETWEEN start_date AND end_date AND employee_id IN ($in)") as $r) {
         $course[(int)$r['employee_id']] = true;
     }
     $susp = []; $disc = [];

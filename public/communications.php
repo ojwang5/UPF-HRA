@@ -10,6 +10,8 @@ $page = 'communications';
 $page_title = 'Communications';
 $pdo = db();
 $isSignal = is_signal_user($user);
+$isSignalIncharge = is_signal_incharge($user);
+$signalTargets = $isSignalIncharge ? comm_incharge_targets($user) : [];
 [$scopeW, $scopeP] = scope_where($user, 'e');
 
 /* ─────────────────────────── POST actions ─────────────────────────── */
@@ -52,6 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = isset($typeNames[$targetType])
                 ? 'Choose the specific ' . $typeNames[$targetType] . ' this message should go to.'
                 : 'Choose a valid destination for this message.';
+        } elseif ($isSignalIncharge && !comm_incharge_target_allowed($user, $targetType, $targetId ?: null)) {
+            $error = 'You can only dispatch to the region, directorate or unit you are attached to.';
         }
 
         if ($error !== '') {
@@ -98,6 +102,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $recipType = $_POST['recipient_type'] ?? 'all';
         $recipId   = (int)($_POST['recipient_id'] ?? 0) ?: null;
         $channel   = ($_POST['channel'] ?? 'email') === 'sms' ? 'sms' : 'email';
+
+        if ($isSignalIncharge) {
+            $allowedRecipients = ['all', 'region', 'directorate', 'unit', 'employee'];
+            if (!in_array($recipType, $allowedRecipients, true)) {
+                flash('err', 'Signaler Incharge accounts can only send to their attached area or personnel within it.');
+                header('Location: /communications.php?tab=outbound'); exit;
+            }
+            if (in_array($recipType, ['region', 'directorate', 'unit'], true)
+                && !comm_incharge_target_allowed($user, $recipType, $recipId)) {
+                flash('err', 'You can only send to the region, directorate or unit you are attached to.');
+                header('Location: /communications.php?tab=outbound'); exit;
+            }
+            if ($recipType === 'employee' && (!(int)$recipId || !comm_incharge_employee_allowed($pdo, $user, (int)$recipId))) {
+                flash('err', 'That employee is outside your attached area.');
+                header('Location: /communications.php?tab=outbound'); exit;
+            }
+        }
 
         if (!$subject || !$body) {
             flash('err', 'Subject and message body are required.');
@@ -217,15 +238,40 @@ $stations     = $pdo->query("SELECT s.id, s.name, d.name AS division_name FROM s
 $posts        = $pdo->query("SELECT p.id, p.name, s.name AS station_name FROM posts p JOIN stations s ON s.id=p.station_id ORDER BY s.name, p.name")->fetchAll();
 $directorates = $pdo->query("SELECT id, name FROM directorates WHERE active=1 ORDER BY name")->fetchAll();
 $units        = $pdo->query("SELECT u.id, u.name, d.name AS directorate_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.active=1 ORDER BY d.name, u.name")->fetchAll();
-$allUsers     = $pdo->query("SELECT id, full_name, role FROM users ORDER BY full_name")->fetchAll();
+$allUsers     = $isSignalIncharge ? [] : $pdo->query("SELECT id, full_name, role FROM users ORDER BY full_name")->fetchAll();
+
+if ($isSignalIncharge) {
+    $keep = fn(array $rows, string $type) => array_values(array_filter(
+        $rows,
+        fn(array $row) => isset($signalTargets[$type]) && (int)$row['id'] === (int)$signalTargets[$type]
+    ));
+    $regions      = $keep($regions, 'region');
+    $directorates = $keep($directorates, 'directorate');
+    $units        = $keep($units, 'unit');
+    $divisions = $stations = $posts = [];
+}
 
 $empStmt = $pdo->prepare("SELECT id, service_no, full_name, email, phone, rank FROM employees e WHERE e.active=1 AND $scopeW ORDER BY " . personnel_order_sql('e'));
 $empStmt->execute($scopeP);
 $employees = $empStmt->fetchAll();
 
-$history = $isSignal
-    ? $pdo->query("SELECT c.*, u.full_name AS sender_name FROM communications c LEFT JOIN users u ON u.id=c.sender_id ORDER BY c.id DESC LIMIT 100")->fetchAll()
-    : [];
+$history = [];
+if ($isSignal && $isSignalIncharge) {
+    $parts = ['c.sender_id=?'];
+    $params = [(int)$user['id']];
+    foreach ($signalTargets as $targetType => $targetId) {
+        $parts[] = "(c.recipient_type='{$targetType}' AND c.recipient_id=?)";
+        $params[] = (int)$targetId;
+    }
+    $stmt = $pdo->prepare("SELECT c.*, u.full_name AS sender_name FROM communications c
+                           LEFT JOIN users u ON u.id=c.sender_id
+                           WHERE (" . implode(' OR ', $parts) . ")
+                           ORDER BY c.id DESC LIMIT 100");
+    $stmt->execute($params);
+    $history = $stmt->fetchAll();
+} elseif ($isSignal) {
+    $history = $pdo->query("SELECT c.*, u.full_name AS sender_name FROM communications c LEFT JOIN users u ON u.id=c.sender_id ORDER BY c.id DESC LIMIT 100")->fetchAll();
+}
 
 $tabs = ['inbox' => 'Inbox'];
 if ($isSignal) {
@@ -250,7 +296,7 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <div class="action-bar">
     <?php if ($isSignal): ?>
-      <span class="badge badge-present">Signals operator</span>
+      <span class="badge badge-present"><?= $isSignalIncharge ? 'Signaler Incharge' : 'Signals operator' ?></span>
     <?php else: ?>
       <span class="badge badge-leave">Read only</span>
     <?php endif; ?>
@@ -410,15 +456,21 @@ include __DIR__ . '/../includes/header.php';
     <div class="form-row">
       <div class="form-group" style="flex:2"><label>Where should the message go? <span style="color:var(--red)">*</span></label>
         <select name="target_type" id="in-type" onchange="updateInboundTarget()">
+          <?php if (!$isSignalIncharge): ?>
           <option value="all">All personnel</option>
-          <option value="region">A Region</option>
+          <?php endif; ?>
+          <?php if (!$isSignalIncharge || isset($signalTargets['region'])): ?><option value="region">A Region</option><?php endif; ?>
+          <?php if (!$isSignalIncharge): ?>
           <option value="division">A Division</option>
           <option value="station">A Station</option>
           <option value="post">A Post</option>
-          <option value="directorate">A Directorate</option>
-          <option value="unit">A Unit</option>
+          <?php endif; ?>
+          <?php if (!$isSignalIncharge || isset($signalTargets['directorate'])): ?><option value="directorate">A Directorate</option><?php endif; ?>
+          <?php if (!$isSignalIncharge || isset($signalTargets['unit'])): ?><option value="unit">A Unit</option><?php endif; ?>
+          <?php if (!$isSignalIncharge): ?>
           <option value="role">A Role</option>
           <option value="user">A Specific User</option>
+          <?php endif; ?>
         </select>
       </div>
       <div class="form-group" id="in-target-wrap" style="display:none;flex:2">
@@ -482,13 +534,15 @@ include __DIR__ . '/../includes/header.php';
       <div class="form-row">
         <div class="form-group" style="flex:2"><label>Send To</label>
           <select name="recipient_type" id="recip-type" onchange="updateRecipientField()">
-            <option value="all">All Personnel (in my scope)</option>
-            <option value="region">By Region</option>
+            <option value="all">All Personnel (in my <?= $isSignalIncharge ? 'attached area' : 'scope' ?>)</option>
+            <?php if (!$isSignalIncharge || isset($signalTargets['region'])): ?><option value="region">By Region</option><?php endif; ?>
+            <?php if (!$isSignalIncharge): ?>
             <option value="division">By Division</option>
             <option value="station">By Station</option>
             <option value="post">By Post</option>
-            <option value="directorate">By Directorate</option>
-            <option value="unit">By Unit</option>
+            <?php endif; ?>
+            <?php if (!$isSignalIncharge || isset($signalTargets['directorate'])): ?><option value="directorate">By Directorate</option><?php endif; ?>
+            <?php if (!$isSignalIncharge || isset($signalTargets['unit'])): ?><option value="unit">By Unit</option><?php endif; ?>
             <option value="employee">Individual Employee</option>
           </select>
         </div>

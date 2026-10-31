@@ -13,15 +13,16 @@ require_once __DIR__ . '/mailer.php';
  * ═══════════════════════════════════════════════════════════════════ */
 
     const GROQ_API_BASE       = 'https://api.groq.com/openai/v1';
-const GROQ_DEFAULT_MODEL  = 'llama-3.1-8b-instant';
+const GROQ_DEFAULT_MODEL  = 'llama-3.3-70b-versatile';
 const GROQ_MAX_TOKENS     = 900;
 const GROQ_TEMPERATURE    = 0.2;
 
 /** Models offered in the Settings screen. */
 const GROQ_MODELS = [
-    'llama-3.1-8b-instant'      => 'Llama 3.1 8B Instant',
-    'gemma2-9b-it'              => 'Gemma 2 9B IT',
-    'mixtral-8x7b-instruct'     => 'Mixtral 8x7B Instruct',
+    'llama-3.3-70b-versatile'   => 'Llama 3.3 70B Versatile',
+    'openai/gpt-oss-20b'        => 'GPT OSS 20B',
+    'openai/gpt-oss-120b'       => 'GPT OSS 120B',
+    'qwen/qwen3-32b'            => 'Qwen3 32B',
 ];
 
 /**
@@ -49,10 +50,12 @@ function groq_enabled(): bool {
 function groq_model(): string {
     $m = trim((string)get_setting('groq_model', GROQ_DEFAULT_MODEL));
     if ($m === '') $m = GROQ_DEFAULT_MODEL;
-    // Try to normalize common deprecated names
+    // Move saved selections for retired models to the supported default.
     $map = [
-        'llama-3.1-8b-instant' => 'llama-3.1-8b-instant',
-        'llama3-8b-8192' => 'llama-3.1-8b-instant',
+        'llama-3.1-8b-instant' => GROQ_DEFAULT_MODEL,
+        'llama3-8b-8192' => GROQ_DEFAULT_MODEL,
+        'gemma2-9b-it' => GROQ_DEFAULT_MODEL,
+        'mixtral-8x7b-instruct' => GROQ_DEFAULT_MODEL,
     ];
     if (isset($map[$m])) $m = $map[$m];
     return $m;
@@ -98,23 +101,18 @@ function groq_chat(array $messages, array $opts = []): array {
     if (isset($data['error'])) {
         $msg = is_array($data['error']) ? ($data['error']['message'] ?? '') : (string)$data['error'];
         $errMsg = groq_sanitize_error((string)$msg);
-        // Try fallback model if current one doesn't exist
-        if (stripos($errMsg, 'does not exist') !== false || stripos($errMsg, 'model') !== false) {
-            $fallbacks = ['llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-instruct'];
-            foreach ($fallbacks as $fb) {
-                if ($fb === $model) continue;
-                $payload2 = $payload;
-                $payload2['model'] = $fb;
-                $body2 = json_encode($payload2, JSON_UNESCAPED_UNICODE);
-                if ($body2 === false) continue;
-                $raw2 = groq_http_post(GROQ_API_BASE . '/chat/completions', $body2, $key);
-                if ($raw2 === null) continue;
-                $data2 = json_decode($raw2, true);
-                if (!is_array($data2) || isset($data2['error'])) continue;
-                $reply2 = (string)($data2['choices'][0]['message']['content'] ?? '');
-                $reply2 = trim($reply2);
-                if ($reply2 === '') continue;
-                return ['ok' => true, 'reply' => $reply2, 'model' => (string)($data2['model'] ?? $fb)];
+        if (groq_is_model_error($data['error'])) {
+            foreach (groq_model_fallbacks($model) as $fallback) {
+                $payload['model'] = $fallback;
+                $fallbackBody = json_encode($payload, JSON_UNESCAPED_UNICODE);
+                if ($fallbackBody === false) continue;
+                $fallbackRaw = groq_http_post(GROQ_API_BASE . '/chat/completions', $fallbackBody, $key);
+                if ($fallbackRaw === null) continue;
+                $fallbackData = json_decode($fallbackRaw, true);
+                if (!is_array($fallbackData) || isset($fallbackData['error'])) continue;
+                $fallbackReply = trim((string)($fallbackData['choices'][0]['message']['content'] ?? ''));
+                if ($fallbackReply === '') continue;
+                return ['ok' => true, 'reply' => $fallbackReply, 'model' => (string)($fallbackData['model'] ?? $fallback)];
             }
         }
         return ['ok' => false, 'error' => 'AI service error: ' . $errMsg];
@@ -131,6 +129,55 @@ function groq_chat(array $messages, array $opts = []): array {
         'reply' => $reply,
         'model' => (string)($data['model'] ?? $model),
     ];
+}
+
+/** True only for errors that can be resolved by selecting another model. */
+function groq_is_model_error($error): bool {
+    $code = is_array($error) ? strtolower((string)($error['code'] ?? '')) : '';
+    $message = strtolower(is_array($error) ? (string)($error['message'] ?? '') : (string)$error);
+    if (in_array($code, ['model_not_found', 'model_decommissioned', 'model_not_available'], true)) return true;
+    return str_contains($message, 'does not exist')
+        || str_contains($message, 'do not have access')
+        || str_contains($message, 'model not found')
+        || str_contains($message, 'model is not available');
+}
+
+/**
+ * Prefer known chat models that the configured key can access. If model
+ * discovery is unavailable, try the maintained production-model list.
+ *
+ * @return string[]
+ */
+function groq_model_fallbacks(string $current): array {
+    return groq_order_model_fallbacks($current, groq_list_models());
+}
+
+/**
+ * Orders chat-capable models without relying on the API being reachable.
+ *
+ * @param string[] $available
+ * @return string[]
+ */
+function groq_order_model_fallbacks(string $current, array $available): array {
+    $preferred = array_keys(GROQ_MODELS);
+    $fallbacks = [];
+
+    foreach ($preferred as $candidate) {
+        if ($candidate !== $current && (!$available || in_array($candidate, $available, true))) {
+            $fallbacks[] = $candidate;
+        }
+    }
+
+    if ($available) {
+        foreach ($available as $candidate) {
+            if ($candidate === $current || in_array($candidate, $fallbacks, true)) continue;
+            if (preg_match('/(?:whisper|audio|speech|transcri|tts|embedding|moderation|guard|safety)/i', $candidate)) continue;
+            $fallbacks[] = $candidate;
+            if (count($fallbacks) >= 3) break;
+        }
+    }
+
+    return $fallbacks;
 }
 
 /**

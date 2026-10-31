@@ -21,8 +21,6 @@ function all_nav(): array {
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>'],
   'employees'    => ['href'=>'/employees.php','label'=>'Personnel','min_rank'=>1,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 1 1 0 7.75"/></svg>'],
-  'phone_validation' => ['href'=>'/phone-validation.php','label'=>'Phone Validation','min_rank'=>1,
-    'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 3.08 5.18 2 2 0 0 1 5.06 3h3a2 2 0 0 1 2 1.72c.12.9.33 1.78.63 2.62a2 2 0 0 1-.45 2.11L9 10.69a16 16 0 0 0 4.31 4.31l1.24-1.24a2 2 0 0 1 2.11-.45c.84.3 1.72.51 2.62.63A2 2 0 0 1 22 16.92z"/></svg>'],
   'statistics'   => ['href'=>'/statistics.php','label'=>'Statistics','min_rank'=>1,
     'icon'=>'<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>'],
   'daily'        => ['href'=>'/daily-status.php','label'=>'Daily Status','min_rank'=>1,
@@ -69,7 +67,9 @@ function nav_for_user(array $user): array {
     $role = (string)($user['role'] ?? '');
     $out  = [];
     foreach (all_nav() as $k => $n) {
-        if (isset($n['roles'])) {
+        if ($k === 'undeployed') {
+            if (!is_hrm_user($user)) continue;
+        } elseif (isset($n['roles'])) {
             if (!in_array($role, $n['roles'], true)) continue;
             if ($k === 'directorate' && $role === 'unit_commander') $n['label'] = 'My Unit';
         } elseif ($rank < (int)$n['min_rank']) {

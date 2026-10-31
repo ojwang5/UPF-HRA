@@ -34,6 +34,11 @@ function assistant_strlen(string $s): int {
     return function_exists('mb_strlen') ? mb_strlen($s) : strlen($s);
 }
 
+/** True when the message is only a brief greeting, not a greeting plus a question. */
+function assistant_is_greeting(string $text): bool {
+    return (bool)preg_match('/^(?:hi|hello|hey|good morning|good afternoon|good evening)[\s!,.?]*$/i', trim($text));
+}
+
 /**
  * Scrubs anything that looks like a credential out of a user message before
  * it is stored or forwarded to the AI service.

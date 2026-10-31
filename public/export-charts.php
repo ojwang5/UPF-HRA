@@ -151,7 +151,7 @@ tr:nth-child(even) td{background:#f5f7fa}
 </div>
 
 <div class="page-footer">
-  Uganda Police Force — MDD Management System &nbsp;·&nbsp; <?= date('Y') ?> &nbsp;·&nbsp; PROTECT &amp; SERVE
+  Uganda Police Force — HUMAN Resource Administration System  &nbsp;·&nbsp; <?= date('Y') ?> &nbsp;·&nbsp; PROTECT &amp; SERVE
 </div>
 
 <div class="no-print no-print-bar">
