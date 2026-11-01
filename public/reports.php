@@ -13,6 +13,25 @@ $mode = get_setting('report_submission_mode', 'hierarchical');
 $isDirect = $mode === 'direct';
 $repStatusInTray = "r.status IN ('submitted','reverted','pending_superadmin','pending_commander')";
 
+/* ── Optional single-entity report scope ── */
+$rawSelLevel = strtolower(trim((string)($_POST['sel_level'] ?? $_GET['sel_level'] ?? '')));
+$rawSelId    = (int)($_POST['sel_id'] ?? $_GET['sel_id'] ?? 0);
+$selLevel    = in_array($rawSelLevel, REPORT_SCOPE_LEVELS, true) ? $rawSelLevel : '';
+$selId       = $rawSelId;
+if ($selLevel !== '' && $selId > 0 && !report_scope_allowed($pdo, $user, $selLevel, $selId)) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        flash('err', 'The selected report scope is not within your command.');
+        header('Location:/reports.php?date=' . urlencode($date));
+        exit;
+    }
+    $selLevel = '';
+    $selId    = 0;
+}
+$scopeOptions   = report_scope_options($pdo, $user);
+$hasSelection   = $selLevel !== '' && $selId > 0;
+$selectedEntity = $hasSelection ? report_scope_entity($pdo, $selLevel, $selId) : null;
+$selectionLabel = $hasSelection && $selectedEntity ? report_scope_label($selLevel, $selectedEntity) : '';
+
 /* ── Helpers ── */
 function rep_status_pill(string $s): string {
     [$l, $c] = match($s) {
@@ -44,12 +63,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ok     = false;
 
     if ($action === 'generate') {
-        $rows   = hierarchy_summary($pdo, $date, $user);
-        $scope  = report_scope_for_user($user);
-        $rId = $user['region_id']   ? (int)$user['region_id']   : null;
-        $dId = $user['division_id'] ? (int)$user['division_id'] : null;
-        $sId = $user['station_id']  ? (int)$user['station_id']  : null;
-        $pId = $user['post_id']     ? (int)$user['post_id']     : null;
+        if ($selLevel !== '' && $selId <= 0) {
+            flash('err', 'Choose a specific ' . (REPORT_SCOPE_LABELS[$selLevel] ?? $selLevel) . ' before generating the report.');
+            $returnQs = ['date' => $date, 'sel_level' => $selLevel];
+            header('Location:/reports.php?' . http_build_query($returnQs));
+            exit;
+        }
+
+        $rows = hierarchy_summary(
+            $pdo,
+            $date,
+            $user,
+            $hasSelection ? $selLevel : null,
+            $hasSelection ? $selId : null
+        );
+
+        $rId = $dId = $sId = $pId = $dirId = $untId = null;
+        if ($hasSelection && $selectedEntity) {
+            $scope = $selLevel;
+            switch ($selLevel) {
+                case 'region':
+                    $rId = $selId;
+                    break;
+                case 'division':
+                    $dId = $selId;
+                    $rId = (int)($selectedEntity['region_id'] ?? 0) ?: null;
+                    break;
+                case 'station':
+                    $sId = $selId;
+                    $dId = (int)($selectedEntity['division_id'] ?? 0) ?: null;
+                    $rId = (int)($selectedEntity['region_id'] ?? 0) ?: null;
+                    break;
+                case 'directorate':
+                    $dirId = $selId;
+                    break;
+                case 'unit':
+                    $untId = $selId;
+                    $dirId = (int)($selectedEntity['directorate_id'] ?? 0) ?: null;
+                    break;
+            }
+        } else {
+            $scope = report_scope_for_user($user);
+            $rId = $user['region_id']   ? (int)$user['region_id']   : null;
+            $dId = $user['division_id'] ? (int)$user['division_id'] : null;
+            $sId = $user['station_id']  ? (int)$user['station_id']  : null;
+            $pId = $user['post_id']     ? (int)$user['post_id']     : null;
+            $dirId = (int)($user['directorate_id'] ?? 0) ?: null;
+            $untId = (int)($user['unit_id'] ?? 0) ?: null;
+        }
+
         if ($scope === 'hq') {
             $current = 'hq';
             $status  = 'approved';
@@ -57,8 +119,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $current = $isDirect ? 'hq' : report_level_next($scope);
             $status  = 'submitted';
         }
-        $dirId = (int)($user['directorate_id'] ?? 0) ?: null;
-        $untId = (int)($user['unit_id'] ?? 0) ?: null;
         $pdo->prepare("INSERT INTO reports (post_id,station_id,division_id,region_id,directorate_id,unit_id,scope_level,date,generated_by,generated_at,summary_json,status,current_level,revision)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
             ->execute([$pId,$sId,$dId,$rId,$dirId,$untId,$scope,$date,$user['id'],date('c'),json_encode($rows),$status,$current]);
@@ -92,8 +152,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $to   = $isDirect ? 'hq' : report_level_next($from);
                     $summary = $rep['summary_json'];
                     if ($resubmit) { // re-generate the summary so corrections are reflected
-                        $gen = $pdo->query("SELECT * FROM users WHERE id=".(int)$rep['generated_by'])->fetch();
-                        if ($gen) $summary = json_encode(hierarchy_summary($pdo, $rep['date'], $gen));
+                        [$genLevel, $genId] = report_selection_from_row($rep);
+                        $summary = json_encode(hierarchy_summary($pdo, $rep['date'], $user, $genLevel, $genId));
                     }
                     $revision = $resubmit ? ((int)$rep['revision'] + 1) : (int)$rep['revision'];
                     $pdo->prepare("UPDATE reports SET current_level=?, status='submitted', summary_json=?, revision=?, reviewed_by=?, reviewed_at=?, review_notes=? WHERE id=?")
@@ -137,14 +197,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if ($ok) header('Location:/reports.php?date='.urlencode($date));
-    else header('Location:/reports.php?date='.urlencode($date));
+    $returnQs = ['date' => $date];
+    if ($selLevel !== '' && $selId > 0) {
+        $returnQs['sel_level'] = $selLevel;
+        $returnQs['sel_id']    = $selId;
+    }
+    header('Location:/reports.php?' . http_build_query($returnQs));
     exit;
 }
 
-/* ── Current-day live summary ── */
-$rows = hierarchy_summary($pdo, $date, $user);
+/* ── Current-day live summary (optionally for one selected entity) ── */
+$rows = hierarchy_summary(
+    $pdo,
+    $date,
+    $user,
+    $hasSelection ? $selLevel : null,
+    $hasSelection ? $selId : null
+);
 $tot  = sum_totals($rows);
+
+$availableLevels = array_values(array_filter(
+    REPORT_SCOPE_LEVELS,
+    fn($lvl) => !empty($scopeOptions[$lvl])
+));
+$liveScopeLabel = $hasSelection && $selectionLabel !== ''
+    ? $selectionLabel
+    : user_scope_label($user);
 
 /* ── In-tray: reports pending at MY level, within my scope ── */
 $tray = [];
@@ -225,7 +303,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="page-header">
   <div>
     <h1>Reports</h1>
-    <div class="desc">Attendance summary for <?= e(date('j F Y',strtotime($date))) ?> · <?= e(user_scope_label($user)) ?>
+    <div class="desc">Attendance summary for <?= e(date('j F Y',strtotime($date))) ?> · <?= e($liveScopeLabel) ?>
       · <span class="report-chip chip-<?= $isDirect ? 'region' : 'division' ?>"><?= $isDirect ? 'Direct to HQ (ON)' : 'Hierarchical flow (post → station → division → region → HQ)' ?></span></div>
   </div>
   <div class="action-bar">
@@ -234,6 +312,8 @@ include __DIR__ . '/../includes/header.php';
       <div class="form-body" style="padding:12px 16px">
         <form method="get" style="display:flex;gap:8px;align-items:flex-end">
           <div class="form-group"><label>Date</label><input type="date" name="date" value="<?= e($date) ?>"></div>
+          <?php if ($selLevel !== ''): ?><input type="hidden" name="sel_level" value="<?= e($selLevel) ?>"><?php endif; ?>
+          <?php if ($selId > 0): ?><input type="hidden" name="sel_id" value="<?= (int)$selId ?>"><?php endif; ?>
           <button class="btn-icon bi-primary" type="submit" title="Go"><?= ICO_SAVE ?></button>
         </form>
       </div>
@@ -241,15 +321,58 @@ include __DIR__ . '/../includes/header.php';
     <form method="post" style="display:contents">
   <?= csrf_field() ?>
       <input type="hidden" name="action" value="generate">
+      <?php if ($selLevel !== ''): ?><input type="hidden" name="sel_level" value="<?= e($selLevel) ?>"><?php endif; ?>
+      <?php if ($selId > 0): ?><input type="hidden" name="sel_id" value="<?= (int)$selId ?>"><?php endif; ?>
       <button type="submit" class="btn-icon bi-primary" title="<?= is_superadmin($user) ? 'Save report' : 'Submit report for review' ?>"><?= ICO_GEN ?></button>
     </form>
-    <a class="btn-icon bi-secondary" href="/export.php?type=csv&date=<?= e($date) ?>" title="Export CSV" target="_blank"><?= ICO_DL ?></a>
-    <a class="btn-icon bi-secondary" href="/export.php?type=print&date=<?= e($date) ?>" title="Print / PDF" target="_blank"><?= ICO_PRINT ?></a>
+    <?php $selQs = $hasSelection ? '&sel_level='.urlencode($selLevel).'&sel_id='.(int)$selId : ''; ?>
+    <a class="btn-icon bi-secondary" href="/export.php?type=csv&date=<?= e($date) ?><?= $selQs ?>" title="Export CSV" target="_blank"><?= ICO_DL ?></a>
+    <a class="btn-icon bi-secondary" href="/export.php?type=print&date=<?= e($date) ?><?= $selQs ?>" title="Print / PDF" target="_blank"><?= ICO_PRINT ?></a>
   </div>
 </div>
 
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 <?php if ($m=flash('err')): ?><div class="alert alert-error"><?= e($m) ?></div><?php endif; ?>
+
+<?php if ($availableLevels): ?>
+<div class="card filter-card" style="margin-bottom:12px">
+  <div class="filter-head">
+    <div class="fh-title"><?= ICO_GEN ?> Report for a Specific Unit</div>
+    <div class="fh-meta"><?= $hasSelection ? e($selectionLabel) : 'Currently showing your full command scope' ?></div>
+  </div>
+  <form method="get" action="/reports.php" class="filter-bar">
+    <input type="hidden" name="date" value="<?= e($date) ?>">
+    <div class="filter-field">
+      <label for="sel-level">Report scope</label>
+      <select id="sel-level" name="sel_level" onchange="if(this.form.sel_id){this.form.sel_id.value='';}this.form.submit()">
+        <option value="">Whole command (default)</option>
+        <?php foreach ($availableLevels as $lvl): ?>
+        <option value="<?= e($lvl) ?>" <?= $selLevel === $lvl ? 'selected' : '' ?>>
+          <?= e(REPORT_SCOPE_LABELS[$lvl] ?? ucfirst($lvl)) ?> (<?= count($scopeOptions[$lvl]) ?>)
+        </option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <?php if ($selLevel !== '' && !empty($scopeOptions[$selLevel])): ?>
+    <div class="filter-field">
+      <label for="sel-id">Select <?= e(REPORT_SCOPE_LABELS[$selLevel] ?? ucfirst($selLevel)) ?></label>
+      <select id="sel-id" name="sel_id" onchange="this.form.submit()">
+        <option value="">— choose —</option>
+        <?php foreach ($scopeOptions[$selLevel] as $opt): ?>
+        <option value="<?= (int)$opt['id'] ?>" <?= $selId === (int)$opt['id'] ? 'selected' : '' ?>><?= e($opt['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <?php endif; ?>
+    <div class="filter-actions">
+      <button class="btn-icon bi-primary btn-labeled" type="submit" title="Apply report scope"><?= ICO_SEARCH ?><span>Apply</span></button>
+      <?php if ($selLevel !== ''): ?>
+      <a class="btn-icon bi-secondary btn-labeled" href="/reports.php?date=<?= e($date) ?>" title="Show whole command"><?= ICO_CANCEL ?><span>Reset</span></a>
+      <?php endif; ?>
+    </div>
+  </form>
+</div>
+<?php endif; ?>
 
 <?php if (!is_superadmin($user)): ?>
 <div class="alert" style="background:var(--navy-50);border:1px solid var(--border);color:var(--muted)">
@@ -325,7 +448,8 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- ═══ LIVE SUMMARY ═══ -->
 <div class="card">
-  <div class="chr"><h3>Attendance Report — <?= e(date('j F Y',strtotime($date))) ?></h3></div>
+  <div class="chr"><h3>Attendance Report — <?= e(date('j F Y',strtotime($date))) ?>
+    <span style="font-weight:400;color:var(--muted);font-size:12px">· <?= e($liveScopeLabel) ?></span></h3></div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Unit</th><th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th><th>Sick</th><th>Suspended</th><th>Under Disciplinary</th><th>Working</th><th>On Duty</th><th>On Course</th><th>Unrecorded</th></tr></thead>
@@ -420,9 +544,11 @@ include __DIR__ . '/../includes/header.php';
     <h3>Reports in My Command <span class="badge badge-admin"><?= count($myReports) ?></span></h3>
     <form method="get" style="display:flex;gap:8px;align-items:center">
       <input type="hidden" name="date" value="<?= e($date) ?>">
+      <?php if ($selLevel !== ''): ?><input type="hidden" name="sel_level" value="<?= e($selLevel) ?>"><?php endif; ?>
+      <?php if ($selId > 0): ?><input type="hidden" name="sel_id" value="<?= (int)$selId ?>"><?php endif; ?>
       <input type="search" name="q" value="<?= e($search) ?>" placeholder="Search unit, date, status…" style="min-width:220px" data-report-search>
       <button class="btn-icon bi-secondary bi-sm" type="submit" title="Search"><?= ICO_SEARCH ?></button>
-      <?php if ($search): ?><a class="btn-icon bi-secondary bi-sm" href="/reports.php?date=<?= e($date) ?>" title="Clear"><?= ICO_CANCEL ?></a><?php endif; ?>
+      <?php if ($search): ?><a class="btn-icon bi-secondary bi-sm" href="/reports.php?date=<?= e($date) ?><?= $hasSelection ? '&sel_level='.urlencode($selLevel).'&sel_id='.(int)$selId : '' ?>" title="Clear"><?= ICO_CANCEL ?></a><?php endif; ?>
     </form>
   </div>
   <?php if ($search): ?><div class="alert" style="background:var(--navy-50);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:10px">Search: <strong><?= e($search) ?></strong> — <?= count($myReports) ?> result(s)</div><?php endif; ?>

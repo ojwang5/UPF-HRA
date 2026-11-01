@@ -42,40 +42,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'submit') {
-        $eid = (int)$_POST['employee_id'];
-        $emp = $pdo->prepare("SELECT * FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
+        $eid   = (int)($_POST['employee_id'] ?? 0);
+        $start = trim((string)($_POST['start_date'] ?? ''));
+        $end   = trim((string)($_POST['end_date'] ?? ''));
+        $emp   = $pdo->prepare("SELECT * FROM employees e WHERE e.id=? AND e.active=1 AND $scopeW");
         $emp->execute(array_merge([$eid], $scopeP)); $e = $emp->fetch();
-        if ($e) {
-            $dirId  = $e['directorate'] ? (int)$pdo->query("SELECT id FROM directorates WHERE name=".$pdo->quote((string)$e['directorate'])." LIMIT 1")->fetchColumn() : null;
-            $dirId  = $dirId ?: null;
-            $unitId = $e['unit'] ? (int)$pdo->query("SELECT id FROM units WHERE name=".$pdo->quote((string)$e['unit'])." LIMIT 1")->fetchColumn() : null;
-            $unitId = $unitId ?: null;
-            $pdo->prepare("INSERT INTO leave_requests (employee_id,post_id,station_id,division_id,region_id,directorate_id,unit_id,leave_type,start_date,end_date,destination,reason,status,submitted_by,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                ->execute([$eid,$e['post_id'],$e['station_id'],$e['division_id'],$e['region_id'],$dirId,$unitId,$_POST['leave_type']??'Annual',$_POST['start_date'],$_POST['end_date'],trim($_POST['destination']??'')?:null,$_POST['reason']??'','pending',$user['id'],date('c')]);
-            notify_superadmins('Leave request submitted',
-                personnel_label($e).' ('.($_POST['leave_type']??'Annual').') — submitted by '.role_label($user['role']),
-                ['created_by'=>$user['id'],'kind'=>'leave']);
-            flash('msg','Leave request submitted.');
+        if (!$e) {
+            flash('err', 'Select a valid personnel record.');
+        } elseif (!valid_date($start) || !valid_date($end) || $end < $start) {
+            flash('err', 'Choose a valid leave period — the end date cannot be before the start date.');
+        } else {
+            $pending = pending_leave_for($pdo, $eid);
+            $running = running_leave_for($pdo, $eid);
+            $overlap = find_conflicting_leave($pdo, $eid, $start, $end);
+            $conflict = $running ?: $overlap;
+
+            if ($pending) {
+                flash('err', personnel_label($e).' already has a pending leave request. Review or adjust that request instead of creating a duplicate.');
+            } elseif ($conflict) {
+                $isApproved = (($conflict['status'] ?? '') === 'approved');
+                if ($isApproved) {
+                    flash('err', personnel_label($e).' already has approved '.$conflict['leave_type'].' leave from '.$conflict['start_date'].' to '.$conflict['end_date'].'. Extend the running leave instead of creating a duplicate.');
+                    header('Location:/leave-requests.php?extend_leave='.(int)$conflict['id'].'&extend_emp='.$eid.'&start='.urlencode($start).'&end='.urlencode($end));
+                    exit;
+                }
+                flash('err', personnel_label($e).' has another leave request overlapping those dates. Resolve it before submitting a new one.');
+            } else {
+                $dirId  = $e['directorate'] ? (int)$pdo->query("SELECT id FROM directorates WHERE name=".$pdo->quote((string)$e['directorate'])." LIMIT 1")->fetchColumn() : null;
+                $dirId  = $dirId ?: null;
+                $unitId = $e['unit'] ? (int)$pdo->query("SELECT id FROM units WHERE name=".$pdo->quote((string)$e['unit'])." LIMIT 1")->fetchColumn() : null;
+                $unitId = $unitId ?: null;
+                $pdo->prepare("INSERT INTO leave_requests (employee_id,post_id,station_id,division_id,region_id,directorate_id,unit_id,leave_type,start_date,end_date,destination,reason,status,submitted_by,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                    ->execute([$eid,$e['post_id'],$e['station_id'],$e['division_id'],$e['region_id'],$dirId,$unitId,$_POST['leave_type']??'Annual',$start,$end,trim($_POST['destination']??'')?:null,$_POST['reason']??'','pending',$user['id'],date('c')]);
+                notify_superadmins('Leave request submitted',
+                    personnel_label($e).' ('.($_POST['leave_type']??'Annual').') — submitted by '.role_label($user['role']),
+                    ['created_by'=>$user['id'],'kind'=>'leave']);
+                flash('msg','Leave request submitted.');
+            }
         }
     } elseif ($action === 'review') {
         $id=(int)$_POST['id']; $decision=$_POST['decision']; $notes=$_POST['notes']??'';
-        $req = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name, e.phone FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=?");
-        $req->execute([$id]); $req=$req->fetch();
+        $req = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name AS emp_name, e.phone FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.id=? AND $scopeW");
+        $req->execute(array_merge([$id], $scopeP)); $req=$req->fetch();
         if ($req && $req['status']==='pending' && can_approve_leave($user, $req['leave_type'])) {
             $newStatus = $decision==='approve' ? 'approved' : 'rejected';
-            $pdo->prepare("UPDATE leave_requests SET status=?,reviewed_by=?,reviewed_at=?,review_notes=? WHERE id=?")->execute([$newStatus,$user['id'],date('c'),$notes,$id]);
-            $pdo->prepare("INSERT INTO notifications (title,message,link,kind,audience,target_user_id,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)")
-                ->execute(["Leave request $newStatus",personnel_label(['service_no'=>$req['service_no'],'rank'=>$req['rank'],'full_name'=>$req['emp_name']])." — $newStatus by ".$user['full_name'],'/leave-requests.php#lr-'.$id,'leave','user',(int)$req['submitted_by'],$user['id'],date('c')]);
-            $sms = send_leave_status_sms($pdo, $id, $newStatus);
-            $flash = 'Decision recorded.';
-            if (!empty($sms['ok'])) {
-                $flash .= !empty($sms['skipped'])
-                    ? ' SMS notification already sent.'
-                    : ' SMS notification submitted to the provider.';
-            } else {
-                $flash .= ' SMS not sent: ' . ($sms['error'] ?? 'unknown error') . '.';
+            $clash = null;
+            if ($newStatus === 'approved') {
+                $clash = find_conflicting_leave($pdo, (int)$req['employee_id'], $req['start_date'], $req['end_date'], $id);
             }
-            flash('msg', $flash);
+            if ($clash) {
+                $clashKind = (($clash['status'] ?? '') === 'approved') ? 'approved leave' : 'another overlapping request';
+                flash('err', 'Cannot approve — this personnel already has '.$clashKind.' covering '.$clash['start_date'].' to '.$clash['end_date'].'. Resolve it before approving.');
+            } else {
+                $pdo->prepare("UPDATE leave_requests SET status=?,reviewed_by=?,reviewed_at=?,review_notes=? WHERE id=?")->execute([$newStatus,$user['id'],date('c'),$notes,$id]);
+                $pdo->prepare("INSERT INTO notifications (title,message,link,kind,audience,target_user_id,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)")
+                    ->execute(["Leave request $newStatus",personnel_label(['service_no'=>$req['service_no'],'rank'=>$req['rank'],'full_name'=>$req['emp_name']])." — $newStatus by ".$user['full_name'],'/leave-requests.php#lr-'.$id,'leave','user',(int)$req['submitted_by'],$user['id'],date('c')]);
+                $sms = send_leave_status_sms($pdo, $id, $newStatus);
+                $flash = 'Decision recorded.';
+                if (!empty($sms['ok'])) {
+                    $flash .= !empty($sms['skipped'])
+                        ? ' SMS notification already sent.'
+                        : ' SMS notification submitted to the provider.';
+                } else {
+                    $flash .= ' SMS not sent: ' . ($sms['error'] ?? 'unknown error') . '.';
+                }
+                flash('msg', $flash);
+            }
         }
     } elseif ($action === 'submit_extension') {
         $lrId   = (int)($_POST['leave_request_id'] ?? 0);
@@ -90,12 +122,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $inScope = (bool)$chk->fetch();
         }
         if ($lr && $inScope && $lr['status']==='approved' && valid_date($newEnd) && $newEnd > $lr['end_date']) {
-            $pdo->prepare("INSERT INTO leave_extensions (leave_request_id,employee_id,old_end_date,new_end_date,reason,status,requested_by) VALUES (?,?,?,?,?, 'pending', ?)")
-                ->execute([$lrId, (int)$lr['employee_id'], $lr['end_date'], $newEnd, $reason ?: null, $user['id']]);
-            notify_superadmins('Leave extension requested',
-                personnel_label(['service_no'=>$lr['service_no'],'rank'=>$lr['rank'],'full_name'=>$lr['emp_name']]).' — extension to '.$newEnd.' requested by '.role_label($user['role']),
-                ['created_by'=>$user['id'],'kind'=>'leave','link'=>'/leave-requests.php']);
-            flash('msg', 'Leave extension request submitted.');
+            $dup = $pdo->prepare("SELECT id FROM leave_extensions WHERE leave_request_id=? AND status='pending' LIMIT 1");
+            $dup->execute([$lrId]);
+            if ($dup->fetch()) {
+                flash('err', 'An extension request for this leave is already pending review.');
+            } else {
+                $pdo->prepare("INSERT INTO leave_extensions (leave_request_id,employee_id,old_end_date,new_end_date,reason,status,requested_by) VALUES (?,?,?,?,?, 'pending', ?)")
+                    ->execute([$lrId, (int)$lr['employee_id'], $lr['end_date'], $newEnd, $reason ?: null, $user['id']]);
+                notify_superadmins('Leave extension requested',
+                    personnel_label(['service_no'=>$lr['service_no'],'rank'=>$lr['rank'],'full_name'=>$lr['emp_name']]).' — extension to '.$newEnd.' requested by '.role_label($user['role']),
+                    ['created_by'=>$user['id'],'kind'=>'leave','link'=>'/leave-requests.php']);
+                flash('msg', 'Leave extension request submitted.');
+            }
         } else {
             flash('err', 'Extension must target an approved leave and a later end date.');
         }
@@ -104,33 +142,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $xq = $pdo->prepare("SELECT le.*, lr.leave_type, lr.submitted_by, e.service_no, e.rank, e.full_name AS emp_name
                              FROM leave_extensions le
                              JOIN leave_requests lr ON lr.id=le.leave_request_id
-                             JOIN employees e ON e.id=le.employee_id WHERE le.id=?");
-        $xq->execute([$id]); $x = $xq->fetch();
+                             JOIN employees e ON e.id=le.employee_id
+                             WHERE le.id=? AND lr.status='approved' AND $scopeW");
+        $xq->execute(array_merge([$id], $scopeP)); $x = $xq->fetch();
         if ($x && $x['status']==='pending' && can_approve_leave($user, $x['leave_type'])) {
             $newStatus = $decision==='approve' ? 'approved' : 'rejected';
-            $pdo->prepare("UPDATE leave_extensions SET status=?,reviewed_by=?,reviewed_at=?,review_notes=? WHERE id=?")
-                ->execute([$newStatus,$user['id'],date('c'),$notes ?: null,$id]);
-            if ($newStatus==='approved') {
-                // Extend the underlying leave and restart the countdown notifications.
-                $pdo->prepare("UPDATE leave_requests SET end_date=?, expiry_notified=0 WHERE id=?")
-                    ->execute([$x['new_end_date'], (int)$x['leave_request_id']]);
+            $clash = null;
+            if ($newStatus === 'approved') {
+                $extStart = date('Y-m-d', strtotime($x['old_end_date'] . ' +1 day'));
+                $cq = $pdo->prepare("SELECT id,start_date,end_date FROM leave_requests
+                                     WHERE employee_id=? AND id<>? AND status='approved'
+                                       AND start_date<=? AND end_date>=? LIMIT 1");
+                $cq->execute([(int)$x['employee_id'], (int)$x['leave_request_id'], $x['new_end_date'], $extStart]);
+                $clash = $cq->fetch() ?: null;
             }
-            $label = personnel_label(['service_no'=>$x['service_no'],'rank'=>$x['rank'],'full_name'=>$x['emp_name']]);
-            if (!empty($x['submitted_by'])) {
-                $pdo->prepare("INSERT INTO notifications (title,message,link,kind,audience,target_user_id,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)")
-                    ->execute(["Leave extension $newStatus", $label." — extension to ".$x['new_end_date']." $newStatus by ".$user['full_name'],'/leave-requests.php#le-'.$id,'leave','user',(int)$x['submitted_by'],$user['id'],date('c')]);
-            }
-            notify_superadmins('Leave extension '.$newStatus, $label.' — '.$x['new_end_date'].' ('.$newStatus.')', ['created_by'=>$user['id'],'kind'=>'leave','link'=>'/leave-requests.php']);
-            $sms = send_leave_status_sms($pdo, (int)$x['leave_request_id'], $newStatus, 'extension', $id);
-            $flash = 'Extension decision recorded.';
-            if (!empty($sms['ok'])) {
-                $flash .= !empty($sms['skipped'])
-                    ? ' SMS notification already sent.'
-                    : ' SMS notification submitted to the provider.';
+            if ($clash) {
+                flash('err', 'Cannot approve the extension — it would overlap another approved leave ('.$clash['start_date'].' to '.$clash['end_date'].').');
             } else {
-                $flash .= ' SMS not sent: ' . ($sms['error'] ?? 'unknown error') . '.';
+                $pdo->prepare("UPDATE leave_extensions SET status=?,reviewed_by=?,reviewed_at=?,review_notes=? WHERE id=?")
+                    ->execute([$newStatus,$user['id'],date('c'),$notes ?: null,$id]);
+                if ($newStatus==='approved') {
+                    // Extend the underlying leave and restart the countdown notifications.
+                    $pdo->prepare("UPDATE leave_requests SET end_date=?, expiry_notified=0 WHERE id=?")
+                        ->execute([$x['new_end_date'], (int)$x['leave_request_id']]);
+                }
+                $label = personnel_label(['service_no'=>$x['service_no'],'rank'=>$x['rank'],'full_name'=>$x['emp_name']]);
+                if (!empty($x['submitted_by'])) {
+                    $pdo->prepare("INSERT INTO notifications (title,message,link,kind,audience,target_user_id,created_by,created_at) VALUES (?,?,?,?,?,?,?,?)")
+                        ->execute(["Leave extension $newStatus", $label." — extension to ".$x['new_end_date']." $newStatus by ".$user['full_name'],'/leave-requests.php#le-'.$id,'leave','user',(int)$x['submitted_by'],$user['id'],date('c')]);
+                }
+                notify_superadmins('Leave extension '.$newStatus, $label.' — '.$x['new_end_date'].' ('.$newStatus.')', ['created_by'=>$user['id'],'kind'=>'leave','link'=>'/leave-requests.php']);
+                $sms = send_leave_status_sms($pdo, (int)$x['leave_request_id'], $newStatus, 'extension', $id);
+                $flash = 'Extension decision recorded.';
+                if (!empty($sms['ok'])) {
+                    $flash .= !empty($sms['skipped'])
+                        ? ' SMS notification already sent.'
+                        : ' SMS notification submitted to the provider.';
+                } else {
+                    $flash .= ' SMS not sent: ' . ($sms['error'] ?? 'unknown error') . '.';
+                }
+                flash('msg', $flash);
             }
-            flash('msg', $flash);
         }
     } elseif ($action === 'refresh_sms_status') {
         $n = refresh_leave_sms_delivery($pdo, 50);
@@ -259,7 +311,71 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
+<?php
+/* ═══ Running-leave prompt: offer an extension instead of a duplicate ═══ */
+$extendLeave = null;
+if (isset($_GET['extend_leave'])) {
+    $xlId = (int)$_GET['extend_leave'];
+    $xq = $pdo->prepare("SELECT lr.*, e.service_no, e.rank, e.full_name
+                         FROM leave_requests lr
+                         JOIN employees e ON e.id=lr.employee_id
+                         WHERE lr.id=? AND lr.status='approved' AND $scopeW");
+    $xq->execute(array_merge([$xlId], $scopeP));
+    $extendLeave = $xq->fetch() ?: null;
+    if (!$extendLeave) {
+        flash('err', 'That leave is no longer eligible for an extension.');
+    }
+}
+?>
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
+<?php if ($m=flash('err')): ?><div class="alert alert-error"><?= e($m) ?></div><?php endif; ?>
+
+<?php if ($extendLeave):
+    $reqEnd  = trim((string)($_GET['end'] ?? ''));
+    $minEnd  = date('Y-m-d', strtotime($extendLeave['end_date'] . ' +1 day'));
+    $suggest = valid_date($reqEnd) && $reqEnd >= $minEnd
+        ? $reqEnd
+        : date('Y-m-d', strtotime($extendLeave['end_date'] . ' +7 days'));
+?>
+<div class="card" style="border-left:4px solid #d97706;margin-bottom:12px">
+  <div class="chr">
+    <div>
+      <h3 style="margin:0 0 4px">Personnel Already on Leave — Extend Instead</h3>
+      <div style="font-size:12px;color:var(--muted)">A new request would duplicate an existing approved leave.</div>
+    </div>
+    <a class="btn-icon bi-secondary bi-sm" href="/leave-requests.php" title="Cancel"><?= ICO_CANCEL ?></a>
+  </div>
+  <div style="padding:0 4px 4px">
+    <p style="font-size:13px;color:var(--navy-800);margin:0 0 14px">
+      <strong><?= e(personnel_label($extendLeave)) ?></strong> has approved
+      <strong><?= e($extendLeave['leave_type']) ?></strong> leave from
+      <strong><?= e($extendLeave['start_date']) ?></strong> to
+      <strong><?= e($extendLeave['end_date']) ?></strong>.
+      Extend this leave rather than creating another record for the same personnel.
+    </p>
+    <form method="post">
+  <?= csrf_field() ?>
+      <input type="hidden" name="action" value="submit_extension">
+      <input type="hidden" name="leave_request_id" value="<?= (int)$extendLeave['id'] ?>">
+      <div class="form-row">
+        <div class="form-group"><label>Current end date</label>
+          <input type="date" value="<?= e($extendLeave['end_date']) ?>" disabled>
+        </div>
+        <div class="form-group"><label>New end date</label>
+          <input type="date" name="new_end_date" required value="<?= e($suggest) ?>" min="<?= e($minEnd) ?>">
+        </div>
+        <div class="form-group" style="flex:2"><label>Reason for extension</label>
+          <input type="text" name="reason" placeholder="Why is the leave being extended? (optional)">
+        </div>
+      </div>
+      <div class="action-bar" style="margin-top:10px">
+        <a class="btn-icon bi-secondary btn-labeled" href="/leave-requests.php"><?= ICO_CANCEL ?><span>Cancel</span></a>
+        <button class="btn-icon bi-gold bi-lg btn-labeled" type="submit" title="Request extension"><?= ICO_SEND ?><span>Request extension</span></button>
+      </div>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
 
 <?php
 /* ═══ Leave Counts & Adjustments ═══════════════════════════════════ */

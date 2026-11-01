@@ -443,6 +443,8 @@ auth.php: require_login()
 
 The dashboard provides a real-time strength summary scoped to the logged-in user's geographic level.
 
+Use **Start slideshow** in the dashboard header to rotate through the personnel status cards, status distribution chart, and (when unit data is available) the top 10 regional or command-level personnel status chart. Each slide advances every 10 seconds. **Stop slideshow** restores the full dashboard; the presentation resumes at its current slide after the dashboard's automatic refresh.
+
 #### Dashboard Sections
 
 ```
@@ -501,7 +503,7 @@ Personnel are always listed in **UPF seniority order** (IGP first, CIVILIAN last
 See [§7.14 Bulk Import](#714-bulk-import).
 
 #### Undeployment and training records
-Undeployment records are managed only by the Human Resource (HR/HRM) directorate, while existing personnel region/directorate assignments remain unchanged. Human Resource Development (HRD) manages course enrollments and training registries. Course records track course type, training school, intake, dates, status (`pending`, `ongoing`, `halted`, or `completed`), and the employee's current working region/directorate. Ongoing courses can drive the daily "On Course" status.
+Undeployment records are managed only by the Human Resource (HR/HRM) directorate, while existing personnel region/directorate assignments remain unchanged. Human Resource Development (HRD) manages course enrollments and training registries. Course records track course type, training school, required intake, dates, status (`pending`, `ongoing`, `halted`, or `completed`), and the employee's current working region/directorate. The HRD course form and CSV import require an intake, and the database rejects new course records without one. Existing records with no intake are marked as legacy and can be corrected from their course record. The centered course form is designed to fit desktop and mobile screens. The Courses page summarizes course and enrollment totals; status cards filter the officer records, and course cards show participating officers, schools, intakes, and course types. Officer names link to personnel records. Course records can be sorted by course, intake, training school, course nature, start date, and completion/pending status. Ongoing courses can drive the daily "On Course" status.
 
 #### Export
 A separate export page (`/export-personnel.php`) generates a printable/downloadable personnel list.
@@ -1089,5 +1091,5 @@ The following demo accounts are seeded on first run:
 *End of Document*
 
 ---
-**Uganda Police Force — MDD Manager System v2.0**  
+**Uganda Police Force — HRAS System v2.0**  
 *Protect & Serve*

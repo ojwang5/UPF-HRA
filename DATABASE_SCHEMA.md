@@ -2,8 +2,8 @@
 
 **Engine:** SQLite (WAL mode, `PRAGMA foreign_keys = ON`)
 **Database file:** `data/mdd.sqlite`
-**Schema source of truth:** `includes/db.php` (`init_schema()` + `migrate()`, migrations v1 → v21)
-**Current schema version:** 21 (`PRAGMA user_version`)
+**Schema source of truth:** `includes/db.php` (`init_schema()` + `migrate()`, migrations v1 → v22)
+**Current schema version:** 22 (`PRAGMA user_version`)
 
 ---
 
@@ -431,7 +431,7 @@ erDiagram
 | course_nature | TEXT | Course type; NOT NULL DEFAULT `'Professional'` |
 | school | TEXT | — **free text**, not FK to `training_schools` |
 | place | TEXT | |
-| intake | TEXT | Course intake / cohort |
+| intake | TEXT | Course intake / cohort; required and non-blank for new records (v22 trigger) |
 | start_date | TEXT | NOT NULL |
 | end_date | TEXT | NOT NULL |
 | duration_days | INTEGER | |
@@ -648,6 +648,7 @@ Known keys: `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from_email
 | v19 | Extension event IDs for distinct leave extension SMS notifications |
 | v20 | Leave SMS failure codes, reasons, and automatic retry metadata |
 | v21 | Course intake field and pending/ongoing/halted/completed lifecycle statuses |
+| v22 | Require a non-blank intake on new course records and when updating an intake; legacy records remain unchanged |
 
 ---
 

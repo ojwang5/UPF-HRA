@@ -49,6 +49,11 @@ include __DIR__ . '/../includes/header.php';
     <div class="desc"><?= e(date('l, j F Y', strtotime($date))) ?> &nbsp;·&nbsp; <?= e(role_label($user['role'])) ?> &nbsp;·&nbsp; <?= e(user_scope_label($user)) ?></div>
   </div>
   <div class="action-bar">
+    <button class="btn-icon btn-labeled bi-secondary" id="dashboard-slideshow-toggle" type="button" aria-pressed="false">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <span>Start slideshow</span>
+    </button>
+    <span id="dashboard-slideshow-status" class="dashboard-slideshow-status" aria-live="polite">Slideshow off</span>
     <div class="panel-wrap">
       <button class="btn-icon bi-secondary" data-panel="panel-date" title="Change date">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -66,6 +71,7 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
+<div class="dashboard-presentation" id="dashboard-presentation">
 <!-- 9 Stat Cards (clickable) -->
 <?php
 // Each entry: [status_key, label, css_class, color, bg_color, svg_icon, hint_text]
@@ -99,6 +105,11 @@ $cards = [
    'Left post without permission'],
 ];
 ?>
+<section class="dashboard-slide" data-slide-title="Personnel status overview" aria-label="Personnel status overview">
+<div class="slide-heading">
+  <h2>Personnel Status Overview</h2>
+  <span><?= e(date('j F Y', strtotime($date))) ?></span>
+</div>
 <div class="grid grid-4 dash-stats">
 <?php foreach ($cards as $card):
   [$key, $label, $cls, $color, $bg, $icon, $hint] = $card;
@@ -126,6 +137,7 @@ $cards = [
 </a>
 <?php endforeach; ?>
 </div>
+</section>
 
 <!-- Detail Drill-down Panel -->
 <?php if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')): ?>
@@ -250,6 +262,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     }
 }
 ?>
+<section class="dashboard-slide" data-slide-title="Status distribution" aria-label="Status distribution chart">
 <div class="card" style="margin-top:4px">
   <div class="chr">
     <h3>Status Distribution — <?= e(date('j F Y', strtotime($date))) ?></h3>
@@ -296,6 +309,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     </div>
   </div>
 </div>
+</section>
 
 <!-- Per-unit breakdown -->
 <?php if (!empty($rows)): ?>
@@ -344,60 +358,107 @@ foreach ($chartData as [$ck, $cl, $cc]) {
 </div>
 <?php endif; ?>
 
-<!-- Regional / unit strength comparison graph -->
 <?php if (count($rows) > 1):
-  $maxTotal = 0; $maxPres = 0;
-  foreach ($rows as $r) { $maxTotal = max($maxTotal, (int)$r['total']); $maxPres = max($maxPres, (int)$r['present']); }
-  $cmpTitle = match($user['role']) {
-    'superadmin'         => 'Regional Strength Comparison',
-    'regional_commander' => 'Division Strength Comparison — '.e($user['region_name']??''),
-    'division_commander' => 'Station Strength Comparison — '.e($user['division_name']??''),
-    default              => 'Post Strength Comparison — '.e($user['station_name']??''),
+  $stackData = $chartData;
+  $stackData[] = ['special_assignment', 'Special Assignment', '#0ea5e9'];
+  $stackData[] = ['undeployed', 'Undeployed', '#64748b'];
+  $ranked = [];
+  foreach ($rows as $r) {
+      $total = (int)$r['total'];
+      $stackTotal = 0;
+      foreach ($stackData as [$ck]) { $stackTotal += (int)($r[$ck] ?? 0); }
+      if ($total <= 0 || $stackTotal <= 0 || trim((string)$r['unit_name']) === '') continue;
+      $r['_stack'] = $stackTotal;
+      $r['_att'] = (int)$r['present'] / $total * 100;
+      $ranked[] = $r;
+  }
+  usort($ranked, function (array $a, array $b): int {
+      if ($a['_att'] != $b['_att']) return $a['_att'] < $b['_att'] ? 1 : -1;
+      if ((int)$a['present'] !== (int)$b['present']) return (int)$a['present'] < (int)$b['present'] ? 1 : -1;
+      return strcmp($a['unit_name'], $b['unit_name']);
+  });
+  $topRows = array_slice($ranked, 0, 10);
+  $maxStack = 0;
+  foreach ($topRows as $r) { $maxStack = max($maxStack, $r['_stack']); }
+  $yStep = max(1, (int)ceil($maxStack / 4));
+  $yMax = $yStep * 4;
+  $visibleStatuses = [];
+  foreach ($stackData as [$ck, $cl, $cc]) {
+      foreach ($topRows as $r) { if ((int)($r[$ck] ?? 0) > 0) { $visibleStatuses[] = [$ck, $cl, $cc]; break; } }
+  }
+  $topTitle = match($user['role']) {
+    'superadmin'         => 'Top 10 Regional Personnel Status',
+    'regional_commander' => 'Top 10 Division Personnel Status — '.e($user['region_name']??''),
+    'division_commander' => 'Top 10 Station Personnel Status — '.e($user['division_name']??''),
+    default              => 'Top 10 Post Personnel Status — '.e($user['station_name']??''),
   };
 ?>
+<section class="dashboard-slide" data-slide-title="<?= $topTitle ?>" aria-label="<?= $topTitle ?>">
 <div class="card" style="margin-top:4px">
   <div class="chr">
-    <h3><?= $cmpTitle ?> — <?= e(date('j F Y', strtotime($date))) ?></h3>
+    <h3><?= $topTitle ?> — <?= e(date('j F Y', strtotime($date))) ?></h3>
     <div class="action-bar">
       <a class="btn-icon bi-secondary bi-sm" href="/export-charts.php?format=csv&date=<?= e($date) ?>" title="Export CSV"><?= ICO_DL ?></a>
       <a class="btn-icon bi-secondary bi-sm" href="/export-charts.php?format=print&date=<?= e($date) ?>" target="_blank" title="Print / PDF"><?= ICO_PRINT ?></a>
     </div>
   </div>
-  <div class="cmp-legend">
-    <span><i style="background:#22c55e"></i> Present</span>
-    <span><i style="background:var(--navy-500, #334155)"></i> Total strength</span>
-    <span><i style="background:var(--gold)"></i> Attendance rate</span>
+  <div class="vchart-caption">Ranked by attendance rate (present ÷ total strength) · top <?= count($topRows) ?></div>
+  <div class="vchart-legend">
+    <?php foreach ($visibleStatuses as [$ck, $cl, $cc]): ?>
+    <span><i style="background:<?= $cc ?>"></i><?= e($cl) ?></span>
+    <?php endforeach; ?>
   </div>
-  <div class="table-wrap">
-    <div class="cmp-list">
-      <?php foreach ($rows as $r): $att = (int)$r['total'] ? round((int)$r['present'] / (int)$r['total'] * 100) : 0; ?>
-      <div class="cmp-item">
-        <div class="cmp-head">
-          <div class="cmp-name"><?= e($r['unit_name']) ?></div>
-          <div class="cmp-nums"><?= (int)$r['present'] ?> present · <?= (int)$r['total'] ?> total · <strong><?= $att ?>%</strong></div>
+  <?php if ($topRows): ?>
+  <div class="vchart-scroll">
+    <div class="vchart" style="min-width:<?= max(440, count($topRows) * 70) ?>px">
+      <div class="vchart-yaxis">
+        <?php for ($t = $yMax; $t >= 0; $t -= $yStep): ?>
+        <div class="vchart-tick" style="bottom:<?= $yMax ? round($t / $yMax * 100, 2) : 0 ?>%"><?= $t ?></div>
+        <?php endfor; ?>
+      </div>
+      <div class="vchart-plot">
+        <div class="vchart-grid">
+          <?php for ($t = $yMax; $t > 0; $t -= $yStep): ?>
+          <div class="vchart-gridline" style="bottom:<?= round($t / $yMax * 100, 2) ?>%"></div>
+          <?php endfor; ?>
         </div>
-        <div class="cmp-bars">
-          <div class="cmp-row">
-            <span class="cmp-row-label">Present</span>
-            <div class="cmp-track"><div class="cmp-fill" style="width:<?= $maxPres ? round((int)$r['present'] / $maxPres * 100) : 0 ?>%;background:#22c55e"></div></div>
-            <span class="cmp-row-val"><?= (int)$r['present'] ?></span>
+        <div class="vchart-bars">
+          <?php foreach ($topRows as $i => $r): $att = round($r['_att']); ?>
+          <div class="vchart-col">
+            <div class="vchart-stack" style="height:<?= $yMax ? round($r['_stack'] / $yMax * 100, 2) : 0 ?>%">
+              <?php foreach ($visibleStatuses as [$ck, $cl, $cc]): $v = (int)($r[$ck] ?? 0); if ($v <= 0) continue; ?>
+              <div class="vchart-seg" style="flex:<?= $v ?> 1 0;background:<?= $cc ?>" title="<?= e($r['unit_name']) ?> — <?= e($cl) ?>: <?= $v ?>"></div>
+              <?php endforeach; ?>
+            </div>
+            <div class="vchart-label">
+              <strong><?= e($r['unit_name']) ?></strong>
+              <span><?= (int)$r['total'] ?> total · <?= $att ?>%</span>
+            </div>
           </div>
-          <div class="cmp-row">
-            <span class="cmp-row-label">Total</span>
-            <div class="cmp-track"><div class="cmp-fill" style="width:<?= $maxTotal ? round((int)$r['total'] / $maxTotal * 100) : 0 ?>%;background:var(--navy-500, #334155)"></div></div>
-            <span class="cmp-row-val"><?= (int)$r['total'] ?></span>
-          </div>
+          <?php endforeach; ?>
         </div>
       </div>
-      <?php endforeach; ?>
     </div>
   </div>
+  <?php else: ?>
+  <div class="muted" style="padding:12px 2px">No personnel status data for this date.</div>
+  <?php endif; ?>
 </div>
+</section>
 <?php endif; ?>
+</div>
 
 <style>
 /* Dashboard stat cards */
 .dash-stats{margin-bottom:12px}
+.dashboard-slideshow-status{font-size:11px;color:var(--muted);white-space:nowrap}
+.dashboard-presentation.is-slideshow > :not(.dashboard-slide){display:none!important}
+.dashboard-slide[hidden]{display:none!important}
+.dashboard-presentation.is-slideshow > .dashboard-slide:not([hidden]){animation:dashboardSlideIn .35s ease-out}
+.slide-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
+.slide-heading h2{margin:0;color:var(--navy-800);font-size:18px}
+.slide-heading span{color:var(--muted);font-size:12px}
+@keyframes dashboardSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .stat{min-height:110px;align-items:flex-start;transition:box-shadow .15s,transform .15s}
 .stat:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
 .stat-card-link{display:block;text-decoration:none;color:inherit}
@@ -425,20 +486,23 @@ foreach ($chartData as [$ck, $cl, $cc]) {
 .lg-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--navy-700)}
 .lg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .lg-val{margin-left:auto;color:var(--muted);font-size:11px}
-/* Regional strength comparison */
-.cmp-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--navy-700);margin:2px 2px 12px}
-.cmp-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-.cmp-list{display:flex;flex-direction:column;gap:14px}
-.cmp-item{border:1px solid var(--border);border-radius:10px;padding:10px 14px;background:var(--navy-50)}
-.cmp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
-.cmp-name{font-weight:700;color:var(--navy-800);font-size:13px}
-.cmp-nums{font-size:11px;color:var(--muted)}
-.cmp-bars{display:flex;flex-direction:column;gap:6px}
-.cmp-row{display:flex;align-items:center;gap:10px}
-.cmp-row-label{width:62px;flex-shrink:0;font-size:11px;color:var(--muted);text-align:right}
-.cmp-track{flex:1;height:11px;background:rgba(0,0,0,.07);border-radius:6px;overflow:hidden}
-.cmp-fill{height:100%;border-radius:6px;min-width:0;transition:width .5s}
-.cmp-row-val{width:34px;flex-shrink:0;font-weight:700;font-size:12px;color:var(--navy-800);text-align:right}
+.vchart-caption{font-size:11px;color:var(--muted);margin:0 2px 10px}
+.vchart-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--navy-700);margin:0 2px 16px}
+.vchart-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.vchart-scroll{overflow-x:auto;padding-bottom:4px}
+.vchart{display:flex;gap:10px;padding:16px 4px 0}
+.vchart-yaxis{position:relative;width:34px;height:260px;flex-shrink:0}
+.vchart-tick{position:absolute;right:0;transform:translateY(50%);font-size:10px;color:var(--muted);line-height:1}
+.vchart-plot{position:relative;flex:1;height:260px;border-bottom:1px solid var(--border);margin-bottom:46px}
+.vchart-grid{position:absolute;inset:0;pointer-events:none}
+.vchart-gridline{position:absolute;left:0;right:0;border-top:1px dashed rgba(0,0,0,.08)}
+.vchart-bars{position:absolute;inset:0;display:flex;align-items:flex-end;gap:8px}
+.vchart-col{position:relative;flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0}
+.vchart-stack{display:flex;flex-direction:column-reverse;width:100%;max-width:58px;min-height:2px;border-radius:4px 4px 0 0;overflow:hidden;transition:height .5s}
+.vchart-seg{width:100%;min-height:0;transition:flex-grow .5s}
+.vchart-label{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:94px;text-align:center;font-size:10px;line-height:1.3;color:var(--navy-700)}
+.vchart-label strong{display:block;font-size:10px;font-weight:700;color:var(--navy-800);overflow-wrap:anywhere}
+.vchart-label span{display:block;font-size:10px;color:var(--muted);margin-top:1px}
 /* Summary strip */
 .dash-summary{
   display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--card);
@@ -464,9 +528,82 @@ foreach ($chartData as [$ck, $cl, $cc]) {
   .ds-cell:nth-child(n+7){border-bottom:1px solid var(--border)}
   .ds-cell:nth-child(n+9){border-bottom:none}
 }
+@media(max-width:600px){
+  .dashboard-slideshow-status{width:100%;text-align:right}
+  .slide-heading{align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){
+  .dashboard-presentation.is-slideshow > .dashboard-slide:not([hidden]){animation:none}
+}
 </style>
 
 <script>
+(function(){
+  const stage = document.getElementById('dashboard-presentation');
+  const toggle = document.getElementById('dashboard-slideshow-toggle');
+  const status = document.getElementById('dashboard-slideshow-status');
+  if (!stage || !toggle || !status) return;
+
+  const slides = Array.from(stage.querySelectorAll('.dashboard-slide'));
+  const label = toggle.querySelector('span');
+  const icon = toggle.querySelector('svg');
+  const storageKey = 'hras-dashboard-slideshow';
+  const indexKey = 'hras-dashboard-slideshow-index';
+  let current = 0;
+  let timer = null;
+  let active = false;
+
+  function showSlide(index) {
+    current = (index + slides.length) % slides.length;
+    slides.forEach((slide, i) => {
+      slide.hidden = i !== current;
+      slide.setAttribute('aria-hidden', i === current ? 'false' : 'true');
+    });
+    status.textContent = 'Slide ' + (current + 1) + ' of ' + slides.length + ' · ' + slides[current].dataset.slideTitle;
+    sessionStorage.setItem(indexKey, String(current));
+  }
+
+  function startSlideshow(index) {
+    if (!slides.length || active) return;
+    active = true;
+    stage.classList.add('is-slideshow');
+    toggle.setAttribute('aria-pressed', 'true');
+    label.textContent = 'Stop slideshow';
+    icon.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
+    sessionStorage.setItem(storageKey, 'on');
+    showSlide(index);
+    timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') showSlide(current + 1);
+    }, 10000);
+  }
+
+  function stopSlideshow() {
+    active = false;
+    window.clearInterval(timer);
+    timer = null;
+    stage.classList.remove('is-slideshow');
+    slides.forEach(slide => {
+      slide.hidden = false;
+      slide.setAttribute('aria-hidden', 'false');
+    });
+    toggle.setAttribute('aria-pressed', 'false');
+    label.textContent = 'Start slideshow';
+    icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+    status.textContent = 'Slideshow off';
+    sessionStorage.removeItem(storageKey);
+    sessionStorage.removeItem(indexKey);
+  }
+
+  toggle.addEventListener('click', () => {
+    if (active) stopSlideshow();
+    else startSlideshow(0);
+  });
+
+  if (sessionStorage.getItem(storageKey) === 'on') {
+    const savedIndex = Number.parseInt(sessionStorage.getItem(indexKey) || '0', 10);
+    startSlideshow(Number.isNaN(savedIndex) ? 0 : savedIndex);
+  }
+})();
 setTimeout(()=>{ if(document.visibilityState==='visible') location.reload(); }, 60000);
 // Scroll to detail panel if loaded via anchor
 <?php if ($detail): ?>

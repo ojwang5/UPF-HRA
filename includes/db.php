@@ -356,6 +356,36 @@ function migrate(PDO $pdo): void {
     if ($v < 21) {
         _migrate_v21($pdo);
     }
+
+    if ($v < 22) {
+        _migrate_v22($pdo);
+    }
+}
+
+/* ─── v22: require an intake for every new or updated course record ─── */
+function _migrate_v22(PDO $pdo): void {
+    $pdo->exec("BEGIN");
+    try {
+        $pdo->exec("
+            CREATE TRIGGER IF NOT EXISTS trg_on_courses_intake_insert
+            BEFORE INSERT ON on_courses
+            WHEN NEW.intake IS NULL OR length(trim(NEW.intake)) = 0
+            BEGIN
+                SELECT RAISE(ABORT, 'Course intake is required');
+            END;
+            CREATE TRIGGER IF NOT EXISTS trg_on_courses_intake_update
+            BEFORE UPDATE OF intake ON on_courses
+            WHEN NEW.intake IS NULL OR length(trim(NEW.intake)) = 0
+            BEGIN
+                SELECT RAISE(ABORT, 'Course intake is required');
+            END;
+        ");
+        $pdo->exec("PRAGMA user_version = 22");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        throw $e;
+    }
 }
 
 /* ─── v21: course intake and lifecycle statuses ─── */

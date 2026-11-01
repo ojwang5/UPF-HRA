@@ -220,50 +220,238 @@ function transfer_report_badge(string $s): string {
         : '<span class="badge badge-sick">Pending report</span>';
 }
 
+/* ═══ Selectable report scopes ═══════════════════════════════════════
+ * A report may cover the whole command or a single region, division,
+ * station/district, directorate or unit. The options below are limited to
+ * what the signed-in user is allowed to see, and hierarchy_summary() applies
+ * the selected filter on top of the user's normal scope.                  */
+
+const REPORT_SCOPE_LEVELS = ['region','division','station','directorate','unit'];
+const REPORT_SCOPE_LABELS = [
+    'region'      => 'Region',
+    'division'    => 'Division',
+    'station'     => 'Station / District',
+    'directorate' => 'Directorate',
+    'unit'        => 'Unit',
+    'post'        => 'Post',
+    'hq'          => 'Force (HQ)',
+];
+
+/** Entity table/column used when grouping a report at a given level. */
+function report_group_sql(string $level): array {
+    return match($level) {
+        'region'      => ["LEFT JOIN regions gp ON gp.id=e.region_id", "gp.id", "COALESCE(gp.name,'Unassigned')"],
+        'division'    => ["LEFT JOIN divisions gp ON gp.id=e.division_id", "gp.id", "COALESCE(gp.name,'Unassigned')"],
+        'station'     => ["LEFT JOIN stations gp ON gp.id=e.station_id", "gp.id", "COALESCE(gp.name,'Unassigned')"],
+        'post'        => ["LEFT JOIN posts gp ON gp.id=e.post_id", "gp.id", "COALESCE(gp.name,'Unassigned')"],
+        'directorate' => ["LEFT JOIN directorates gp ON gp.name=e.directorate", "gp.id", "COALESCE(gp.name,NULLIF(e.directorate,''),'Unassigned')"],
+        'unit'        => ["LEFT JOIN directorates gd ON gd.name=e.directorate LEFT JOIN units gp ON gp.directorate_id=gd.id AND gp.name=e.unit", "gp.id", "COALESCE(gp.name,NULLIF(e.unit,''),'Unassigned')"],
+        'hq'          => ["", "'hq'", "'Force (HQ)'"],
+        default       => ["LEFT JOIN posts gp ON gp.id=e.post_id", "gp.id", "COALESCE(gp.name,'Unassigned')"],
+    };
+}
+
+/** Level broken down inside a selected scope (e.g. region => divisions). */
+function report_scope_child_level(string $level): string {
+    return match($level) {
+        'region'      => 'division',
+        'division'    => 'station',
+        'station'     => 'post',
+        'directorate' => 'unit',
+        'unit'        => 'unit',
+        'post'        => 'post',
+        'hq'          => 'region',
+        default       => 'post',
+    };
+}
+
+/** Loads one selectable entity (region/division/station/directorate/unit). */
+function report_scope_entity(PDO $pdo, string $level, int $id): ?array {
+    if ($id <= 0) return null;
+    try {
+        switch ($level) {
+            case 'region':
+                $st = $pdo->prepare("SELECT id,name FROM regions WHERE id=?");
+                break;
+            case 'division':
+                $st = $pdo->prepare("SELECT d.id,d.name,d.region_id FROM divisions d WHERE d.id=?");
+                break;
+            case 'station':
+                $st = $pdo->prepare("SELECT s.id,s.name,s.division_id,d.region_id FROM stations s JOIN divisions d ON d.id=s.division_id WHERE s.id=?");
+                break;
+            case 'directorate':
+                $st = $pdo->prepare("SELECT id,name FROM directorates WHERE id=?");
+                break;
+            case 'unit':
+                $st = $pdo->prepare("SELECT u.id,u.name,u.directorate_id,d.name AS directorate_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.id=?");
+                break;
+            default:
+                return null;
+        }
+        $st->execute([$id]);
+        return $st->fetch() ?: null;
+    } catch (\Throwable $e) {
+        return null;
+    }
+}
+
+/** Builds the employee filter used to restrict a report to one entity. */
+function report_scope_filter_sql(PDO $pdo, string $level, int $id): ?array {
+    $ent = report_scope_entity($pdo, $level, $id);
+    if (!$ent) return null;
+    return match($level) {
+        'region'      => ['sql'=>'e.region_id=?',     'params'=>[$id],                                  'group_level'=>'division', 'label'=>(string)$ent['name']],
+        'division'    => ['sql'=>'e.division_id=?',   'params'=>[$id],                                  'group_level'=>'station',  'label'=>(string)$ent['name']],
+        'station'     => ['sql'=>'e.station_id=?',    'params'=>[$id],                                  'group_level'=>'post',     'label'=>(string)$ent['name']],
+        'directorate' => ['sql'=>'e.directorate=?',   'params'=>[(string)$ent['name']],                 'group_level'=>'unit',     'label'=>(string)$ent['name']],
+        'unit'        => ['sql'=>'e.directorate=? AND e.unit=?', 'params'=>[(string)$ent['directorate_name'],(string)$ent['name']], 'group_level'=>'unit', 'label'=>(string)$ent['name']],
+        default       => null,
+    };
+}
+
+/** All entities the user may select for a report, grouped by level. */
+function report_scope_options(PDO $pdo, array $user): array {
+    static $cache = [];
+    $cacheKey = (int)($user['id'] ?? 0) . '|' . (string)($user['role'] ?? '');
+    if (isset($cache[$cacheKey])) return $cache[$cacheKey];
+
+    $out  = array_fill_keys(REPORT_SCOPE_LEVELS, []);
+    $role = (string)($user['role'] ?? '');
+
+    try {
+        if ($role === 'superadmin') {
+            $out['region']      = $pdo->query("SELECT id,name FROM regions ORDER BY name COLLATE NOCASE")->fetchAll();
+            $out['division']    = $pdo->query("SELECT id,region_id AS parent_id,name FROM divisions ORDER BY name COLLATE NOCASE")->fetchAll();
+            $out['station']     = $pdo->query("SELECT s.id,s.division_id AS parent_id,s.name FROM stations s JOIN divisions d ON d.id=s.division_id ORDER BY s.name COLLATE NOCASE")->fetchAll();
+            $out['directorate'] = $pdo->query("SELECT id,name FROM directorates WHERE active=1 ORDER BY name COLLATE NOCASE")->fetchAll();
+            $out['unit']        = $pdo->query("SELECT u.id,u.directorate_id AS parent_id,u.name,d.name AS directorate_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.active=1 ORDER BY u.name COLLATE NOCASE")->fetchAll();
+            return $cache[$cacheKey] = $out;
+        }
+
+        $rid   = (int)($user['region_id'] ?? 0);
+        $did   = (int)($user['division_id'] ?? 0);
+        $sid   = (int)($user['station_id'] ?? 0);
+        $dirId = (int)($user['directorate_id'] ?? 0);
+        $untId = (int)($user['unit_id'] ?? 0);
+
+        // Signal in-charges can be attached geographically or functionally.
+        if ($role === 'signal_incharge') {
+            if ($rid > 0)        $role = 'regional_commander';
+            elseif ($untId > 0)  $role = 'unit_commander';
+            elseif ($dirId > 0)  $role = 'directorate_commander';
+        }
+
+        if ($role === 'regional_commander' && $rid > 0) {
+            $s = $pdo->prepare("SELECT id,name FROM regions WHERE id=?"); $s->execute([$rid]); $out['region'] = $s->fetchAll();
+            $s = $pdo->prepare("SELECT id,region_id AS parent_id,name FROM divisions WHERE region_id=? ORDER BY name COLLATE NOCASE"); $s->execute([$rid]); $out['division'] = $s->fetchAll();
+            $s = $pdo->prepare("SELECT s.id,s.division_id AS parent_id,s.name FROM stations s JOIN divisions d ON d.id=s.division_id WHERE d.region_id=? ORDER BY s.name COLLATE NOCASE"); $s->execute([$rid]); $out['station'] = $s->fetchAll();
+        } elseif ($role === 'division_commander' && $did > 0) {
+            $s = $pdo->prepare("SELECT id,region_id AS parent_id,name FROM divisions WHERE id=?"); $s->execute([$did]); $out['division'] = $s->fetchAll();
+            $s = $pdo->prepare("SELECT id,division_id AS parent_id,name FROM stations WHERE division_id=? ORDER BY name COLLATE NOCASE"); $s->execute([$did]); $out['station'] = $s->fetchAll();
+        } elseif ($role === 'station_commander' && $sid > 0) {
+            $s = $pdo->prepare("SELECT id,division_id AS parent_id,name FROM stations WHERE id=?"); $s->execute([$sid]); $out['station'] = $s->fetchAll();
+        } elseif ($role === 'directorate_commander' && $dirId > 0) {
+            $s = $pdo->prepare("SELECT id,name FROM directorates WHERE id=?"); $s->execute([$dirId]); $out['directorate'] = $s->fetchAll();
+            $s = $pdo->prepare("SELECT u.id,u.directorate_id AS parent_id,u.name,d.name AS directorate_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.directorate_id=? AND u.active=1 ORDER BY u.name COLLATE NOCASE"); $s->execute([$dirId]); $out['unit'] = $s->fetchAll();
+        } elseif ($role === 'unit_commander' && $untId > 0) {
+            $s = $pdo->prepare("SELECT u.id,u.directorate_id AS parent_id,u.name,d.name AS directorate_name FROM units u JOIN directorates d ON d.id=u.directorate_id WHERE u.id=?"); $s->execute([$untId]); $out['unit'] = $s->fetchAll();
+        }
+
+        // Functional options that actually have personnel inside the user's
+        // normal scope (e.g. a region commander can report on a directorate
+        // operating within their region).
+        [$scopeW, $scopeP] = scope_where($user, 'e');
+        $dirStmt = $pdo->prepare("SELECT DISTINCT d.id,d.name FROM employees e JOIN directorates d ON d.name=e.directorate WHERE e.active=1 AND $scopeW ORDER BY d.name COLLATE NOCASE");
+        $dirStmt->execute($scopeP);
+        $unitStmt = $pdo->prepare("SELECT DISTINCT u.id,u.directorate_id AS parent_id,u.name,d.name AS directorate_name FROM employees e JOIN directorates d ON d.name=e.directorate JOIN units u ON u.directorate_id=d.id AND u.name=e.unit WHERE e.active=1 AND $scopeW ORDER BY u.name COLLATE NOCASE");
+        $unitStmt->execute($scopeP);
+
+        $merge = function(array $rows, string $level) use (&$out): void {
+            $byId = [];
+            foreach ($out[$level] as $r) $byId[(int)$r['id']] = $r;
+            foreach ($rows as $r) {
+                if (!isset($byId[(int)$r['id']])) $byId[(int)$r['id']] = $r;
+            }
+            $out[$level] = array_values($byId);
+            usort($out[$level], fn($a, $b) => strcasecmp((string)$a['name'], (string)$b['name']));
+        };
+        $merge($dirStmt->fetchAll(), 'directorate');
+        $merge($unitStmt->fetchAll(), 'unit');
+    } catch (\Throwable $e) {
+        // Return whatever could be loaded.
+    }
+    return $cache[$cacheKey] = $out;
+}
+
+/** True when the selected entity is one of the user's permitted scopes. */
+function report_scope_allowed(PDO $pdo, array $user, string $level, int $id): bool {
+    if (!in_array($level, REPORT_SCOPE_LEVELS, true) || $id <= 0) return false;
+    $opts = report_scope_options($pdo, $user);
+    foreach ($opts[$level] ?? [] as $o) {
+        if ((int)$o['id'] === $id) return true;
+    }
+    return false;
+}
+
+/** Display label for a selected report scope. */
+function report_scope_label(string $level, ?array $entity = null): string {
+    $base = REPORT_SCOPE_LABELS[$level] ?? ucfirst($level);
+    return $entity && !empty($entity['name']) ? $base . ' — ' . $entity['name'] : $base;
+}
+
+/** Reconstructs the selected scope stored on an existing report row. */
+function report_selection_from_row(array $report): array {
+    $level = (string)($report['scope_level'] ?? '');
+    if (!in_array($level, REPORT_SCOPE_LEVELS, true)) return [null, null];
+    $id = match($level) {
+        'region'      => (int)($report['region_id'] ?? 0),
+        'division'    => (int)($report['division_id'] ?? 0),
+        'station'     => (int)($report['station_id'] ?? 0),
+        'directorate' => (int)($report['directorate_id'] ?? 0),
+        'unit'        => (int)($report['unit_id'] ?? 0),
+        default       => 0,
+    };
+    return $id > 0 ? [$level, $id] : [null, null];
+}
+
 /**
  * Returns aggregate stats for the user's scope, grouped by the level below theirs.
- * superadmin => group by region
+ * Optionally restricted to one selected entity (region/division/station/directorate/unit).
+ * superadmin => group by region (or the breakdown of the selected entity)
  * regional_commander => group by division
  * division_commander => group by station
  * station_commander/post_commander/officer => group by post
  */
-function hierarchy_summary(PDO $pdo, string $date, array $user): array {
+function hierarchy_summary(PDO $pdo, string $date, array $user, ?string $scopeLevel = null, ?int $scopeId = null): array {
     [$scopeWhere, $scopeParams] = scope_where($user, 'e');
 
-    // Determine grouping level
-    $groupLevel = match($user['role']) {
-        'superadmin'         => 'region',
-        'regional_commander' => 'division',
-        'division_commander' => 'station',
-        'directorate_commander',
-        'unit_commander'     => 'region',
-        default              => 'post',
-    };
+    $filterSql    = '';
+    $filterParams = [];
+    $groupLevel   = null;
 
-    $groupCol   = "{$groupLevel}s.id";
-    $groupName  = "{$groupLevel}s.name";
-    $joinClause = build_hierarchy_joins($groupLevel);
+    if ($scopeLevel !== null && $scopeId !== null) {
+        $filter = report_scope_filter_sql($pdo, $scopeLevel, $scopeId);
+        if ($filter === null) return [];
+        $filterSql    = $filter['sql'];
+        $filterParams = $filter['params'];
+        $groupLevel   = $filter['group_level'];
+    }
 
-    $sql = "
-        SELECT {$groupCol} AS unit_id, {$groupName} AS unit_name, '{$groupLevel}' AS unit_level,
-               COUNT(e.id) AS total,
-               SUM(CASE WHEN e.gender='M' THEN 1 ELSE 0 END) AS male,
-               SUM(CASE WHEN e.gender='F' THEN 1 ELSE 0 END) AS female,
-               SUM(CASE WHEN ds.status='present'      THEN 1 ELSE 0 END) AS present,
-               SUM(CASE WHEN ds.status='awol'         THEN 1 ELSE 0 END) AS awol,
-               SUM(CASE WHEN ds.status='leave'        THEN 1 ELSE 0 END) AS on_leave,
-               SUM(CASE WHEN ds.status='sick'         THEN 1 ELSE 0 END) AS sick,
-               SUM(CASE WHEN ds.status='suspended'    THEN 1 ELSE 0 END) AS suspended,
-               SUM(CASE WHEN ds.status='disciplinary' THEN 1 ELSE 0 END) AS disciplinary,
-               SUM(CASE WHEN ds.status='on_duty'      THEN 1 ELSE 0 END) AS on_duty,
-               SUM(CASE WHEN ds.status='on_course'    THEN 1 ELSE 0 END) AS on_course
-        FROM employees e
-        {$joinClause}
-        LEFT JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=:d
-        WHERE e.active=1 AND {$scopeWhere}
-        GROUP BY unit_id
-        ORDER BY unit_name
-    ";
+    if ($groupLevel === null) {
+        $groupLevel = match($user['role']) {
+            'superadmin'         => 'region',
+            'regional_commander' => 'division',
+            'division_commander' => 'station',
+            'directorate_commander' => 'directorate',
+            'unit_commander'     => 'unit',
+            default              => 'post',
+        };
+    }
+
+    [$joinClause, $groupCol, $groupName] = report_group_sql($groupLevel);
+
+    $where = "e.active=1 AND {$scopeWhere}";
+    if ($filterSql !== '') $where .= " AND {$filterSql}";
 
     $sqlFinal = "
         SELECT {$groupCol} AS unit_id, {$groupName} AS unit_name, '{$groupLevel}' AS unit_level,
@@ -284,12 +472,12 @@ function hierarchy_summary(PDO $pdo, string $date, array $user): array {
         FROM employees e
         {$joinClause}
         LEFT JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
-        WHERE e.active=1 AND {$scopeWhere}
+        WHERE {$where}
         GROUP BY unit_id
         ORDER BY unit_name
     ";
     $stmt = $pdo->prepare($sqlFinal);
-    $stmt->execute(array_merge([$date], $scopeParams));
+    $stmt->execute(array_merge([$date], $scopeParams, $filterParams));
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
         foreach (['total','male','female','present','awol','on_leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed'] as $k) {
@@ -498,6 +686,48 @@ function leave_balances(PDO $pdo, array $employeeIds, ?string $year = null): arr
         $b['remaining'] = $b['entitlement'] + $b['adjust'] - $b['taken'];
     }
     return $out;
+}
+
+/** Approved leave that covers today (a leave currently running). */
+function running_leave_for(PDO $pdo, int $employeeId, ?string $onDate = null): ?array {
+    if ($employeeId <= 0) return null;
+    $onDate = $onDate ?: date('Y-m-d');
+    if (!valid_date($onDate)) return null;
+    $st = $pdo->prepare("SELECT * FROM leave_requests
+                         WHERE employee_id=? AND status='approved'
+                           AND start_date<=? AND end_date>=?
+                         ORDER BY end_date DESC, id DESC LIMIT 1");
+    $st->execute([$employeeId, $onDate, $onDate]);
+    return $st->fetch() ?: null;
+}
+
+/** Any pending leave request for an employee (blocks duplicate submissions). */
+function pending_leave_for(PDO $pdo, int $employeeId, ?int $excludeId = null): ?array {
+    if ($employeeId <= 0) return null;
+    $sql = "SELECT * FROM leave_requests WHERE employee_id=? AND status='pending'";
+    $params = [$employeeId];
+    if ($excludeId) { $sql .= " AND id<>?"; $params[] = $excludeId; }
+    $sql .= " ORDER BY submitted_at DESC, id DESC LIMIT 1";
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * Existing pending/approved leave overlapping a proposed period.
+ * Approved requests are preferred so the caller can offer an extension.
+ */
+function find_conflicting_leave(PDO $pdo, int $employeeId, string $start, string $end, ?int $excludeId = null): ?array {
+    if ($employeeId <= 0 || !valid_date($start) || !valid_date($end) || $end < $start) return null;
+    $sql = "SELECT * FROM leave_requests
+            WHERE employee_id=? AND status IN ('pending','approved')
+              AND start_date<=? AND end_date>=?";
+    $params = [$employeeId, $end, $start];
+    if ($excludeId) { $sql .= " AND id<>?"; $params[] = $excludeId; }
+    $sql .= " ORDER BY CASE status WHEN 'approved' THEN 0 ELSE 1 END, end_date DESC, id DESC LIMIT 1";
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    return $st->fetch() ?: null;
 }
 
 /**

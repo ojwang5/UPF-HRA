@@ -11,14 +11,14 @@ $MODULES = [
     'courses' => [
         'title'    => 'On Courses',
         'back'     => '/courses.php',
-        'required' => ['service_no','course_name','start_date','end_date'],
+        'required' => ['service_no','course_name','intake','start_date','end_date'],
         'columns'  => [
             'service_no'    => 'Required · File/Force No of an active officer in your scope',
             'course_name'   => 'Required · e.g. Junior Staff Course',
             'course_nature' => 'Course type, e.g. Professional, Promotional, Refresher',
             'school'        => 'School / training school',
             'place'         => 'Place / town',
-            'intake'        => 'Course intake / cohort',
+            'intake'        => 'Required · course intake / cohort, e.g. 2026 Intake 1',
             'start_date'    => 'YYYY-MM-DD',
             'end_date'      => 'YYYY-MM-DD',
             'status'        => 'pending, ongoing, halted, or completed (default based on start date)',
@@ -161,11 +161,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
 
             if ($module === 'courses') {
                 $cname = $cell('course_name');
+                $intake = $cell('intake');
                 $start = $cell('start_date');
                 $end   = $cell('end_date');
                 $courseStatus = strtolower($cell('status'));
                 if ($courseStatus === '') $courseStatus = $start > date('Y-m-d') ? 'pending' : 'ongoing';
                 if ($cname === '')        $rowErrs[] = 'course_name is required';
+                if ($intake === '')       $rowErrs[] = 'intake is required for every course';
                 if (!valid_date($start))  $rowErrs[] = "invalid start_date '{$start}' (use YYYY-MM-DD)";
                 if (!valid_date($end))    $rowErrs[] = "invalid end_date '{$end}' (use YYYY-MM-DD)";
                 if (valid_date($start) && valid_date($end) && $end < $start) $rowErrs[] = 'end_date cannot be before start_date';
@@ -178,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_FILES['csv_file']['name'])
                     $pdo->prepare("INSERT INTO on_courses (employee_id,course_name,course_nature,school,place,intake,start_date,end_date,duration_days,sponsor,status,notes,created_by,completed_at)
                                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='completed' THEN ? ELSE NULL END)")
                         ->execute([(int)$emp['id'], $cname, $cell('course_nature') ?: 'Professional',
-                                   $cell('school') ?: null, $cell('place') ?: null, $cell('intake') ?: null,
+                                   $cell('school') ?: null, $cell('place') ?: null, $intake,
                                    $start, $end, $duration, $cell('sponsor') ?: null, $courseStatus,
                                    $cell('notes') ?: null, $user['id'], $courseStatus, $end]);
                     log_activity('Bulk Import On-Course', 'on_course', $cname, (int)$pdo->lastInsertId(), personnel_label($emp));

@@ -140,9 +140,8 @@ include __DIR__ . '/../includes/header.php';
             <td><strong><?= e($r['full_name']) ?></strong></td>
             <td>
               <select name="status[<?= $r['id'] ?>]" class="status-select">
-                <option value="" <?= !$r['status']?'selected':'' ?>>— unrecorded —</option>
                 <?php foreach (ALL_STATUSES as $s): ?>
-                  <option value="<?= $s ?>" <?= $r['status']===$s?'selected':'' ?>><?= e(status_label($s)) ?></option>
+                  <option value="<?= $s ?>" <?= $r['status'] === $s || ($r['status'] === null && $s === 'present') ? 'selected' : '' ?>><?= e(status_label($s)) ?></option>
                 <?php endforeach; ?>
               </select>
             </td>
