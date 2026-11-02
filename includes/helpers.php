@@ -6,6 +6,15 @@ function e(?string $s): string {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * URL for a resized personnel photo. The endpoint generates and caches a
+ * thumbnail on first request, so full-size uploads never hit list pages.
+ */
+function photo_url(string $path, int $width = 160): string {
+    if ($path === '') return '';
+    return '/thumb.php?f=' . rawurlencode(basename($path)) . '&w=' . max(32, min(800, $width));
+}
+
 /* ─── Password policy ─────────────────────────────────────────────
  * A valid password must contain at least one capital letter, one small
  * letter and one special character, and be longer than 6 characters. */

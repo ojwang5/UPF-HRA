@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/mailer.php';
 $user = require_login();
 $page = 'dashboard';
 $page_title = 'Dashboard';
@@ -40,6 +41,133 @@ if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')
     $detailPersonnel = $stmt->fetchAll();
 }
 
+$page_style = <<<'CSS'
+/* Dashboard stat cards */
+.dash-stats{
+  margin-bottom:12px
+}
+.stat{
+  min-height:110px;
+align-items:flex-start;
+transition:box-shadow .15s,transform .15s
+}
+.stat:hover{
+  transform:translateY(-2px);box-shadow:var(--shadow)}
+.stat-card-link{display:block;text-decoration:none;color:inherit}
+.stat-bar{height:5px;background:rgba(0,0,0,.08);border-radius:3px;margin-top:8px;overflow:hidden}
+.stat-bar-fill{height:100%;border-radius:3px;transition:width .4s}
+.stat-pct{font-size:10px;color:var(--muted);margin-top:4px}
+.stat .hint{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.3}
+.stat-deserted{border-color:#be185d}
+/* Status distribution charts */
+.charts-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;align-items:stretch}
+@media(max-width:900px){.charts-grid{grid-template-columns:1fr}}
+.chart-title{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy-800);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
+.chart-title .ico{width:15px;height:15px;color:var(--gold)}
+.bar-box{padding-right:20px;border-right:1px solid var(--border)}
+@media(max-width:900px){.bar-box{padding-right:0;border-right:none;border-bottom:1px solid var(--border);padding-bottom:18px}}
+.hbar-list{display:flex;flex-direction:column;gap:9px}
+.hbar-row{display:flex;align-items:center;gap:10px}
+.hbar-label{width:92px;flex-shrink:0;font-size:12px;color:var(--navy-700);display:flex;align-items:center;justify-content:space-between;gap:6px}
+.hbar-num{font-weight:700;font-size:12px;color:var(--navy-800)}
+.hbar-track{flex:1;height:12px;background:rgba(0,0,0,.07);border-radius:6px;overflow:hidden}
+.hbar-fill{height:100%;border-radius:6px;min-width:0;transition:width .5s}
+.hbar-pct{width:38px;flex-shrink:0;text-align:right;font-size:11px;font-weight:600;color:var(--muted)}
+.pie-wrap{display:flex;align-items:center;gap:22px;justify-content:center;flex-wrap:wrap}
+.pie-legend{display:flex;flex-direction:column;gap:6px;min-width:160px}
+.lg-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--navy-700)}
+.lg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.lg-val{margin-left:auto;color:var(--muted);font-size:11px}
+.vchart-caption{font-size:11px;color:var(--muted);margin:0 2px 10px}
+.vchart-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--navy-700);margin:0 2px 16px}
+.vchart-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.vchart-scroll{overflow-x:auto;padding-bottom:4px}
+.vchart{display:flex;gap:10px;padding:16px 4px 0}
+.vchart-yaxis{position:relative;width:34px;height:260px;flex-shrink:0}
+.vchart-tick{position:absolute;right:0;transform:translateY(50%);font-size:10px;color:var(--muted);line-height:1}
+.vchart-plot{position:relative;flex:1;height:260px;border-bottom:1px solid var(--border);margin-bottom:46px}
+.vchart-grid{position:absolute;inset:0;pointer-events:none}
+.vchart-gridline{position:absolute;left:0;right:0;border-top:1px dashed rgba(0,0,0,.08)}
+.vchart-bars{position:absolute;inset:0;display:flex;align-items:flex-end;gap:8px}
+.vchart-col{position:relative;flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0}
+.vchart-stack{
+  display:flex;
+  flex-direction:column-reverse;
+  width:100%;
+  max-width:58px;
+  min-height:2px;
+  border-radius:4px 4px 0 0;
+  overflow:hidden;
+  transition:height .5s
+}
+.vchart-seg{
+  width:100%;
+  min-height:0;
+  transition:flex-grow .5s
+}
+.vchart-label{
+  position:absolute;
+top:calc(100% + 8px);
+left:50%;
+transform:translateX(-50%);
+width:94px;
+text-align:center;
+font-size:10px;
+line-height:1.3;
+color:var(--navy-700)
+}
+.vchart-label strong{
+  display:block;
+  font-size:10px;
+  font-weight:700;
+  color:var(--navy-800);
+  overflow-wrap:anywhere
+}
+.vchart-label span{
+  display:block;
+  font-size:10px;
+  color:var(--muted);
+  margin-top:1px
+}
+/* Summary strip */
+.dash-summary{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:10px;
+  margin-bottom:16px;
+  overflow:hidden;
+  box-shadow:var(--shadow-sm);
+}
+.ds-cell{
+  min-width:0;
+  padding:12px 10px;
+  border-right:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  text-align:center
+}
+.ds-cell:nth-child(5n){border-right:none}
+.ds-cell:nth-child(n+6){border-bottom:none}
+.ds-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;line-height:1.3;color:var(--muted);font-weight:600;margin-bottom:5px;overflow-wrap:anywhere}
+.ds-val{font-size:22px;font-weight:700;color:var(--navy-800);line-height:1.1}
+@media(max-width:1000px){
+  .dash-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ds-cell:nth-child(5n){border-right:1px solid var(--border)}
+  .ds-cell:nth-child(3n){border-right:none}
+  .ds-cell:nth-child(n+6){border-bottom:1px solid var(--border)}
+  .ds-cell:nth-child(n+7){border-bottom:none}
+}
+@media(max-width:600px){
+  .dash-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ds-cell:nth-child(3n){border-right:1px solid var(--border)}
+  .ds-cell:nth-child(2n){border-right:none}
+  .ds-cell:nth-child(n+7){border-bottom:1px solid var(--border)}
+  .ds-cell:nth-child(n+9){border-bottom:none}
+}
+CSS;
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -49,11 +177,6 @@ include __DIR__ . '/../includes/header.php';
     <div class="desc"><?= e(date('l, j F Y', strtotime($date))) ?> &nbsp;·&nbsp; <?= e(role_label($user['role'])) ?> &nbsp;·&nbsp; <?= e(user_scope_label($user)) ?></div>
   </div>
   <div class="action-bar">
-    <button class="btn-icon btn-labeled bi-secondary" id="dashboard-slideshow-toggle" type="button" aria-pressed="false">
-      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      <span>Start slideshow</span>
-    </button>
-    <span id="dashboard-slideshow-status" class="dashboard-slideshow-status" aria-live="polite">Slideshow off</span>
     <div class="panel-wrap">
       <button class="btn-icon bi-secondary" data-panel="panel-date" title="Change date">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -71,7 +194,6 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
-<div class="dashboard-presentation" id="dashboard-presentation">
 <!-- 9 Stat Cards (clickable) -->
 <?php
 // Each entry: [status_key, label, css_class, color, bg_color, svg_icon, hint_text]
@@ -105,11 +227,6 @@ $cards = [
    'Left post without permission'],
 ];
 ?>
-<section class="dashboard-slide" data-slide-title="Personnel status overview" aria-label="Personnel status overview">
-<div class="slide-heading">
-  <h2>Personnel Status Overview</h2>
-  <span><?= e(date('j F Y', strtotime($date))) ?></span>
-</div>
 <div class="grid grid-4 dash-stats">
 <?php foreach ($cards as $card):
   [$key, $label, $cls, $color, $bg, $icon, $hint] = $card;
@@ -137,7 +254,6 @@ $cards = [
 </a>
 <?php endforeach; ?>
 </div>
-</section>
 
 <!-- Detail Drill-down Panel -->
 <?php if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')): ?>
@@ -262,7 +378,6 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     }
 }
 ?>
-<section class="dashboard-slide" data-slide-title="Status distribution" aria-label="Status distribution chart">
 <div class="card" style="margin-top:4px">
   <div class="chr">
     <h3>Status Distribution — <?= e(date('j F Y', strtotime($date))) ?></h3>
@@ -309,7 +424,6 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     </div>
   </div>
 </div>
-</section>
 
 <!-- Per-unit breakdown -->
 <?php if (!empty($rows)): ?>
@@ -393,7 +507,6 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     default              => 'Top 10 Post Personnel Status — '.e($user['station_name']??''),
   };
 ?>
-<section class="dashboard-slide" data-slide-title="<?= $topTitle ?>" aria-label="<?= $topTitle ?>">
 <div class="card" style="margin-top:4px">
   <div class="chr">
     <h3><?= $topTitle ?> — <?= e(date('j F Y', strtotime($date))) ?></h3>
@@ -444,166 +557,9 @@ foreach ($chartData as [$ck, $cl, $cc]) {
   <div class="muted" style="padding:12px 2px">No personnel status data for this date.</div>
   <?php endif; ?>
 </div>
-</section>
 <?php endif; ?>
-</div>
-
-<style>
-/* Dashboard stat cards */
-.dash-stats{margin-bottom:12px}
-.dashboard-slideshow-status{font-size:11px;color:var(--muted);white-space:nowrap}
-.dashboard-presentation.is-slideshow > :not(.dashboard-slide){display:none!important}
-.dashboard-slide[hidden]{display:none!important}
-.dashboard-presentation.is-slideshow > .dashboard-slide:not([hidden]){animation:dashboardSlideIn .35s ease-out}
-.slide-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
-.slide-heading h2{margin:0;color:var(--navy-800);font-size:18px}
-.slide-heading span{color:var(--muted);font-size:12px}
-@keyframes dashboardSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.stat{min-height:110px;align-items:flex-start;transition:box-shadow .15s,transform .15s}
-.stat:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-.stat-card-link{display:block;text-decoration:none;color:inherit}
-.stat-bar{height:5px;background:rgba(0,0,0,.08);border-radius:3px;margin-top:8px;overflow:hidden}
-.stat-bar-fill{height:100%;border-radius:3px;transition:width .4s}
-.stat-pct{font-size:10px;color:var(--muted);margin-top:4px}
-.stat .hint{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.3}
-.stat-deserted{border-color:#be185d}
-/* Status distribution charts */
-.charts-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;align-items:stretch}
-@media(max-width:900px){.charts-grid{grid-template-columns:1fr}}
-.chart-title{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--navy-800);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px}
-.chart-title .ico{width:15px;height:15px;color:var(--gold)}
-.bar-box{padding-right:20px;border-right:1px solid var(--border)}
-@media(max-width:900px){.bar-box{padding-right:0;border-right:none;border-bottom:1px solid var(--border);padding-bottom:18px}}
-.hbar-list{display:flex;flex-direction:column;gap:9px}
-.hbar-row{display:flex;align-items:center;gap:10px}
-.hbar-label{width:92px;flex-shrink:0;font-size:12px;color:var(--navy-700);display:flex;align-items:center;justify-content:space-between;gap:6px}
-.hbar-num{font-weight:700;font-size:12px;color:var(--navy-800)}
-.hbar-track{flex:1;height:12px;background:rgba(0,0,0,.07);border-radius:6px;overflow:hidden}
-.hbar-fill{height:100%;border-radius:6px;min-width:0;transition:width .5s}
-.hbar-pct{width:38px;flex-shrink:0;text-align:right;font-size:11px;font-weight:600;color:var(--muted)}
-.pie-wrap{display:flex;align-items:center;gap:22px;justify-content:center;flex-wrap:wrap}
-.pie-legend{display:flex;flex-direction:column;gap:6px;min-width:160px}
-.lg-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--navy-700)}
-.lg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.lg-val{margin-left:auto;color:var(--muted);font-size:11px}
-.vchart-caption{font-size:11px;color:var(--muted);margin:0 2px 10px}
-.vchart-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--navy-700);margin:0 2px 16px}
-.vchart-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-.vchart-scroll{overflow-x:auto;padding-bottom:4px}
-.vchart{display:flex;gap:10px;padding:16px 4px 0}
-.vchart-yaxis{position:relative;width:34px;height:260px;flex-shrink:0}
-.vchart-tick{position:absolute;right:0;transform:translateY(50%);font-size:10px;color:var(--muted);line-height:1}
-.vchart-plot{position:relative;flex:1;height:260px;border-bottom:1px solid var(--border);margin-bottom:46px}
-.vchart-grid{position:absolute;inset:0;pointer-events:none}
-.vchart-gridline{position:absolute;left:0;right:0;border-top:1px dashed rgba(0,0,0,.08)}
-.vchart-bars{position:absolute;inset:0;display:flex;align-items:flex-end;gap:8px}
-.vchart-col{position:relative;flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0}
-.vchart-stack{display:flex;flex-direction:column-reverse;width:100%;max-width:58px;min-height:2px;border-radius:4px 4px 0 0;overflow:hidden;transition:height .5s}
-.vchart-seg{width:100%;min-height:0;transition:flex-grow .5s}
-.vchart-label{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:94px;text-align:center;font-size:10px;line-height:1.3;color:var(--navy-700)}
-.vchart-label strong{display:block;font-size:10px;font-weight:700;color:var(--navy-800);overflow-wrap:anywhere}
-.vchart-label span{display:block;font-size:10px;color:var(--muted);margin-top:1px}
-/* Summary strip */
-.dash-summary{
-  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--card);
-  border:1px solid var(--border);border-radius:10px;
-  margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow-sm);
-}
-.ds-cell{min-width:0;padding:12px 10px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center}
-.ds-cell:nth-child(5n){border-right:none}
-.ds-cell:nth-child(n+6){border-bottom:none}
-.ds-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;line-height:1.3;color:var(--muted);font-weight:600;margin-bottom:5px;overflow-wrap:anywhere}
-.ds-val{font-size:22px;font-weight:700;color:var(--navy-800);line-height:1.1}
-@media(max-width:1000px){
-  .dash-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .ds-cell:nth-child(5n){border-right:1px solid var(--border)}
-  .ds-cell:nth-child(3n){border-right:none}
-  .ds-cell:nth-child(n+6){border-bottom:1px solid var(--border)}
-  .ds-cell:nth-child(n+7){border-bottom:none}
-}
-@media(max-width:600px){
-  .dash-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .ds-cell:nth-child(3n){border-right:1px solid var(--border)}
-  .ds-cell:nth-child(2n){border-right:none}
-  .ds-cell:nth-child(n+7){border-bottom:1px solid var(--border)}
-  .ds-cell:nth-child(n+9){border-bottom:none}
-}
-@media(max-width:600px){
-  .dashboard-slideshow-status{width:100%;text-align:right}
-  .slide-heading{align-items:flex-start}
-}
-@media(prefers-reduced-motion:reduce){
-  .dashboard-presentation.is-slideshow > .dashboard-slide:not([hidden]){animation:none}
-}
-</style>
 
 <script>
-(function(){
-  const stage = document.getElementById('dashboard-presentation');
-  const toggle = document.getElementById('dashboard-slideshow-toggle');
-  const status = document.getElementById('dashboard-slideshow-status');
-  if (!stage || !toggle || !status) return;
-
-  const slides = Array.from(stage.querySelectorAll('.dashboard-slide'));
-  const label = toggle.querySelector('span');
-  const icon = toggle.querySelector('svg');
-  const storageKey = 'hras-dashboard-slideshow';
-  const indexKey = 'hras-dashboard-slideshow-index';
-  let current = 0;
-  let timer = null;
-  let active = false;
-
-  function showSlide(index) {
-    current = (index + slides.length) % slides.length;
-    slides.forEach((slide, i) => {
-      slide.hidden = i !== current;
-      slide.setAttribute('aria-hidden', i === current ? 'false' : 'true');
-    });
-    status.textContent = 'Slide ' + (current + 1) + ' of ' + slides.length + ' · ' + slides[current].dataset.slideTitle;
-    sessionStorage.setItem(indexKey, String(current));
-  }
-
-  function startSlideshow(index) {
-    if (!slides.length || active) return;
-    active = true;
-    stage.classList.add('is-slideshow');
-    toggle.setAttribute('aria-pressed', 'true');
-    label.textContent = 'Stop slideshow';
-    icon.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
-    sessionStorage.setItem(storageKey, 'on');
-    showSlide(index);
-    timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') showSlide(current + 1);
-    }, 10000);
-  }
-
-  function stopSlideshow() {
-    active = false;
-    window.clearInterval(timer);
-    timer = null;
-    stage.classList.remove('is-slideshow');
-    slides.forEach(slide => {
-      slide.hidden = false;
-      slide.setAttribute('aria-hidden', 'false');
-    });
-    toggle.setAttribute('aria-pressed', 'false');
-    label.textContent = 'Start slideshow';
-    icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
-    status.textContent = 'Slideshow off';
-    sessionStorage.removeItem(storageKey);
-    sessionStorage.removeItem(indexKey);
-  }
-
-  toggle.addEventListener('click', () => {
-    if (active) stopSlideshow();
-    else startSlideshow(0);
-  });
-
-  if (sessionStorage.getItem(storageKey) === 'on') {
-    const savedIndex = Number.parseInt(sessionStorage.getItem(indexKey) || '0', 10);
-    startSlideshow(Number.isNaN(savedIndex) ? 0 : savedIndex);
-  }
-})();
 setTimeout(()=>{ if(document.visibilityState==='visible') location.reload(); }, 60000);
 // Scroll to detail panel if loaded via anchor
 <?php if ($detail): ?>

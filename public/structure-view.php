@@ -115,10 +115,7 @@ $male   = count(array_filter($personnel, fn($e)=>$e['gender']==='M'));
 $female = count(array_filter($personnel, fn($e)=>$e['gender']==='F'));
 
 $page_title = ($type==='directorate'?'Directorate':'Unit').': '.$entity['name'];
-include __DIR__ . '/../includes/header.php';
-?>
-
-<style>
+$page_style = <<<'CSS'
 .px { display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;border:none;cursor:pointer;text-decoration:none;line-height:1.4;white-space:nowrap;transition:opacity .15s }
 .px:hover { opacity:.82 }
 .px .ico { width:12px;height:12px }
@@ -134,7 +131,10 @@ dialog::backdrop { background:rgba(0,0,0,.45) }
 .stat-box { background:var(--navy-50);border-radius:10px;padding:14px 18px;text-align:center }
 .stat-box .n { font-size:28px;font-weight:800;color:var(--navy-800);line-height:1 }
 .stat-box .l { font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:4px }
-</style>
+CSS;
+
+include __DIR__ . '/../includes/header.php';
+?>
 
 <!-- Breadcrumb -->
 <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px">

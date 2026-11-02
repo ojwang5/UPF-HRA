@@ -29,8 +29,6 @@ function notifications_for(array $user, bool $unreadOnly = false, int $limit = 8
     $udir = $user['directorate_id'] ? (int)$user['directorate_id'] : -1;
 
     $db = db();
-    // Ensure deletion table exists
-    try { $db->exec("CREATE TABLE IF NOT EXISTS notification_deletions (notification_id INTEGER NOT NULL, user_id INTEGER NOT NULL, deleted_at TEXT NOT NULL, PRIMARY KEY(notification_id,user_id))"); } catch (Exception $e) {}
 
     $sql = "SELECT n.*, u.full_name AS sender, r.read_at AS read_at_user
             FROM notifications n
@@ -52,7 +50,24 @@ function notifications_for(array $user, bool $unreadOnly = false, int $limit = 8
 }
 
 function unread_notification_count(array $user): int {
-    return count(notifications_for($user, true, 200));
+    $uid  = (int)$user['id'];
+    $role = $user['role'];
+    $rid  = $user['region_id'] ? (int)$user['region_id'] : -1;
+    $udir = $user['directorate_id'] ? (int)$user['directorate_id'] : -1;
+
+    $stmt = db()->prepare("SELECT COUNT(*)
+        FROM notifications n
+        LEFT JOIN notification_reads r ON r.notification_id=n.id AND r.user_id=:uid
+        LEFT JOIN notification_deletions d ON d.notification_id=n.id AND d.user_id=:uid
+        WHERE r.read_at IS NULL AND d.notification_id IS NULL AND (
+            n.audience='all'
+            OR (n.audience='user' AND n.target_user_id=:uid)
+            OR (n.audience='role' AND n.target_role=:role)
+            OR (n.audience='region' AND n.target_region_id=:rid)
+            OR (n.audience='directorate' AND n.target_directorate_id=:udir)
+        )");
+    $stmt->execute([':uid'=>$uid, ':role'=>$role, ':rid'=>$rid, ':udir'=>$udir]);
+    return (int)$stmt->fetchColumn();
 }
 
 function mark_notification_read(int $notificationId, int $userId): void {
@@ -70,22 +85,15 @@ function delete_notification(int $notificationId, int $userId): void {
     $db = db();
     // Remove read marker if exists
     $db->prepare("DELETE FROM notification_reads WHERE notification_id=? AND user_id=?")->execute([$notificationId, $userId]);
-    // Mark as deleted for this user by adding to a deletion table if it exists, else just rely on read state
-    // Try to create/delete marker
-    try {
-        $db->exec("CREATE TABLE IF NOT EXISTS notification_deletions (notification_id INTEGER NOT NULL, user_id INTEGER NOT NULL, deleted_at TEXT NOT NULL, PRIMARY KEY(notification_id,user_id))");
-        $db->prepare("INSERT OR REPLACE INTO notification_deletions (notification_id,user_id,deleted_at) VALUES (?,?,?)")
-           ->execute([$notificationId, $userId, date('c')]);
-    } catch (Exception $e) {
-        // ignore
-    }
+    // Mark as deleted for this user
+    $db->prepare("INSERT OR REPLACE INTO notification_deletions (notification_id,user_id,deleted_at) VALUES (?,?,?)")
+       ->execute([$notificationId, $userId, date('c')]);
 }
 
 function delete_all_notifications(array $user): void {
     $uid = (int)$user['id'];
     $db = db();
     try {
-        $db->exec("CREATE TABLE IF NOT EXISTS notification_deletions (notification_id INTEGER NOT NULL, user_id INTEGER NOT NULL, deleted_at TEXT NOT NULL, PRIMARY KEY(notification_id,user_id))");
         foreach (notifications_for($user, false, 1000) as $n) {
             $db->prepare("INSERT OR IGNORE INTO notification_deletions (notification_id,user_id,deleted_at) VALUES (?,?,?)")
                ->execute([(int)$n['id'], $uid, date('c')]);

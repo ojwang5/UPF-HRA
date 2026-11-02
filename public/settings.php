@@ -26,31 +26,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $testTo = trim($_POST['test_email'] ?? $user['email'] ?? '');
         if (!$testTo) { flash('err','Enter a recipient email to test.'); }
         else {
-            $res = smtp_send_email($testTo, 'Test Recipient', 'UPF MDD — SMTP Test', email_html_template('SMTP Test', '<p>This is a test email from the UPF MDD Management System. SMTP is working correctly.</p>'));
+            $res = smtp_send_email($testTo, 'Test Recipient', 'UPF — SMTP Test', email_html_template('SMTP Test', '<p>This is a test email from the UPF HRA System. SMTP is working correctly.</p>'));
             $res['ok'] ? flash('msg','Test email sent to '.$testTo.' successfully.') : flash('err','SMTP error: '.$res['error']);
         }
 
     } elseif ($action === 'save_sms') {
-        $keys = ['sms_provider','sms_api_key','sms_api_secret','sms_username','sms_sender_id','sms_infobip_base_url'];
-        foreach ($keys as $k) save_setting($k, trim($_POST[$k] ?? ''));
-
         $provider = strtolower(trim($_POST['sms_provider'] ?? 'infobip'));
-        if (!in_array($provider, SMS_PROVIDERS, true)) {
-            $provider = 'infobip';
-            save_setting('sms_provider', $provider);
-        }
+        if (!in_array($provider, SMS_PROVIDERS, true)) $provider = 'infobip';
+        save_setting('sms_provider', $provider);
 
-        // Accept an Infobip key typed into the generic API-secret field.
-        $typedKey = trim($_POST['sms_api_key'] ?? '');
-        $typedSecret = trim($_POST['sms_api_secret'] ?? '');
-        if ($provider === 'infobip' && $typedKey === '' && $typedSecret !== '') {
-            save_setting('sms_api_key', $typedSecret);
-        }
+        $field = fn(string $k): string => trim($_POST[$k] ?? '');
 
-        // Infobip base URLs are often copied without a scheme.
-        $baseUrl = trim($_POST['sms_infobip_base_url'] ?? '');
-        if ($provider === 'infobip' && $baseUrl !== '' && !preg_match('#^https?://#i', $baseUrl)) {
-            save_setting('sms_infobip_base_url', 'https://' . $baseUrl);
+        if ($provider === 'infobip') {
+            save_setting('sms_api_key', $field('sms_infobip_api_key'));
+            save_setting('sms_sender_id', $field('sms_infobip_sender_id'));
+            // Infobip base URLs are often copied without a scheme.
+            $baseUrl = $field('sms_infobip_base_url');
+            if ($baseUrl !== '' && !preg_match('#^https?://#i', $baseUrl)) {
+                $baseUrl = 'https://' . $baseUrl;
+            }
+            save_setting('sms_infobip_base_url', $baseUrl);
+        } elseif ($provider === 'africas_talking') {
+            save_setting('sms_api_key', $field('sms_at_api_key'));
+            save_setting('sms_username', $field('sms_at_username'));
+            save_setting('sms_sender_id', $field('sms_at_sender_id'));
+        } elseif ($provider === 'twilio') {
+            save_setting('sms_api_key', $field('sms_twilio_account_sid'));
+            if ($field('sms_twilio_auth_token') !== '') {
+                save_setting('sms_api_secret', $field('sms_twilio_auth_token'));
+            }
+            save_setting('sms_sender_id', $field('sms_twilio_from'));
+        } elseif ($provider === 'nexmo') {
+            save_setting('sms_api_key', $field('sms_vonage_api_key'));
+            if ($field('sms_vonage_api_secret') !== '') {
+                save_setting('sms_api_secret', $field('sms_vonage_api_secret'));
+            }
+            save_setting('sms_sender_id', $field('sms_vonage_from'));
         }
 
         flash('msg', 'SMS settings saved.');
@@ -60,6 +71,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         save_setting('report_submission_mode', $mode);
         log_activity('Changed report submission mode', 'setting', $mode);
         flash('msg', $mode === 'direct' ? 'Reports now go DIRECTLY to HQ for approval.' : 'Reports now flow hierarchically (post → station → division → region → HQ).');
+
+    } elseif ($action === 'save_slideshow') {
+        $interval = (int)($_POST['slideshow_interval'] ?? 10);
+        if ($interval < 5) $interval = 5;
+        if ($interval > 300) $interval = 300;
+        save_setting('slideshow_enabled', isset($_POST['slideshow_enabled']) ? '1' : '0');
+        save_setting('slideshow_autoplay', isset($_POST['slideshow_autoplay']) ? '1' : '0');
+        save_setting('slideshow_interval', (string)$interval);
+        foreach (['overview', 'distribution', 'breakdown'] as $slide) {
+            save_setting('slideshow_slide_' . $slide, isset($_POST['slideshow_slide_' . $slide]) ? '1' : '0');
+        }
+        log_activity('Updated dashboard slideshow settings', 'setting', 'interval='.$interval);
+        flash('msg', 'Slideshow settings saved.');
 
     } elseif ($action === 'save_groq') {
         $model = trim($_POST['groq_model'] ?? '');
@@ -137,18 +161,24 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($m=flash('msg')): ?><div class="alert alert-success"><?= e($m) ?></div><?php endif; ?>
 <?php if ($m=flash('err')): ?><div class="alert alert-error"><?= e($m) ?></div><?php endif; ?>
 
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(540px,100%),1fr));gap:20px">
+
 <!-- ══════════════════ REPORT SUBMISSION MODE ══════════════════ -->
 <?php $rmode = get_setting('report_submission_mode', 'hierarchical') === 'direct' ? 'direct' : 'hierarchical'; ?>
-<div class="card" style="margin-bottom:20px">
-  <div class="chr">
-    <h3>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-      Report Submission Mode
-    </h3>
-    <span class="badge" style="<?= $rmode==='direct' ? 'background:#fef3c7;color:#92400e' : 'background:#dcfce7;color:#166534' ?>">
-      <?= $rmode==='direct' ? 'Direct to HQ' : 'Hierarchical (post → station → division → region → HQ)' ?>
-    </span>
-  </div>
+<details class="cfg-tile">
+  <summary class="cfg-sum">
+    <div class="chr" style="flex:1;border:none;padding:0">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Report Submission Mode
+      </h3>
+      <span class="badge" style="<?= $rmode==='direct' ? 'background:#fef3c7;color:#92400e' : 'background:#dcfce7;color:#166534' ?>">
+        <?= $rmode==='direct' ? 'Direct to HQ' : 'Hierarchical' ?>
+      </span>
+    </div>
+    <span class="cfg-chev"></span>
+  </summary>
+  <div class="cfg-body">
   <p style="margin:0 0 14px;font-size:13px;color:var(--muted);max-width:720px">
     In <strong>Hierarchical</strong> mode every generated report is reviewed level by level up the command chain
     (each reviewer forwards or returns it for correction). In <strong>Direct to HQ</strong> mode, generated reports
@@ -167,12 +197,11 @@ include __DIR__ . '/../includes/header.php';
     </label>
     <noscript><button class="btn-icon bi-gold bi-lg" type="submit" style="gap:8px;padding:0 18px;width:auto;font-size:12px;font-weight:600;margin-top:8px"><?= ICO_SAVE ?> <span>Save Mode</span></button></noscript>
   </form>
-</div>
-
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(540px,100%),1fr));gap:20px">
+  </div>
+</details>
 
 <!-- ══════════════════ SMTP CARD ══════════════════ -->
-<details class="cfg-tile" open>
+<details class="cfg-tile">
   <summary class="cfg-sum">
     <div class="chr" style="flex:1;border:none;padding:0">
       <h3>
@@ -226,7 +255,7 @@ include __DIR__ . '/../includes/header.php';
       </div>
       <div class="form-group" style="flex:2;min-width:180px">
         <label>From Display Name</label>
-        <input type="text" name="smtp_from_name" value="<?= $s('smtp_from_name') ?>" placeholder="UPF MDD System">
+        <input type="text" name="smtp_from_name" value="<?= $s('smtp_from_name') ?>" placeholder="UPF HRA System">
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:4px;align-items:flex-end;flex-wrap:wrap">
@@ -260,7 +289,7 @@ include __DIR__ . '/../includes/header.php';
 </details>
 
 <!-- ══════════════════ SMS CARD ══════════════════ -->
-<details class="cfg-tile" open>
+<details class="cfg-tile">
   <summary class="cfg-sum">
     <div class="chr" style="flex:1;border:none;padding:0">
       <h3>
@@ -276,6 +305,10 @@ include __DIR__ . '/../includes/header.php';
     <span class="cfg-chev"></span>
   </summary>
   <div class="cfg-body">
+  <?php
+    $smsActive = sms_provider();
+    $sv = fn(string $key, string $provider): string => $smsActive === $provider ? $s($key) : '';
+  ?>
   <form method="post">
   <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_sms">
@@ -284,52 +317,113 @@ include __DIR__ . '/../includes/header.php';
         <label>SMS Provider</label>
         <select name="sms_provider">
           <?php foreach (['infobip'=>'Infobip','africas_talking'=>"Africa's Talking",'twilio'=>'Twilio','nexmo'=>'Vonage (Nexmo)'] as $v=>$l): ?>
-          <option value="<?= $v ?>" <?= get_setting('sms_provider','infobip')===$v?'selected':'' ?>><?= $l ?></option>
+          <option value="<?= $v ?>" <?= $smsActive===$v?'selected':'' ?>><?= $l ?></option>
           <?php endforeach; ?>
         </select>
       </div>
     </div>
-    <div class="form-row">
+
+    <!-- Infobip -->
+    <div class="form-row sms-provider-block" data-provider="infobip" style="<?= $smsActive === 'infobip' ? '' : 'display:none' ?>">
       <div class="form-group" style="flex:2">
         <label>API Key <span style="font-size:10px;color:var(--muted)">(Infobip App key)</span></label>
-        <input type="text" name="sms_api_key" value="<?= $s('sms_api_key') ?>" placeholder="Your API key" autocomplete="off">
+        <input type="text" name="sms_infobip_api_key" value="<?= $sv('sms_api_key','infobip') ?>" placeholder="Your Infobip App key" autocomplete="off">
       </div>
-      <div class="form-group sms-secret-field" style="flex:2">
-        <label>API Secret / Auth Token <span style="font-size:10px;color:var(--muted)">(Twilio / Vonage)</span></label>
-        <input type="password" name="sms_api_secret" placeholder="<?= get_setting('sms_api_secret') ? '••••••••' : 'API secret or token' ?>" autocomplete="new-password">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group sms-username-field">
-        <label>Username <span style="font-size:10px;color:var(--muted)">(Africa's Talking)</span></label>
-        <input type="text" name="sms_username" value="<?= $s('sms_username') ?>" placeholder="sandbox or your AT username">
-      </div>
-      <div class="form-group">
-        <label>Sender ID / From Number <span style="font-size:10px;color:var(--muted)">(use a sender registered with your provider)</span></label>
-        <input type="text" name="sms_sender_id" value="<?= $s('sms_sender_id') ?>" placeholder="447491163443 or UPF-MDD">
-      </div>
-    </div>
-    <div class="form-row sms-infobip-field">
       <div class="form-group" style="flex:2">
-        <label>Infobip Base URL <span style="font-size:10px;color:var(--muted)">(Infobip only)</span></label>
-        <input type="text" name="sms_infobip_base_url" value="<?= $s('sms_infobip_base_url') ?>" placeholder="https://xxxxx.api.infobip.com">
+        <label>Sender ID <span style="font-size:10px;color:var(--muted)">(optional)</span></label>
+        <input type="text" name="sms_infobip_sender_id" value="<?= $sv('sms_sender_id','infobip') ?>" placeholder="UPF-HRAS">
       </div>
     </div>
+    <div class="form-row sms-provider-block" data-provider="infobip" style="<?= $smsActive === 'infobip' ? '' : 'display:none' ?>">
+      <div class="form-group" style="flex:2">
+        <label>Base URL</label>
+        <input type="text" name="sms_infobip_base_url" value="<?= $sv('sms_infobip_base_url','infobip') ?>" placeholder="https://xxxxx.api.infobip.com">
+      </div>
+    </div>
+
+    <!-- Africa's Talking -->
+    <div class="form-row sms-provider-block" data-provider="africas_talking" style="<?= $smsActive === 'africas_talking' ? '' : 'display:none' ?>">
+      <div class="form-group" style="flex:2">
+        <label>API Key <span style="font-size:10px;color:var(--muted)">(Africa's Talking API key)</span></label>
+        <input type="text" name="sms_at_api_key" value="<?= $sv('sms_api_key','africas_talking') ?>" placeholder="Your Africa's Talking API key" autocomplete="off">
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>Username <span style="font-size:10px;color:var(--muted)">(sandbox or your AT username)</span></label>
+        <input type="text" name="sms_at_username" value="<?= $sv('sms_username','africas_talking') ?>" placeholder="sandbox or your AT username">
+      </div>
+    </div>
+    <div class="form-row sms-provider-block" data-provider="africas_talking" style="<?= $smsActive === 'africas_talking' ? '' : 'display:none' ?>">
+      <div class="form-group" style="flex:2">
+        <label>Sender ID / Short Code <span style="font-size:10px;color:var(--muted)">(registered with Africa's Talking)</span></label>
+        <input type="text" name="sms_at_sender_id" value="<?= $sv('sms_sender_id','africas_talking') ?>" placeholder="UPF-HRAS">
+      </div>
+    </div>
+
+    <!-- Twilio -->
+    <div class="form-row sms-provider-block" data-provider="twilio" style="<?= $smsActive === 'twilio' ? '' : 'display:none' ?>">
+      <div class="form-group" style="flex:2">
+        <label>Account SID</label>
+        <input type="text" name="sms_twilio_account_sid" value="<?= $sv('sms_api_key','twilio') ?>" placeholder="ACxxxxxxxxxxxxxxxx" autocomplete="off">
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>Auth Token</label>
+        <input type="password" name="sms_twilio_auth_token" placeholder="<?= $smsActive === 'twilio' && get_setting('sms_api_secret') ? '•••••••• (leave blank to keep)' : 'Your Twilio auth token' ?>" autocomplete="new-password">
+      </div>
+    </div>
+    <div class="form-row sms-provider-block" data-provider="twilio" style="<?= $smsActive === 'twilio' ? '' : 'display:none' ?>">
+      <div class="form-group" style="flex:2">
+        <label>From Number <span style="font-size:10px;color:var(--muted)">(Twilio phone number or verified sender)</span></label>
+        <input type="text" name="sms_twilio_from" value="<?= $sv('sms_sender_id','twilio') ?>" placeholder="+1234567890">
+      </div>
+    </div>
+
+    <!-- Vonage (Nexmo) -->
+    <div class="form-row sms-provider-block" data-provider="nexmo" style="<?= $smsActive === 'nexmo' ? '' : 'display:none' ?>">
+      <div class="form-group" style="flex:2">
+        <label>API Key</label>
+        <input type="text" name="sms_vonage_api_key" value="<?= $sv('sms_api_key','nexmo') ?>" placeholder="Your Vonage API key" autocomplete="off">
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>API Secret</label>
+        <input type="password" name="sms_vonage_api_secret" placeholder="<?= $smsActive === 'nexmo' && get_setting('sms_api_secret') ? '•••••••• (leave blank to keep)' : 'Your Vonage API secret' ?>" autocomplete="new-password">
+      </div>
+    </div>
+    <div class="form-row sms-provider-block" data-provider="nexmo" style="<?= $smsActive === 'nexmo' ? '' : 'display:none' ?>">
+      <div class="form-group" style="flex:2">
+        <label>From / Sender</label>
+        <input type="text" name="sms_vonage_from" value="<?= $sv('sms_sender_id','nexmo') ?>" placeholder="UPF-HRAS or +1234567890">
+      </div>
+    </div>
+
     <button class="btn-icon bi-gold bi-lg" type="submit" style="gap:8px;padding:0 18px;width:auto;font-size:12px;font-weight:600;margin-top:4px">
       <?= ICO_SAVE ?> <span>Save SMS Settings</span>
     </button>
   </form>
-  <div style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted)">
+  <div class="sms-provider-block" data-provider="infobip" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'infobip' ? '' : 'display:none' ?>">
     <strong style="color:var(--navy-700)">Infobip:</strong> Enter your API key and your personal base URL (e.g. <em>https://xxxxx.api.infobip.com</em>) from the Infobip portal.
-    <br><strong style="color:var(--navy-700)">Sender ID:</strong> Use a sender registered on the Infobip account (see its purchased numbers). Leave it blank to use the account default sender.
+    <br><strong style="color:var(--navy-700)">Sender ID:</strong> Use a sender registered on the Infobip account. Leave it blank to use the account default sender.
     <br><strong style="color:var(--navy-700)">Credit balance:</strong> Infobip must have sufficient SMS credit; messages are accepted but not delivered when the balance is zero.
-    <br><strong style="color:var(--navy-700)">Leave SMS:</strong> Personnel are notified by SMS as soon as a leave request or extension is approved or rejected. Approved leave messages include the effective end date.
+  </div>
+  <div class="sms-provider-block" data-provider="africas_talking" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'africas_talking' ? '' : 'display:none' ?>">
+    <strong style="color:var(--navy-700)">Africa's Talking:</strong> Enter your API key and username (use <em>sandbox</em> while testing).
+    <br><strong style="color:var(--navy-700)">Sender ID / Short Code:</strong> Must be registered and approved on your Africa's Talking account.
+  </div>
+  <div class="sms-provider-block" data-provider="twilio" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'twilio' ? '' : 'display:none' ?>">
+    <strong style="color:var(--navy-700)">Twilio:</strong> Enter the Account SID and Auth Token from your Twilio console.
+    <br><strong style="color:var(--navy-700)">From Number:</strong> Use a Twilio phone number or a verified sender.
+  </div>
+  <div class="sms-provider-block" data-provider="nexmo" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'nexmo' ? '' : 'display:none' ?>">
+    <strong style="color:var(--navy-700)">Vonage (Nexmo):</strong> Enter the API key and API secret from your Vonage dashboard.
+    <br><strong style="color:var(--navy-700)">From / Sender:</strong> Use an approved sender ID or a purchased number.
+  </div>
+  <div style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted)">
+    <strong style="color:var(--navy-700)">Leave SMS:</strong> Personnel are notified by SMS as soon as a leave request or extension is approved or rejected. Approved leave messages include the effective end date.
   </div>
   </div>
 </details>
 
 <!-- ══════════════════ AI ASSISTANT CARD ══════════════════ -->
-<details class="cfg-tile" open>
+<details class="cfg-tile">
   <summary class="cfg-sum">
     <div class="chr" style="flex:1;border:none;padding:0">
       <h3>
@@ -416,18 +510,94 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </details>
 
+<!-- ══════════════════ DASHBOARD SLIDESHOW CARD ══════════════════ -->
+<?php
+  $ssEnabled  = get_setting('slideshow_enabled', '1') !== '0';
+  $ssAutoplay = get_setting('slideshow_autoplay', '0') === '1';
+  $ssInterval = (int)get_setting('slideshow_interval', '10');
+  if ($ssInterval < 5) $ssInterval = 10;
+  $ssSlides = [
+    'overview'     => 'Personnel status overview',
+    'distribution' => 'Status distribution charts',
+    'breakdown'    => 'Top 10 unit breakdown',
+  ];
+?>
+<details class="cfg-tile">
+  <summary class="cfg-sum">
+    <div class="chr" style="flex:1;border:none;padding:0">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><polygon points="5 3 19 12 5 21 5 3"/><rect x="2" y="2" width="20" height="20" rx="2" opacity=".25"/></svg>
+        Dashboard Slideshow
+      </h3>
+      <?php if ($ssEnabled): ?>
+        <span class="badge" style="background:#dcfce7;color:#166534">● Enabled</span>
+      <?php else: ?>
+        <span class="badge" style="background:#fee2e2;color:#991b1b">● Switched off</span>
+      <?php endif; ?>
+    </div>
+    <span class="cfg-chev"></span>
+  </summary>
+  <div class="cfg-body">
+    <p style="margin:0 0 14px;font-size:13px;color:var(--muted);max-width:760px">
+      Control the presentation mode available on the dashboard. The slideshow rotates through the
+      selected slides without reloading the page.
+    </p>
+    <form method="post">
+  <?= csrf_field() ?>
+      <input type="hidden" name="action" value="save_slideshow">
+      <div style="margin:0 0 12px">
+        <label class="switch">
+          <input type="checkbox" name="slideshow_enabled" value="1" <?= $ssEnabled ? 'checked' : '' ?>>
+          <span class="slider"></span>
+          <span class="switch-label"><strong>Show slideshow controls on the dashboard</strong><br><small>When off, the Start slideshow button is hidden for everyone.</small></span>
+        </label>
+      </div>
+      <div style="margin:0 0 12px">
+        <label class="switch">
+          <input type="checkbox" name="slideshow_autoplay" value="1" <?= $ssAutoplay ? 'checked' : '' ?>>
+          <span class="slider"></span>
+          <span class="switch-label"><strong>Start the slideshow automatically</strong><br><small>Begins rotating as soon as the dashboard loads.</small></span>
+        </label>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="max-width:220px">
+          <label>Seconds per slide</label>
+          <input type="number" name="slideshow_interval" min="5" max="300" step="1" value="<?= $ssInterval ?>">
+          <small class="muted">Between 5 and 300 seconds.</small>
+        </div>
+      </div>
+      <div style="margin:4px 0 12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px">Slides to include</div>
+        <?php foreach ($ssSlides as $ssKey => $ssLabel): ?>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--navy-700);margin-bottom:8px">
+          <input type="checkbox" name="slideshow_slide_<?= $ssKey ?>" value="1" <?= get_setting('slideshow_slide_'.$ssKey, '1') !== '0' ? 'checked' : '' ?>>
+          <?= e($ssLabel) ?>
+        </label>
+        <?php endforeach; ?>
+      </div>
+      <button class="btn-icon bi-gold bi-lg" type="submit" style="gap:8px;padding:0 18px;width:auto;font-size:12px;font-weight:600">
+        <?= ICO_SAVE ?> <span>Save Slideshow Settings</span>
+      </button>
+    </form>
+  </div>
+</details>
+
 </div><!-- end grid -->
 
 <!-- ══════════════════ LEAVE TYPES ══════════════════ -->
 <?php $leaveTypes = leave_types_list($pdo, false); ?>
-<div class="card" style="margin-top:20px">
-  <div class="chr">
-    <h3>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      Leave Types
-    </h3>
-    <span class="badge badge-admin"><?= count($leaveTypes) ?></span>
-  </div>
+<details class="cfg-tile" style="margin-top:20px">
+  <summary class="cfg-sum">
+    <div class="chr" style="flex:1;border:none;padding:0">
+      <h3>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:var(--primary)"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Leave Types
+      </h3>
+      <span class="badge badge-admin"><?= count($leaveTypes) ?></span>
+    </div>
+    <span class="cfg-chev"></span>
+  </summary>
+  <div class="cfg-body">
   <p style="margin:0 0 14px;font-size:13px;color:var(--muted);max-width:760px">
     Configure the leave types available to personnel and the minimum rank required to approve each type.
     Approvers of a type must hold the selected rank or higher.
@@ -474,20 +644,18 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <button class="btn-icon bi-gold" type="submit" title="Add leave type"><?= ICO_PLUS ?></button>
   </form>
-</div>
+  </div>
+</details>
 
 <script>
 (function () {
   var provider = document.querySelector('select[name="sms_provider"]');
   if (!provider) return;
-  var secret = document.querySelector('.sms-secret-field');
-  var username = document.querySelector('.sms-username-field');
-  var infobip = document.querySelector('.sms-infobip-field');
+  var blocks = document.querySelectorAll('.sms-provider-block');
   function sync() {
-    var isInfobip = provider.value === 'infobip';
-    if (secret) secret.style.display = isInfobip ? 'none' : '';
-    if (username) username.style.display = provider.value === 'africas_talking' ? '' : 'none';
-    if (infobip) infobip.style.display = isInfobip ? '' : 'none';
+    blocks.forEach(function (block) {
+      block.style.display = block.getAttribute('data-provider') === provider.value ? '' : 'none';
+    });
   }
   provider.addEventListener('change', sync);
   sync();

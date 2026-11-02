@@ -282,9 +282,7 @@ if ($viewing) {
 }
 $viewSummary = $viewing ? (json_decode($viewing['summary_json'] ?? '[]', true) ?: []) : [];
 
-include __DIR__ . '/../includes/header.php';
-?>
-<style>
+$page_style = <<<'CSS'
   .report-chip{padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
   /* The scope chip carries a 60-char sentence on the division view; let it
      wrap instead of forcing the whole page header wider than a phone. */
@@ -299,7 +297,10 @@ include __DIR__ . '/../includes/header.php';
   .flow-dots i{width:8px;height:8px;border-radius:50%;background:var(--border,#d7dde5);display:inline-block}
   .flow-dots i.on{background:#059669}
   .flow-dots i.half{background:linear-gradient(90deg,#059669 50%,#d7dde5 50%)}
-</style>
+CSS;
+
+include __DIR__ . '/../includes/header.php';
+?>
 <div class="page-header">
   <div>
     <h1>Reports</h1>

@@ -281,9 +281,7 @@ $tabUrl = function (string $key) use ($dimensions, $sort, $search): string {
 };
 $resetUrl = '/statistics.php?dimension=' . urlencode($dimension);
 
-include __DIR__ . '/../includes/header.php';
-?>
-<style>
+$page_style = <<<'CSS'
   .statistics-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
   .statistics-tab{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--navy-800);font-size:12px;font-weight:600;text-decoration:none;transition:background .12s,border-color .12s,color .12s}
   .statistics-tab:hover{background:var(--navy-50);border-color:var(--primary);text-decoration:none}
@@ -319,7 +317,10 @@ include __DIR__ . '/../includes/header.php';
     body{background:#fff;color:#111}
     .statistics-table th:first-child,.statistics-table td:first-child{position:static}
   }
-</style>
+CSS;
+
+include __DIR__ . '/../includes/header.php';
+?>
 
 <div class="page-header">
   <div>

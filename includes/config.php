@@ -9,6 +9,17 @@ define('APP_MOTTO', 'PROTECT & SERVE');
 define('BASE_PATH', dirname(__DIR__));
 define('DB_PATH', BASE_PATH . '/data/mdd.sqlite');
 
+/**
+ * Public URL for a local asset with a filemtime cache-buster, so browsers can
+ * cache CSS/images aggressively without ever serving a stale copy after deploy.
+ */
+function asset_url(string $path): string {
+    $path = '/' . ltrim($path, '/');
+    $file = BASE_PATH . '/public' . $path;
+    $ver  = @filemtime($file);
+    return $path . ($ver ? '?v=' . $ver : '');
+}
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }

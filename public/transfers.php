@@ -276,6 +276,11 @@ $pendingCount = count(array_filter($transfers, fn($t)=>$t['status']==='pending')
 $approvedCount = count(array_filter($transfers, fn($t)=>$t['status']==='approved'));
 $executedCount = count(array_filter($transfers, fn($t)=>$t['status']==='executed'));
 
+$page_style = <<<'CSS'
+.transfer-block{border:1px dashed var(--border);border-radius:8px;padding:10px 12px}
+.block-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600;margin-bottom:6px}
+CSS;
+
 include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
@@ -526,11 +531,6 @@ include __DIR__ . '/../includes/header.php';
     </table>
   </div>
 </div>
-
-<style>
-.transfer-block{border:1px dashed var(--border);border-radius:8px;padding:10px 12px}
-.block-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600;margin-bottom:6px}
-</style>
 
 <script>
 (function(){

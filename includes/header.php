@@ -8,6 +8,7 @@ $user = current_user();
 $page = $page ?? '';
 $page_title = $page_title ?? '';
 $page_css = $page_css ?? '';
+$page_style = $page_style ?? '';
 $role = $user['role'] ?? '';
 
 $all_nav = all_nav();
@@ -20,17 +21,26 @@ if ($user) {
 }
 $unreadCount = $user ? unread_notification_count($user) : 0;
 $unreadMessages = $user ? inbound_unread_count($user) : 0;
+$page_css_url = $page_css;
+if ($page_css_url !== '' && str_starts_with($page_css_url, '/')) {
+    $page_css_url = asset_url($page_css_url);
+}
 ?><!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($page_title ? $page_title.' — ' : '') ?><?= e(APP_NAME) ?></title>
-<link rel="stylesheet" href="/assets/style.css">
-<?php if (!empty($page_css)): ?>
-<link rel="stylesheet" href="<?= e($page_css) ?>">
+<?php $__style = e(asset_url('/assets/style.css')); ?>
+<link rel="preload" href="<?= $__style ?>" as="style">
+<link rel="stylesheet" href="<?= $__style ?>">
+<?php if ($page_css_url !== ''): ?>
+<link rel="stylesheet" href="<?= e($page_css_url) ?>">
 <?php endif; ?>
-<link rel="icon" type="image/jpeg" href="/assets/logo.jpg">
+<?php if (!empty($page_style)): ?>
+<style><?= $page_style ?></style>
+<?php endif; ?>
+<link rel="icon" type="image/jpeg" href="<?= e(asset_url('/assets/logo.jpg')) ?>">
 <script>
   // Apply saved theme before first paint to avoid flash
   (function(){
@@ -69,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function () {
       <span></span><span></span><span></span>
     </button>
     <?php endif; ?>
-    <img src="/assets/logo.jpg" alt="UPF" class="logo">
+    <img src="<?= e(asset_url('/assets/logo.jpg')) ?>" alt="UPF" class="logo">
     <div class="brand">
       <div class="org"><?= e(APP_ORG) ?></div>
       <div class="sys"><?= e(APP_NAME) ?></div>
@@ -114,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
     <!-- Mobile drawer header: identity + close. Must be first so the top of the
          list is never hidden behind the sticky topbar or below the fold. -->
     <div class="sb-drawer-head">
-      <img src="/assets/logo.jpg" alt="" class="sb-drawer-logo">
+      <img src="<?= e(asset_url('/assets/logo.jpg')) ?>" alt="" class="sb-drawer-logo">
       <div class="sb-drawer-id">
         <div class="n"><?= e($user['full_name']) ?></div>
         <div class="m"><?= e(role_label($role)) ?><?= ($sl=user_scope_label($user))!=='HQ' ? ' · '.e($sl) : '' ?></div>

@@ -80,10 +80,7 @@ $units        = $pdo->query("SELECT u.*, d.name AS dir_name, (SELECT COUNT(*) FR
 
 $tab = $_GET['tab'] ?? 'geography';
 
-include __DIR__ . '/../includes/header.php';
-?>
-
-<style>
+$page_style = <<<'CSS'
 /* ── Pill action buttons ── */
 .px { display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;border:none;cursor:pointer;text-decoration:none;line-height:1.4;white-space:nowrap;transition:opacity .15s }
 .px:hover { opacity:.82 }
@@ -107,7 +104,10 @@ dialog::backdrop { background:rgba(0,0,0,.45) }
 .cnt-grey { background:var(--navy-50);color:var(--muted) }
 .cnt-blue { background:#dbeafe;color:#1d4ed8 }
 .cnt-green { background:#dcfce7;color:#166534 }
-</style>
+CSS;
+
+include __DIR__ . '/../includes/header.php';
+?>
 
 <div class="page-header">
   <div><h1>Organisational Structure</h1><div class="desc">Manage UPF geographic hierarchy, directorates and functional units</div></div>

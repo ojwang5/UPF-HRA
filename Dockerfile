@@ -13,21 +13,23 @@ LABEL org.opencontainers.image.title="UPF Human Resource Management System" \
 #   pdo_sqlite : SQLite database used by the whole application
 #   mbstring   : mb_encode_mimeheader() in the SMTP mailer
 #   opcache    : opcode cache for production performance
+#   gd         : server-side photo thumbnails (keeps list pages small)
 #   (openssl — needed for SMTP TLS — ships enabled in the base image)
 RUN set -eux; \
     savedAptMark="$(apt-mark showmanual)"; \
     apt-get update; \
-    apt-get install -y --no-install-recommends libonig-dev; \
+    apt-get install -y --no-install-recommends libonig-dev libjpeg62-turbo-dev libpng-dev libwebp-dev; \
     if ! php -m | grep -qi '^pdo_sqlite$';      then docker-php-ext-install -j"$(nproc)" pdo_sqlite; fi; \
     if ! php -m | grep -qi '^mbstring$';        then docker-php-ext-install -j"$(nproc)" mbstring;   fi; \
     if ! php -m | grep -qi 'Zend OPcache';      then docker-php-ext-install -j"$(nproc)" opcache;    fi; \
+    if ! php -m | grep -qi '^gd$';              then docker-php-ext-configure gd --with-jpeg --with-webp && docker-php-ext-install -j"$(nproc)" gd; fi; \
     apt-mark auto '.*' > /dev/null; \
     apt-mark manual $savedAptMark; \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
     rm -rf /var/lib/apt/lists/* /usr/src/php
 
 # ── Apache modules & hardening ───────────────────────────────────────────────
-RUN a2enmod rewrite headers \
+RUN a2enmod rewrite headers deflate \
  && { sed -ri 's/^\s*ServerTokens .*/ServerTokens Prod/'     /etc/apache2/apache2.conf || true; } \
  && { sed -ri 's/^\s*ServerSignature .*/ServerSignature Off/' /etc/apache2/apache2.conf || true; }
 
@@ -45,6 +47,7 @@ COPY public/   ./public/
 # ── Writable runtime dirs (data = SQLite, uploads = personnel photos) ─────────
 RUN mkdir -p /var/www/html/data \
              /var/www/html/public/uploads/photos \
+             /var/www/html/public/uploads/thumbs \
              /var/lib/php/sessions \
  && chown -R www-data:www-data /var/www/html/data \
                                /var/www/html/public/uploads \

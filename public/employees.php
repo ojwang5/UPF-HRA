@@ -440,7 +440,7 @@ include __DIR__ . '/../includes/header.php';
     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
       <div style="width:72px;height:72px;border-radius:10px;overflow:hidden;border:2px solid var(--border);background:var(--navy-50);flex-shrink:0;display:flex;align-items:center;justify-content:center">
         <?php if (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])): ?>
-          <img src="/uploads/photos/<?= e($viewing['photo_path']) ?>" alt="Photo" style="width:100%;height:100%;object-fit:cover">
+          <img src="<?= e(photo_url($viewing['photo_path'], 480)) ?>" alt="Photo" style="width:100%;height:100%;object-fit:cover">
         <?php else: ?>
           <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" width="32" height="32"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
         <?php endif; ?>
@@ -537,7 +537,7 @@ include __DIR__ . '/../includes/header.php';
       </div>
       <div class="detail-photo-body">
         <div class="detail-photo-thumb" id="dp-thumb">
-          <img id="dp-thumb-img" alt="Current photo" src="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? '/uploads/photos/'.e($viewing['photo_path']) : '' ?>" style="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? '' : 'display:none' ?>">
+          <img id="dp-thumb-img" alt="Current photo" src="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? e(photo_url($viewing['photo_path'], 320)) : '' ?>" style="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? '' : 'display:none' ?>">
           <svg id="dp-thumb-ph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="<?= (!empty($viewing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$viewing['photo_path'])) ? 'display:none' : '' ?>"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
         </div>
         <div class="detail-photo-fields">
@@ -721,7 +721,7 @@ include __DIR__ . '/../includes/header.php';
         <tr class="<?= $viewId===$emp['id']?'row-on_duty':'' ?>">
           <td style="padding:4px 6px">
             <?php if (!empty($emp['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$emp['photo_path'])): ?>
-              <img src="/uploads/photos/<?= e($emp['photo_path']) ?>" alt="" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block">
+              <img src="<?= e(photo_url($emp['photo_path'], 96)) ?>" alt="" loading="lazy" style="width:36px;height:36px;border-radius:8px;object-fit:cover;display:block">
             <?php else: ?>
               <div style="width:36px;height:36px;border-radius:8px;background:var(--navy-50);border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
                 <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" width="18" height="18"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -955,7 +955,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="photo-upload-wrap">
               <div class="photo-preview" id="photo-preview-box">
                 <?php if (!empty($editing['photo_path']) && file_exists(__DIR__.'/uploads/photos/'.$editing['photo_path'])): ?>
-                  <img src="/uploads/photos/<?= e($editing['photo_path']) ?>" id="photo-preview-img" alt="Current photo">
+                  <img src="<?= e(photo_url($editing['photo_path'], 480)) ?>" id="photo-preview-img" alt="Current photo">
                 <?php else: ?>
                   <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" width="28" height="28" id="photo-preview-placeholder"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
                   <img id="photo-preview-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover">

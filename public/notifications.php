@@ -31,6 +31,8 @@ $notifs = notifications_for($user, false, 100);
 $regions   = is_superadmin($user) ? $pdo->query("SELECT * FROM regions ORDER BY name")->fetchAll() : [];
 $directorates = is_superadmin($user) ? $pdo->query("SELECT * FROM directorates WHERE active=1 ORDER BY name")->fetchAll() : [];
 
+$page_style = '.notif{display:flex;gap:12px;padding:14px 6px;border-bottom:1px solid var(--border);align-items:flex-start}';
+
 include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
@@ -126,7 +128,6 @@ include __DIR__ . '/../includes/header.php';
   <?php endforeach; ?>
 </div>
 
-<style>.notif{display:flex;gap:12px;padding:14px 6px;border-bottom:1px solid var(--border);align-items:flex-start}</style>
 <script>
 document.querySelectorAll('details.form-panel').forEach(d=>{
   d.addEventListener('toggle',()=>{ if(d.open) document.querySelectorAll('details.form-panel').forEach(o=>{ if(o!==d) o.open=false; }); });

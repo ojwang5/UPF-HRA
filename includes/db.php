@@ -131,6 +131,12 @@ function init_schema(PDO $pdo): void {
             read_at TEXT NOT NULL,
             PRIMARY KEY (notification_id, user_id)
         );
+        CREATE TABLE IF NOT EXISTS notification_deletions (
+            notification_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            deleted_at TEXT NOT NULL,
+            PRIMARY KEY (notification_id, user_id)
+        );
     ");
 
     // Seed on empty DB

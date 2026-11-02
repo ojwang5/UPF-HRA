@@ -32,12 +32,12 @@ if (current_user()) { header('Location:/'); exit; }
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Login — <?= e(APP_NAME) ?></title>
-<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="<?= e(asset_url('/assets/style.css')) ?>">
 </head><body class="login-page">
 <form class="login-card" method="post" action="/login.php">
   <?= csrf_field() ?>
   <div class="brand-block">
-    <img src="/assets/logo.jpg" alt="UPF">
+    <img src="<?= e(asset_url('/assets/logo.jpg')) ?>" alt="UPF">
     <div class="org"><?= e(APP_ORG) ?></div>
     <div class="sys"><?= e(APP_NAME) ?></div>
     <div class="motto"><?= e(APP_MOTTO) ?></div>
