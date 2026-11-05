@@ -530,7 +530,7 @@ erDiagram
 | key | TEXT | PK |
 | value | TEXT | |
 
-Known keys: `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from_email`, `smtp_from_name`, `smtp_encryption`, `sms_provider`, `sms_api_key`, `sms_api_secret`, `sms_username`, `sms_sender_id`, `report_submission_mode`.
+Known keys: `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from_email`, `smtp_from_name`, `smtp_encryption`, `sms_provider`, `sms_api_key`, `sms_api_secret`, `sms_sender_id`, `report_submission_mode`.
 
 ---
 

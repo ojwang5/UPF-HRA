@@ -816,7 +816,7 @@ sort($pgNums);
             <?php elseif ($resp !== 'ok'): ?>
               <span class="badge badge-awol" title="<?= e($resp) ?>">Not delivered</span>
               <div class="muted" style="font-size:10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= e($resp) ?>"><?= e($resp) ?></div>
-            <?php elseif ($pstat === 'DELIVERED'): ?>
+            <?php elseif (str_starts_with($pstat, 'DELIVERED')): ?>
               <span class="badge badge-present" title="<?= e($pstat) ?>">Delivered</span>
             <?php elseif (str_starts_with($pstat, 'PENDING')): ?>
               <span class="badge badge-sick" title="<?= e($pstat) ?>">Pending</span>

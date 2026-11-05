@@ -41,7 +41,35 @@ if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')
     $detailPersonnel = $stmt->fetchAll();
 }
 
+$ssEnabled  = get_setting('slideshow_enabled', '1') !== '0';
+$ssAutoplay = get_setting('slideshow_autoplay', '0') === '1';
+$ssInterval = (int)get_setting('slideshow_interval', '10');
+if ($ssInterval < 5) $ssInterval = 10;
+$ssSlides = [
+    'overview'     => get_setting('slideshow_slide_overview', '1') !== '0',
+    'distribution' => get_setting('slideshow_slide_distribution', '1') !== '0',
+    'breakdown'    => get_setting('slideshow_slide_breakdown', '1') !== '0' && count($rows) > 1,
+];
+$ssShowControls = $ssEnabled && in_array(true, $ssSlides, true);
+
 $page_style = <<<'CSS'
+/* Dashboard slideshow */
+.dashboard-slideshow-status{font-size:11px;color:var(--muted);white-space:nowrap}
+.dashboard-presentation.is-slideshow > :not(.dashboard-slide){display:none!important}
+.dashboard-slide[hidden]{display:none!important}
+.dashboard-presentation.is-slideshow > .dashboard-slide:not([hidden]){animation:dashboardSlideIn .35s ease-out}
+.slide-heading{display:none;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
+.dashboard-presentation.is-slideshow .slide-heading{display:flex}
+.slide-heading h2{margin:0;color:var(--navy-800);font-size:18px}
+.slide-heading span{color:var(--muted);font-size:12px}
+@keyframes dashboardSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:600px){
+  .dashboard-slideshow-status{width:100%;text-align:right}
+  .slide-heading{align-items:flex-start}
+}
+@media(prefers-reduced-motion:reduce){
+  .dashboard-presentation.is-slideshow > .dashboard-slide:not([hidden]){animation:none}
+}
 /* Dashboard stat cards */
 .dash-stats{
   margin-bottom:12px
@@ -89,7 +117,15 @@ transition:box-shadow .15s,transform .15s
 .vchart-grid{position:absolute;inset:0;pointer-events:none}
 .vchart-gridline{position:absolute;left:0;right:0;border-top:1px dashed rgba(0,0,0,.08)}
 .vchart-bars{position:absolute;inset:0;display:flex;align-items:flex-end;gap:8px}
-.vchart-col{position:relative;flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0}
+.vchart-col{
+  position:relative;
+  flex:1;height:100%;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  align-items:center;
+  min-width:0
+}
 .vchart-stack{
   display:flex;
   flex-direction:column-reverse;
@@ -149,8 +185,20 @@ color:var(--navy-700)
 }
 .ds-cell:nth-child(5n){border-right:none}
 .ds-cell:nth-child(n+6){border-bottom:none}
-.ds-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;line-height:1.3;color:var(--muted);font-weight:600;margin-bottom:5px;overflow-wrap:anywhere}
-.ds-val{font-size:22px;font-weight:700;color:var(--navy-800);line-height:1.1}
+.ds-label{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  line-height:1.3;
+  color:var(--muted);
+  font-weight:600;
+  margin-bottom:5px;
+  overflow-wrap:anywhere
+}
+.ds-val{
+  font-size:22px;
+  font-weight:700;
+  color:var(--navy-800);line-height:1.1}
 @media(max-width:1000px){
   .dash-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
   .ds-cell:nth-child(5n){border-right:1px solid var(--border)}
@@ -177,6 +225,13 @@ include __DIR__ . '/../includes/header.php';
     <div class="desc"><?= e(date('l, j F Y', strtotime($date))) ?> &nbsp;·&nbsp; <?= e(role_label($user['role'])) ?> &nbsp;·&nbsp; <?= e(user_scope_label($user)) ?></div>
   </div>
   <div class="action-bar">
+    <?php if ($ssShowControls): ?>
+    <button class="btn-icon btn-labeled bi-secondary" id="dashboard-slideshow-toggle" type="button" aria-pressed="false">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      <span>Start slideshow</span>
+    </button>
+    <span id="dashboard-slideshow-status" class="dashboard-slideshow-status" aria-live="polite">Slideshow off</span>
+    <?php endif; ?>
     <div class="panel-wrap">
       <button class="btn-icon bi-secondary" data-panel="panel-date" title="Change date">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -194,6 +249,7 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
+<div class="dashboard-presentation" id="dashboard-presentation">
 <!-- 9 Stat Cards (clickable) -->
 <?php
 // Each entry: [status_key, label, css_class, color, bg_color, svg_icon, hint_text]
@@ -215,7 +271,7 @@ $cards = [
    'Under suspension order'],
   ['disciplinary', 'Under Disciplinary', 'stat-disciplinary', '#dc2626', '#fee2e2',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-   'Facing disciplinary action · counted in working strength'],
+   'Facing disciplinary action.'],
   ['on_duty',      'On Duty',      'stat-on_duty',      '#0891b2', '#cffafe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
    'Deployed / operational duty'],
@@ -227,6 +283,13 @@ $cards = [
    'Left post without permission'],
 ];
 ?>
+<?php if ($ssSlides['overview']): ?><section class="dashboard-slide" data-slide-title="Personnel status overview" aria-label="Personnel status overview"><?php endif; ?>
+<?php if ($ssSlides['overview']): ?>
+<div class="slide-heading">
+  <h2>Personnel Status Overview</h2>
+  <span><?= e(date('j F Y', strtotime($date))) ?></span>
+</div>
+<?php endif; ?>
 <div class="grid grid-4 dash-stats">
 <?php foreach ($cards as $card):
   [$key, $label, $cls, $color, $bg, $icon, $hint] = $card;
@@ -254,6 +317,7 @@ $cards = [
 </a>
 <?php endforeach; ?>
 </div>
+<?php if ($ssSlides['overview']): ?></section><?php endif; ?>
 
 <!-- Detail Drill-down Panel -->
 <?php if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')): ?>
@@ -378,6 +442,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     }
 }
 ?>
+<?php if ($ssSlides['distribution']): ?><section class="dashboard-slide" data-slide-title="Status distribution" aria-label="Status distribution chart"><?php endif; ?>
 <div class="card" style="margin-top:4px">
   <div class="chr">
     <h3>Status Distribution — <?= e(date('j F Y', strtotime($date))) ?></h3>
@@ -424,6 +489,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     </div>
   </div>
 </div>
+<?php if ($ssSlides['distribution']): ?></section><?php endif; ?>
 
 <!-- Per-unit breakdown -->
 <?php if (!empty($rows)): ?>
@@ -507,6 +573,7 @@ foreach ($chartData as [$ck, $cl, $cc]) {
     default              => 'Top 10 Post Personnel Status — '.e($user['station_name']??''),
   };
 ?>
+<?php if ($ssSlides['breakdown']): ?><section class="dashboard-slide" data-slide-title="<?= e($topTitle) ?>" aria-label="<?= e($topTitle) ?>"><?php endif; ?>
 <div class="card" style="margin-top:4px">
   <div class="chr">
     <h3><?= $topTitle ?> — <?= e(date('j F Y', strtotime($date))) ?></h3>
@@ -557,9 +624,90 @@ foreach ($chartData as [$ck, $cl, $cc]) {
   <div class="muted" style="padding:12px 2px">No personnel status data for this date.</div>
   <?php endif; ?>
 </div>
+<?php if ($ssSlides['breakdown']): ?></section><?php endif; ?>
 <?php endif; ?>
+</div>
 
 <script>
+(function(){
+  var stage = document.getElementById('dashboard-presentation');
+  var toggle = document.getElementById('dashboard-slideshow-toggle');
+  var status = document.getElementById('dashboard-slideshow-status');
+  if (!stage || !toggle || !status) return;
+
+  var slides = Array.prototype.slice.call(stage.querySelectorAll('.dashboard-slide'));
+  if (!slides.length) return;
+
+  var label = toggle.querySelector('span');
+  var icon = toggle.querySelector('svg');
+  var storageKey = 'hras-dashboard-slideshow';
+  var indexKey = 'hras-dashboard-slideshow-index';
+  var intervalMs = <?= max(5, $ssInterval) * 1000 ?>;
+  var autoplay = <?= $ssAutoplay ? 'true' : 'false' ?>;
+  var current = 0;
+  var timer = null;
+  var active = false;
+
+  function showSlide(index) {
+    current = ((index % slides.length) + slides.length) % slides.length;
+    slides.forEach(function(slide, i){
+      slide.hidden = i !== current;
+      slide.setAttribute('aria-hidden', i === current ? 'false' : 'true');
+    });
+    status.textContent = 'Slide ' + (current + 1) + ' of ' + slides.length + ' · ' + (slides[current].getAttribute('data-slide-title') || '');
+    try { sessionStorage.setItem(indexKey, String(current)); } catch(e){}
+  }
+
+  function startSlideshow(index) {
+    if (!slides.length || active) return;
+    active = true;
+    stage.classList.add('is-slideshow');
+    toggle.setAttribute('aria-pressed', 'true');
+    label.textContent = 'Stop slideshow';
+    icon.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
+    try { sessionStorage.setItem(storageKey, 'on'); } catch(e){}
+    showSlide(index || 0);
+    timer = window.setInterval(function(){
+      if (document.visibilityState === 'visible') showSlide(current + 1);
+    }, intervalMs);
+  }
+
+  function stopSlideshow() {
+    active = false;
+    window.clearInterval(timer);
+    timer = null;
+    stage.classList.remove('is-slideshow');
+    slides.forEach(function(slide){
+      slide.hidden = false;
+      slide.setAttribute('aria-hidden', 'false');
+    });
+    toggle.setAttribute('aria-pressed', 'false');
+    label.textContent = 'Start slideshow';
+    icon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+    status.textContent = 'Slideshow off';
+    try {
+      sessionStorage.removeItem(storageKey);
+      sessionStorage.removeItem(indexKey);
+    } catch(e){}
+  }
+
+  toggle.addEventListener('click', function(){
+    if (active) stopSlideshow();
+    else startSlideshow(0);
+  });
+
+  var savedState = null;
+  var savedIndex = null;
+  try {
+    savedState = sessionStorage.getItem(storageKey);
+    savedIndex = Number.parseInt(sessionStorage.getItem(indexKey) || '0', 10);
+  } catch(e){}
+  if (savedState === 'on') {
+    startSlideshow(Number.isNaN(savedIndex) ? 0 : savedIndex);
+  } else if (autoplay) {
+    startSlideshow(0);
+  }
+})();
 setTimeout(()=>{ if(document.visibilityState==='visible') location.reload(); }, 60000);
 // Scroll to detail panel if loaded via anchor
 <?php if ($detail): ?>

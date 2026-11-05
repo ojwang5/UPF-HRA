@@ -73,7 +73,7 @@ The **MDD Manager System** (Morning Duty Deployment Manager) is a web-based Huma
 │  Icons               │  Inline SVG                  │
 │  Auth                │  PHP sessions + bcrypt       │
 │  Email               │  Pure-PHP SMTP (no Composer) │
-│  SMS                 │  Infobip / Africa's Talking  │
+│  SMS                 │  Infobip / Twilio / Yoola    │
 │  Package Manager     │  None (zero dependencies)    │
 │  Port                │  5000                        │
 └──────────────────────┴──────────────────────────────┘
@@ -115,7 +115,7 @@ The **MDD Manager System** (Morning Duty Deployment Manager) is a web-based Huma
                     ▼                                    ▼
           ┌──────────────────┐              ┌──────────────────┐
           │   SMTP Server    │              │  SMS Gateway     │
-          │  (Email alerts)  │              │ Africa's Talking │
+          │  (Email alerts)  │              │ Yoola SMS et al. │
           └──────────────────┘              └──────────────────┘
 ```
 
@@ -603,7 +603,7 @@ set to 'leave' automatically
 
 **Leave statuses:** `pending` → `approved` / `rejected`
 
-Leave decision SMS is sent to the personnel phone on file. The Leave SMS Notifications table shows provider delivery status, any reported error code, a plain-language failure reason, and the recommended action. An Infobip `UNDELIVERABLE_NOT_DELIVERED` / code 32 or `ABSENT_SUBSCRIBER` / code 9 is treated as a temporary handset/network failure. When an authorized user refreshes SMS delivery status, the system makes one automatic retry after a 30-minute cooldown, reusing the original log row so the leave decision keeps a single delivery record. Invalid phone numbers are not retried blindly. Permanent failures such as rejected, expired, or invalid destinations require the number or sender configuration to be corrected before a manual retry.
+Leave decision SMS is sent to the personnel phone on file when a request or extension is approved or rejected. The Leave SMS Notifications table shows provider delivery status, any reported error code, a plain-language failure reason, and the recommended action. An Infobip `UNDELIVERABLE_NOT_DELIVERED` / code 32 or `ABSENT_SUBSCRIBER` / code 9 is treated as a temporary handset/network failure; Yoola SMS undeliverable reports are also retried once. When an authorized user refreshes SMS delivery status, the system makes one automatic retry after a 30-minute cooldown, reusing the original log row so the leave decision keeps a single delivery record. Invalid phone numbers are not retried blindly. Permanent failures such as rejected, expired, or invalid destinations require the number or sender configuration to be corrected before a manual retry.
 
 ---
 
@@ -768,7 +768,7 @@ Broadcast messages to personnel via email and/or SMS. Powered by the system's bu
 
 **Channels:** Email, SMS, Both
 
-**Configuration** (via Settings): SMTP host/port/credentials, SMS provider (Infobip, Africa's Talking, Twilio, or Vonage), API keys.
+**Configuration** (via Settings): SMTP host/port/credentials, SMS provider (Infobip, Twilio, or Yoola SMS), API keys.
 
 ---
 
@@ -785,7 +785,7 @@ System configuration stored as key-value pairs in the `settings` table.
 | Category | Setting |
 |----------|---------|
 | **Email** | SMTP host, port, username, password, from address, from name |
-| **SMS** | Provider (Infobip / Africa's Talking / Twilio / Vonage), API key, sender ID |
+| **SMS** | Provider (Infobip / Twilio / Yoola SMS), API key, sender ID |
 | **System** | Organisation name, timezone, date format |
 
 ---

@@ -513,6 +513,8 @@ include __DIR__ . '/../includes/header.php';
     <h3>Outbound Message</h3>
     <?php if (!smtp_configured()): ?><span class="badge" style="background:#fef3c7;color:#92400e">⚠ SMTP not configured</span>
     <?php else: ?><span class="badge" style="background:#dcfce7;color:#166534">✓ Email ready</span><?php endif; ?>
+    <?php if (!sms_configured()): ?><span class="badge" style="background:#fef3c7;color:#92400e">⚠ SMS not configured</span>
+    <?php else: ?><span class="badge" style="background:#dcfce7;color:#166534">✓ SMS via <?= e(sms_provider_label()) ?></span><?php endif; ?>
   </div>
   <form method="post" id="compose-form" style="display:flex;flex-direction:column;gap:14px">
     <?= csrf_field() ?>
@@ -527,6 +529,7 @@ include __DIR__ . '/../includes/header.php';
         </label>
         <?php endforeach; ?>
       </div>
+      <div class="muted" style="font-size:11px;margin-top:6px">Outbound SMS is sent through <?= e(sms_provider_label()) ?>.</div>
     </div>
 
     <div style="background:var(--navy-50);border-radius:10px;padding:16px;border:1px solid var(--border)">

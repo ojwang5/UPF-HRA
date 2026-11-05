@@ -48,7 +48,7 @@ function leave_sms_message(array $req, string $status, string $eventType = 'leav
 
 function leave_sms_delivery_failed(string $status): bool {
     $status = strtoupper(trim($status));
-    foreach (['UNDELIVERABLE', 'EXPIRED', 'REJECTED'] as $prefix) {
+    foreach (['UNDELIVERABLE', 'EXPIRED', 'REJECTED', 'FAILED'] as $prefix) {
         if (str_starts_with($status, $prefix)) return true;
     }
     return false;
@@ -171,9 +171,9 @@ function retry_undeliverable_leave_sms(PDO $pdo, int $limit = 10): array {
                            JOIN leave_requests lr ON lr.id = l.leave_request_id
                            JOIN employees e ON e.id = l.employee_id
                            LEFT JOIN leave_extensions le ON l.event_type = 'extension' AND le.id = l.event_id
-                           WHERE l.provider = 'infobip'
+                           WHERE l.provider IN ('infobip', 'yoola')
                              AND l.response LIKE 'undelivered:%'
-                             AND l.failure_code IN (9, 32)
+                             AND (l.provider <> 'infobip' OR l.failure_code IN (9, 32))
                              AND l.retry_count < 1
                              AND (l.last_retry_at IS NULL OR l.last_retry_at <= datetime('now','localtime','-30 minutes'))
                              AND (
@@ -250,29 +250,31 @@ function retry_undeliverable_leave_sms(PDO $pdo, int $limit = 10): array {
 }
 
 /**
- * Refresh delivery status for recent Infobip leave SMS messages.
- * Returns the number of log rows whose status was updated.
+ * Refresh delivery status for recent leave SMS messages from the configured
+ * provider (Infobip or Yoola). Returns the number of log rows updated.
  */
 function refresh_leave_sms_delivery(PDO $pdo, int $limit = 25): int {
-    if (!sms_configured() || sms_provider() !== 'infobip') return 0;
+    $provider = sms_provider();
+    if (!sms_configured() || !in_array($provider, ['infobip', 'yoola'], true)) return 0;
 
     $limit = max(1, min(100, $limit));
     $stmt = $pdo->prepare("SELECT id, provider_ref, provider_status, response, failure_code, failure_reason
                            FROM leave_sms_log
-                           WHERE provider = 'infobip'
+                           WHERE provider = ?
                              AND provider_ref IS NOT NULL AND provider_ref <> ''
                              AND (
                                  (response = 'ok'
                                   AND COALESCE(UPPER(provider_status), '') NOT IN
-                                      ('DELIVERED', 'UNDELIVERABLE', 'EXPIRED', 'REJECTED')
+                                      ('DELIVERED', 'UNDELIVERABLE', 'EXPIRED', 'REJECTED', 'FAILED')
                                   AND UPPER(provider_status) NOT LIKE 'UNDELIVERABLE%'
                                   AND UPPER(provider_status) NOT LIKE 'EXPIRED%'
-                                  AND UPPER(provider_status) NOT LIKE 'REJECTED%')
+                                  AND UPPER(provider_status) NOT LIKE 'REJECTED%'
+                                  AND UPPER(provider_status) NOT LIKE 'FAILED%')
                                  OR (response LIKE 'undelivered:%'
                                      AND (failure_code IS NULL OR failure_reason IS NULL))
                              )
                            ORDER BY id DESC LIMIT {$limit}");
-    $stmt->execute();
+    $stmt->execute([$provider]);
     $rows = $stmt->fetchAll();
     if (!$rows) return 0;
 
@@ -281,7 +283,7 @@ function refresh_leave_sms_delivery(PDO $pdo, int $limit = 25): int {
                           WHERE id = ?");
     $updated = 0;
     foreach ($rows as $row) {
-        $state = sms_delivery_status((string)$row['provider_ref'], 'infobip');
+        $state = sms_delivery_status((string)$row['provider_ref'], $provider);
         if (empty($state['ok'])) continue;
         $group = strtoupper((string)($state['status'] ?? ''));
         $desc  = trim((string)($state['description'] ?? ''));

@@ -46,22 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $baseUrl = 'https://' . $baseUrl;
             }
             save_setting('sms_infobip_base_url', $baseUrl);
-        } elseif ($provider === 'africas_talking') {
-            save_setting('sms_api_key', $field('sms_at_api_key'));
-            save_setting('sms_username', $field('sms_at_username'));
-            save_setting('sms_sender_id', $field('sms_at_sender_id'));
         } elseif ($provider === 'twilio') {
             save_setting('sms_api_key', $field('sms_twilio_account_sid'));
             if ($field('sms_twilio_auth_token') !== '') {
                 save_setting('sms_api_secret', $field('sms_twilio_auth_token'));
             }
             save_setting('sms_sender_id', $field('sms_twilio_from'));
-        } elseif ($provider === 'nexmo') {
-            save_setting('sms_api_key', $field('sms_vonage_api_key'));
-            if ($field('sms_vonage_api_secret') !== '') {
-                save_setting('sms_api_secret', $field('sms_vonage_api_secret'));
-            }
-            save_setting('sms_sender_id', $field('sms_vonage_from'));
+        } elseif ($provider === 'yoola') {
+            save_setting('sms_api_key', $field('sms_yoola_api_key'));
+            save_setting('sms_sender_id', $field('sms_yoola_sender_id'));
         }
 
         flash('msg', 'SMS settings saved.');
@@ -316,7 +309,7 @@ include __DIR__ . '/../includes/header.php';
       <div class="form-group">
         <label>SMS Provider</label>
         <select name="sms_provider">
-          <?php foreach (['infobip'=>'Infobip','africas_talking'=>"Africa's Talking",'twilio'=>'Twilio','nexmo'=>'Vonage (Nexmo)'] as $v=>$l): ?>
+          <?php foreach (['infobip'=>'Infobip','twilio'=>'Twilio','yoola'=>'Yoola SMS'] as $v=>$l): ?>
           <option value="<?= $v ?>" <?= $smsActive===$v?'selected':'' ?>><?= $l ?></option>
           <?php endforeach; ?>
         </select>
@@ -341,24 +334,6 @@ include __DIR__ . '/../includes/header.php';
       </div>
     </div>
 
-    <!-- Africa's Talking -->
-    <div class="form-row sms-provider-block" data-provider="africas_talking" style="<?= $smsActive === 'africas_talking' ? '' : 'display:none' ?>">
-      <div class="form-group" style="flex:2">
-        <label>API Key <span style="font-size:10px;color:var(--muted)">(Africa's Talking API key)</span></label>
-        <input type="text" name="sms_at_api_key" value="<?= $sv('sms_api_key','africas_talking') ?>" placeholder="Your Africa's Talking API key" autocomplete="off">
-      </div>
-      <div class="form-group" style="flex:2">
-        <label>Username <span style="font-size:10px;color:var(--muted)">(sandbox or your AT username)</span></label>
-        <input type="text" name="sms_at_username" value="<?= $sv('sms_username','africas_talking') ?>" placeholder="sandbox or your AT username">
-      </div>
-    </div>
-    <div class="form-row sms-provider-block" data-provider="africas_talking" style="<?= $smsActive === 'africas_talking' ? '' : 'display:none' ?>">
-      <div class="form-group" style="flex:2">
-        <label>Sender ID / Short Code <span style="font-size:10px;color:var(--muted)">(registered with Africa's Talking)</span></label>
-        <input type="text" name="sms_at_sender_id" value="<?= $sv('sms_sender_id','africas_talking') ?>" placeholder="UPF-HRAS">
-      </div>
-    </div>
-
     <!-- Twilio -->
     <div class="form-row sms-provider-block" data-provider="twilio" style="<?= $smsActive === 'twilio' ? '' : 'display:none' ?>">
       <div class="form-group" style="flex:2">
@@ -377,21 +352,15 @@ include __DIR__ . '/../includes/header.php';
       </div>
     </div>
 
-    <!-- Vonage (Nexmo) -->
-    <div class="form-row sms-provider-block" data-provider="nexmo" style="<?= $smsActive === 'nexmo' ? '' : 'display:none' ?>">
+    <!-- Yoola SMS -->
+    <div class="form-row sms-provider-block" data-provider="yoola" style="<?= $smsActive === 'yoola' ? '' : 'display:none' ?>">
       <div class="form-group" style="flex:2">
-        <label>API Key</label>
-        <input type="text" name="sms_vonage_api_key" value="<?= $sv('sms_api_key','nexmo') ?>" placeholder="Your Vonage API key" autocomplete="off">
+        <label>API Key <span style="font-size:10px;color:var(--muted)">(Yoola SMS API key)</span></label>
+        <input type="text" name="sms_yoola_api_key" value="<?= $sv('sms_api_key','yoola') ?>" placeholder="Your Yoola SMS API key" autocomplete="off">
       </div>
       <div class="form-group" style="flex:2">
-        <label>API Secret</label>
-        <input type="password" name="sms_vonage_api_secret" placeholder="<?= $smsActive === 'nexmo' && get_setting('sms_api_secret') ? '•••••••• (leave blank to keep)' : 'Your Vonage API secret' ?>" autocomplete="new-password">
-      </div>
-    </div>
-    <div class="form-row sms-provider-block" data-provider="nexmo" style="<?= $smsActive === 'nexmo' ? '' : 'display:none' ?>">
-      <div class="form-group" style="flex:2">
-        <label>From / Sender</label>
-        <input type="text" name="sms_vonage_from" value="<?= $sv('sms_sender_id','nexmo') ?>" placeholder="UPF-HRAS or +1234567890">
+        <label>Sender ID <span style="font-size:10px;color:var(--muted)">(optional)</span></label>
+        <input type="text" name="sms_yoola_sender_id" value="<?= $sv('sms_sender_id','yoola') ?>" placeholder="YoolaSMS">
       </div>
     </div>
 
@@ -404,17 +373,14 @@ include __DIR__ . '/../includes/header.php';
     <br><strong style="color:var(--navy-700)">Sender ID:</strong> Use a sender registered on the Infobip account. Leave it blank to use the account default sender.
     <br><strong style="color:var(--navy-700)">Credit balance:</strong> Infobip must have sufficient SMS credit; messages are accepted but not delivered when the balance is zero.
   </div>
-  <div class="sms-provider-block" data-provider="africas_talking" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'africas_talking' ? '' : 'display:none' ?>">
-    <strong style="color:var(--navy-700)">Africa's Talking:</strong> Enter your API key and username (use <em>sandbox</em> while testing).
-    <br><strong style="color:var(--navy-700)">Sender ID / Short Code:</strong> Must be registered and approved on your Africa's Talking account.
-  </div>
   <div class="sms-provider-block" data-provider="twilio" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'twilio' ? '' : 'display:none' ?>">
     <strong style="color:var(--navy-700)">Twilio:</strong> Enter the Account SID and Auth Token from your Twilio console.
     <br><strong style="color:var(--navy-700)">From Number:</strong> Use a Twilio phone number or a verified sender.
   </div>
-  <div class="sms-provider-block" data-provider="nexmo" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'nexmo' ? '' : 'display:none' ?>">
-    <strong style="color:var(--navy-700)">Vonage (Nexmo):</strong> Enter the API key and API secret from your Vonage dashboard.
-    <br><strong style="color:var(--navy-700)">From / Sender:</strong> Use an approved sender ID or a purchased number.
+  <div class="sms-provider-block" data-provider="yoola" style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);<?= $smsActive === 'yoola' ? '' : 'display:none' ?>">
+    <strong style="color:var(--navy-700)">Yoola SMS:</strong> Enter the API key from your Yoola dashboard (Dashboard → API Key).
+    <br><strong style="color:var(--navy-700)">Sender ID:</strong> Optional. Leave blank to use the default <em>YoolaSMS</em> sender, or enter an approved sender ID.
+    <br><strong style="color:var(--navy-700)">Credit balance:</strong> The Yoola account must have sufficient SMS credits; messages are accepted but not delivered when the balance is zero.
   </div>
   <div style="margin-top:14px;background:var(--navy-50);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted)">
     <strong style="color:var(--navy-700)">Leave SMS:</strong> Personnel are notified by SMS as soon as a leave request or extension is approved or rejected. Approved leave messages include the effective end date.
