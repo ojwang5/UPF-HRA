@@ -6,6 +6,85 @@
 <footer class="footer">
   &copy; <?= date('Y') ?> <?= e(APP_ORG) ?> — <?= e(APP_NAME) ?>
 </footer>
+
+<!-- Global confirmation dialog for destructive forms -->
+<dialog id="hras-confirm-dialog" class="confirm-dialog" aria-labelledby="hras-confirm-title" aria-describedby="hras-confirm-message">
+  <form method="dialog" class="confirm-dialog-form">
+    <div class="confirm-dialog-body">
+      <div class="confirm-dialog-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="confirm-dialog-text">
+        <h2 id="hras-confirm-title">Please confirm</h2>
+        <p id="hras-confirm-message">Are you sure you want to continue?</p>
+      </div>
+    </div>
+    <div class="confirm-dialog-foot">
+      <button type="submit" value="cancel" class="btn btn-secondary" data-confirm-cancel>Cancel</button>
+      <button type="submit" value="confirm" class="btn btn-danger" data-confirm-ok>Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+/* ── Global confirmation dialog ────────────────────────────────────────────
+   Usage: add data-confirm="Message" to a <form>. Optional attributes:
+     data-confirm-title="Dialog heading"
+     data-confirm-ok="Confirm button label"
+   Cancel (or Escape / backdrop click) aborts the submission.
+──────────────────────────────────────────────────────────────────────────── */
+(function(){
+  var dialog = document.getElementById('hras-confirm-dialog');
+  if(!dialog || typeof dialog.showModal !== 'function') return;
+
+  var titleEl = document.getElementById('hras-confirm-title');
+  var msgEl   = document.getElementById('hras-confirm-message');
+  var okBtn   = dialog.querySelector('[data-confirm-ok]');
+  var cancelBtn = dialog.querySelector('[data-confirm-cancel]');
+  var pending = null;
+
+  document.addEventListener('submit', function(e){
+    var form = e.target;
+    if(!(form instanceof HTMLFormElement)) return;
+    if(!form.hasAttribute('data-confirm')) return;
+
+    // Re-entry after the user confirms.
+    if(form.dataset.confirmBypass === '1'){
+      delete form.dataset.confirmBypass;
+      return;
+    }
+
+    e.preventDefault();
+    if(dialog.open) return;
+
+    pending = form;
+    titleEl.textContent = form.getAttribute('data-confirm-title') || 'Please confirm';
+    msgEl.textContent = form.getAttribute('data-confirm') || 'Are you sure you want to continue?';
+    okBtn.textContent = form.getAttribute('data-confirm-ok') || 'Delete';
+    dialog.returnValue = '';
+    dialog.showModal();
+    cancelBtn.focus();
+  }, true);
+
+  dialog.addEventListener('click', function(e){
+    if(e.target === dialog) dialog.close('cancel');
+  });
+
+  dialog.addEventListener('close', function(){
+    var form = pending;
+    pending = null;
+    if(dialog.returnValue !== 'confirm' || !form) return;
+
+    form.dataset.confirmBypass = '1';
+    if(typeof form.requestSubmit === 'function') form.requestSubmit();
+    else form.submit();
+  });
+})();
+</script>
+
 <script>
 /* ── Global panel-drop system ──────────────────────────────────────────────
    Usage:

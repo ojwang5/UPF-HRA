@@ -23,7 +23,7 @@
 | Column | Values | CHECK? |
 |---|---|---|
 | `employees.gender` | `M`, `F` | ✅ |
-| `daily_status.status` | `present`, `awol`, `leave`, `sick`, `suspended`, `disciplinary`, `on_duty`, `on_course`, `deserted`, `special_assignment`, `undeployed` | ✅ |
+| `daily_status.status` | `present`, `awol`, `leave`, `sick`, `wounded`, `suspended`, `disciplinary`, `on_duty`, `on_course`, `deserted`, `special_assignment`, `undeployed`, `death`, `retired`, `missing` | ✅ |
 | `transfers.transfer_scope` | `hierarchy`, `directorate` | ✅ |
 | `transfers.status` | `pending`, `approved`, `rejected`, `executed`, `cancelled` | ✅ |
 | `transfers.report_status` | `pending`, `reported` | ✅ |
@@ -223,7 +223,7 @@ erDiagram
 | id | INTEGER | PK AUTOINCREMENT |
 | employee_id | INTEGER | NOT NULL, FK → `employees.id` **ON DELETE CASCADE** |
 | date | TEXT | NOT NULL |
-| status | TEXT | NOT NULL, CHECK (11 values) |
+| status | TEXT | NOT NULL, CHECK (15 values) |
 | notes | TEXT | |
 | recorded_by | INTEGER | FK → `users.id` |
 | auto_status | INTEGER | NOT NULL DEFAULT 0 |
@@ -649,6 +649,7 @@ Known keys: `smtp_host`, `smtp_port`, `smtp_user`, `smtp_pass`, `smtp_from_email
 | v20 | Leave SMS failure codes, reasons, and automatic retry metadata |
 | v21 | Course intake field and pending/ongoing/halted/completed lifecycle statuses |
 | v22 | Require a non-blank intake on new course records and when updating an intake; legacy records remain unchanged |
+| v23 | `daily_status` CHECK + `wounded`, `death`, `retired`, `missing` (Sick / Wounded dashboard bucket) |
 
 ---
 

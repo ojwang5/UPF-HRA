@@ -19,25 +19,27 @@ $tot  = sum_totals($rows);
 
 /* ── Detail drill-down: list personnel with this status for the date ── */
 $detailPersonnel = [];
+$detailStatusKey = $detail === 'on_leave' ? 'leave' : $detail;
 if ($detail && (in_array($detail, ALL_STATUSES, true) || $detail === 'on_leave')) {
     [$scopeW, $scopeP] = scope_where($user, 'e');
-    $dsStatus = ($detail === 'on_leave') ? 'leave' : $detail;
+    $detailStatuses = status_bucket_keys($detailStatusKey);
+    $statusPlaceholders = implode(',', array_fill(0, count($detailStatuses), '?'));
     $stmt = $pdo->prepare(
         "SELECT e.service_no, e.full_name, e.rank, e.gender,
                 e.directorate, e.unit,
                 rg.name AS region_name, dv.name AS division_name,
                 st.name AS station_name, pt.name AS post_name,
-                ds.notes
+                ds.status, ds.notes
          FROM employees e
          LEFT JOIN regions   rg ON rg.id=e.region_id
          LEFT JOIN divisions dv ON dv.id=e.division_id
          LEFT JOIN stations  st ON st.id=e.station_id
          LEFT JOIN posts     pt ON pt.id=e.post_id
          JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
-         WHERE e.active=1 AND ds.status=? AND $scopeW
+         WHERE e.active=1 AND ds.status IN ($statusPlaceholders) AND $scopeW
          ORDER BY rg.name, dv.name, pt.name, " . personnel_order_sql('e')
     );
-    $stmt->execute(array_merge([$date, $dsStatus], $scopeP));
+    $stmt->execute(array_merge([$date], $detailStatuses, $scopeP));
     $detailPersonnel = $stmt->fetchAll();
 }
 
@@ -250,7 +252,7 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="dashboard-presentation" id="dashboard-presentation">
-<!-- 9 Stat Cards (clickable) -->
+<!-- 12 Stat Cards (clickable) -->
 <?php
 // Each entry: [status_key, label, css_class, color, bg_color, svg_icon, hint_text]
 $cards = [
@@ -263,9 +265,9 @@ $cards = [
   ['on_leave',     'On Leave',     'stat-leave',        '#3b82f6', '#dbeafe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
    'Approved leave absence'],
-  ['sick',         'Sick',         'stat-sick',         '#f59e0b', '#fef3c7',
+  ['sick',         'Sick / Wounded', 'stat-sick',       '#f59e0b', '#fef3c7',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
-   'Medical / sick absence'],
+   'Medical or wounded absence'],
   ['suspended',    'Suspended',    'stat-suspended',    '#7c3aed', '#ede9fe',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
    'Under suspension order'],
@@ -281,6 +283,15 @@ $cards = [
   ['deserted',     'Deserted',     'stat-deserted',     '#be185d', '#fce7f3',
    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
    'Left post without permission'],
+  ['death',        'Death',        'stat-death',        '#334155', '#e2e8f0',
+   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+   'Deceased — off strength'],
+  ['retired',      'Retired',      'stat-retired',      '#78716c', '#e7e5e4',
+   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+   'Retired from service'],
+  ['missing',      'Missing',      'stat-missing',      '#ea580c', '#ffedd5',
+   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="12"/><line x1="11" y1="15" x2="11.01" y2="15"/></svg>',
+   'Whereabouts unknown'],
 ];
 ?>
 <?php if ($ssSlides['overview']): ?><section class="dashboard-slide" data-slide-title="Personnel status overview" aria-label="Personnel status overview"><?php endif; ?>
@@ -293,7 +304,8 @@ $cards = [
 <div class="grid grid-4 dash-stats">
 <?php foreach ($cards as $card):
   [$key, $label, $cls, $color, $bg, $icon, $hint] = $card;
-  $val = $tot[$key] ?? 0;
+  $val = 0;
+  foreach (status_bucket_keys($key) as $bucketKey) $val += (int)($tot[$bucketKey] ?? 0);
   $pct = $tot['total'] > 0 ? round($val / $tot['total'] * 100) : 0;
   $isActive = ($detail === $key);
   $detailUrl = $isActive
@@ -324,11 +336,11 @@ $cards = [
 <div id="detail-panel" class="card" style="border-left:4px solid var(--primary);margin-bottom:8px;scroll-margin-top:80px">
   <div class="chr">
     <div>
-      <h3><?= status_badge($detail) ?> &nbsp;<?= e(status_label($detail)) ?> — <?= e(date('j F Y', strtotime($date))) ?></h3>
+      <h3><?php foreach (status_bucket_keys($detailStatusKey) as $bk): ?><?= status_badge($bk) ?> <?php endforeach; ?>&nbsp;<?= e(status_bucket_label($detailStatusKey)) ?> — <?= e(date('j F Y', strtotime($date))) ?></h3>
       <div class="muted" style="font-size:12px;margin-top:2px"><?= count($detailPersonnel) ?> personnel</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <?php $exportStatus = ($detail === 'on_leave') ? 'leave' : $detail; ?>
+      <?php $exportStatus = $detailStatusKey; ?>
       <a class="btn-icon bi-secondary bi-sm" href="/export-personnel.php?format=csv&status=<?= urlencode($exportStatus) ?>&date=<?= urlencode($date) ?>" target="_blank" title="Export this list (CSV)"><?= ICO_DL ?></a>
       <a class="btn-icon bi-secondary bi-sm" href="/export-personnel.php?format=excel&status=<?= urlencode($exportStatus) ?>&date=<?= urlencode($date) ?>" target="_blank" title="Export this list (Excel)"><?= ICO_DL ?></a>
       <a class="btn-icon bi-secondary bi-sm" href="/export-personnel.php?format=pdf&status=<?= urlencode($exportStatus) ?>&date=<?= urlencode($date) ?>" target="_blank" title="Print this list"><?= ICO_PRINT ?></a>
@@ -341,7 +353,9 @@ $cards = [
       <thead><tr>
         <th>File/Force No</th><th>Rank</th><th>Full Name</th><th>G</th>
         <th>Directorate</th><th>Unit</th>
-        <th>Region</th><th>Station/Post</th><th>Notes</th>
+        <th>Region</th><th>Station/Post</th>
+        <?php if (count(status_bucket_keys($detailStatusKey)) > 1): ?><th>Status</th><?php endif; ?>
+        <th>Notes</th>
       </tr></thead>
       <tbody>
         <?php foreach ($detailPersonnel as $dp): ?>
@@ -354,6 +368,7 @@ $cards = [
           <td style="font-size:12px"><?= e($dp['unit']??'—') ?></td>
           <td class="muted" style="font-size:12px"><?= e($dp['region_name']??'—') ?></td>
           <td style="font-size:12px"><?= e(($dp['station_name']??'').' / '.($dp['post_name']??'')) ?></td>
+          <?php if (count(status_bucket_keys($detailStatusKey)) > 1): ?><td><?= status_badge((string)$dp['status']) ?></td><?php endif; ?>
           <td style="font-size:12px;color:var(--muted)"><?= e($dp['notes']??'') ?></td>
         </tr>
         <?php endforeach; ?>
@@ -361,7 +376,7 @@ $cards = [
     </table>
   </div>
   <?php else: ?>
-  <p class="muted" style="text-align:center;padding:20px">No personnel with status <strong><?= e(status_label($detail)) ?></strong> recorded on this date.</p>
+  <p class="muted" style="text-align:center;padding:20px">No personnel with status <strong><?= e(status_bucket_label($detailStatusKey)) ?></strong> recorded on this date.</p>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -397,8 +412,8 @@ $cards = [
     <div class="ds-val" style="color:#f59e0b"><?= $tot['unrecorded'] ?></div>
   </div>
   <div class="ds-cell">
-    <div class="ds-label">Flags (AWOL+Susp+Disc+Des)</div>
-    <div class="ds-val" style="color:#ef4444"><?= $tot['awol'] + $tot['suspended'] + $tot['disciplinary'] + $tot['deserted'] ?></div>
+    <div class="ds-label">Flags (AWOL+Susp+Disc+Des+Missing)</div>
+    <div class="ds-val" style="color:#ef4444"><?= $tot['awol'] + $tot['suspended'] + $tot['disciplinary'] + $tot['deserted'] + $tot['missing'] ?></div>
   </div>
   <div class="ds-cell">
     <div class="ds-label">On Course</div>
@@ -413,11 +428,15 @@ $chartData = [
     ['on_duty',      'On Duty',      '#0891b2'],
     ['on_leave',     'On Leave',     '#3b82f6'],
     ['sick',         'Sick',         '#f59e0b'],
+    ['wounded',      'Wounded',      '#fb923c'],
     ['on_course',    'On Course',    '#059669'],
     ['awol',         'AWOL',         '#ef4444'],
     ['suspended',    'Suspended',    '#7c3aed'],
     ['disciplinary', 'Disciplinary', '#dc2626'],
     ['deserted',     'Deserted',     '#be185d'],
+    ['death',        'Death',        '#334155'],
+    ['retired',      'Retired',      '#78716c'],
+    ['missing',      'Missing',      '#ea580c'],
     ['unrecorded',   'Unrecorded',   '#94a3b8'],
 ];
 $cht = [];
@@ -511,8 +530,9 @@ foreach ($chartData as [$ck, $cl, $cc]) {
       <thead><tr>
         <th><?= ucfirst($rows[0]['unit_level'] ?? 'Unit') ?></th>
         <th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th>
-        <th>Sick</th><th>Susp.</th><th>Under Disc.</th><th>Working</th>
-        <th>On Duty</th><th>On Course</th><th>Deserted</th><th>Unrecorded</th>
+        <th>Sick/Wnd</th><th>Susp.</th><th>Under Disc.</th><th>Working</th>
+        <th>On Duty</th><th>On Course</th><th>Deserted</th>
+        <th>Death</th><th>Retired</th><th>Missing</th><th>Unrecorded</th>
       </tr></thead>
       <tbody>
         <?php foreach ($rows as $r): ?>
@@ -522,13 +542,16 @@ foreach ($chartData as [$ck, $cl, $cc]) {
           <td><span style="color:#22c55e;font-weight:600"><?= $r['present'] ?></span></td>
           <td><?= $r['awol'] ? '<span style="color:#ef4444;font-weight:600">'.$r['awol'].'</span>' : '—' ?></td>
           <td><?= $r['on_leave'] ?: '—' ?></td>
-          <td><?= $r['sick'] ?: '—' ?></td>
+          <td><?= ($r['sick'] + $r['wounded']) ?: '—' ?></td>
           <td><?= $r['suspended'] ? '<span style="color:#7c3aed;font-weight:600">'.$r['suspended'].'</span>' : '—' ?></td>
           <td><?= $r['disciplinary'] ? '<span style="color:#dc2626;font-weight:600">'.$r['disciplinary'].'</span>' : '—' ?></td>
           <td><span style="color:#0891b2;font-weight:600"><?= working_strength($r) ?></span></td>
           <td><?= $r['on_duty'] ?: '—' ?></td>
           <td><?= $r['on_course'] ?: '—' ?></td>
           <td><?= $r['deserted'] ? '<span style="color:#be185d;font-weight:600">'.$r['deserted'].'</span>' : '—' ?></td>
+          <td><?= $r['death'] ? '<span style="color:#334155;font-weight:600">'.$r['death'].'</span>' : '—' ?></td>
+          <td><?= $r['retired'] ? '<span style="color:#78716c;font-weight:600">'.$r['retired'].'</span>' : '—' ?></td>
+          <td><?= $r['missing'] ? '<span style="color:#ea580c;font-weight:600">'.$r['missing'].'</span>' : '—' ?></td>
           <td><?= $r['unrecorded'] ? '<span style="color:#94a3b8">'.$r['unrecorded'].'</span>' : '<span style="color:#22c55e">✓</span>' ?></td>
         </tr>
         <?php endforeach; ?>
@@ -698,11 +721,18 @@ foreach ($chartData as [$ck, $cl, $cc]) {
 
   var savedState = null;
   var savedIndex = null;
+  var detailOpen = <?= !empty($detail) ? 'true' : 'false' ?>;
   try {
     savedState = sessionStorage.getItem(storageKey);
     savedIndex = Number.parseInt(sessionStorage.getItem(indexKey) || '0', 10);
   } catch(e){}
-  if (savedState === 'on') {
+  if (detailOpen) {
+    // Drill-down must stay visible — never let the slideshow hide the detail panel.
+    try {
+      sessionStorage.removeItem(storageKey);
+      sessionStorage.removeItem(indexKey);
+    } catch(e){}
+  } else if (savedState === 'on') {
     startSlideshow(Number.isNaN(savedIndex) ? 0 : savedIndex);
   } else if (autoplay) {
     startSlideshow(0);

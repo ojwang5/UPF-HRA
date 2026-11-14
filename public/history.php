@@ -123,13 +123,14 @@ include __DIR__ . '/../includes/header.php';
   <?php endif; ?>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Unit</th><th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th><th>Sick</th><th>Suspended</th><th>Disciplinary</th><th>On Duty</th><th>On Course</th></tr></thead>
+      <thead><tr><th>Unit</th><th>Total</th><th>Present</th><th>AWOL</th><th>Leave</th><th>Sick</th><th>Wounded</th><th>Suspended</th><th>Disciplinary</th><th>On Duty</th><th>On Course</th><th>Deserted</th><th>Death</th><th>Retired</th><th>Missing</th></tr></thead>
       <tbody>
         <?php foreach ($detail['summary'] as $s): ?>
         <tr><td><?= e($s['unit_name']??$s['branch_name']??'—') ?></td><td><?= $s['total'] ?></td><td><?= $s['present'] ?></td>
-          <td><?= $s['awol'] ?></td><td><?= $s['on_leave'] ?></td><td><?= $s['sick'] ?></td>
+          <td><?= $s['awol'] ?></td><td><?= $s['on_leave'] ?></td><td><?= $s['sick'] ?></td><td><?= $s['wounded']??0 ?></td>
           <td><?= $s['suspended']??0 ?></td><td><?= $s['disciplinary']??0 ?></td>
-          <td><?= $s['on_duty']??0 ?></td><td><?= $s['on_course']??0 ?></td></tr>
+          <td><?= $s['on_duty']??0 ?></td><td><?= $s['on_course']??0 ?></td><td><?= $s['deserted']??0 ?></td>
+          <td><?= $s['death']??0 ?></td><td><?= $s['retired']??0 ?></td><td><?= $s['missing']??0 ?></td></tr>
         <?php endforeach; ?>
       </tbody>
     </table>

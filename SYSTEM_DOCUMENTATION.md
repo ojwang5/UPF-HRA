@@ -533,12 +533,17 @@ Commander opens Daily Status
   System lists all employees in scope
            │
            ▼
-  For each employee: select status
-  ┌────────────┬────────────┬──────────┬────────────┐
-  │  Present   │   AWOL     │  Leave   │   Sick     │
-  ├────────────┼────────────┼──────────┼────────────┤
-  │ Suspended  │ Discipl.   │ On Duty  │ On Course  │
-  └────────────┴────────────┴──────────┴────────────┘
+  For each employee: choose one of 15 statuses
+  ┌────────────┬────────────┬────────────┬────────────┐
+  │  Present   │   AWOL     │ On Leave   │   Sick     │
+  ├────────────┼────────────┼────────────┼────────────┤
+  │  Wounded   │ Suspended  │ Discipl.   │  On Duty   │
+  ├────────────┼────────────┼────────────┼────────────┤
+  │ On Course  │  Deserted  │  Special   │ Undeployed │
+  │            │            │ Assignment │            │
+  ├────────────┼────────────┼────────────┼────────────┤
+  │   Death    │  Retired   │  Missing   │            │
+  └────────────┴────────────┴────────────┴────────────┘
            │
            ▼
   Submit form → INSERT/UPDATE daily_status
@@ -552,6 +557,9 @@ Commander opens Daily Status
 - Status can be updated on the same day by the recording commander
 - Historical dates can be viewed but only edited by higher commanders
 - `deserted` status is a permanent escalation (distinct from AWOL)
+- `death`, `retired` and `missing` are lifecycle statuses: the officer stays on the
+  nominal roll (unless separately deactivated) but is excluded from working strength
+- The dashboard reports `sick` and `wounded` together as **Sick / Wounded**
 
 ---
 
@@ -884,7 +892,7 @@ Ranks are stored as text and sorted using a SQL CASE expression that preserves U
 
 ## 9. Personnel Statuses
 
-Nine operational statuses track the daily deployment state of each officer:
+Fifteen statuses track the daily deployment state and lifecycle of each officer. The dashboard groups `sick` and `wounded` into a single **Sick / Wounded** stat card:
 
 | Code | Label | Description |
 |------|-------|-------------|
@@ -892,11 +900,17 @@ Nine operational statuses track the daily deployment state of each officer:
 | `awol` | AWOL | Absent Without Official Leave |
 | `leave` | On Leave | Approved annual/compassionate leave |
 | `sick` | Sick | Medical absence |
+| `wounded` | Wounded | Injured or wounded officer |
 | `suspended` | Suspended | Under administrative suspension |
 | `disciplinary` | Disciplinary | Under disciplinary proceedings |
 | `on_duty` | On Duty | On special assignment or external duty |
 | `on_course` | On Course | Attending training or a course |
 | `deserted` | Deserted | Permanent AWOL — fled post |
+| `special_assignment` | Special Assignment | Detached on a special duty |
+| `undeployed` | Undeployed | On strength but not currently deployed |
+| `death` | Death | Deceased — removed from working strength |
+| `retired` | Retired | Retired from service |
+| `missing` | Missing | Whereabouts unknown |
 
 ---
 

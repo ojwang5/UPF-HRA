@@ -175,12 +175,13 @@ function log_activity(string $action, string $entityType = '', string $entityLab
     } catch (\Throwable $e) { /* silent — never break the app */ }
 }
 
-const ALL_STATUSES = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed'];
+const ALL_STATUSES = ['present','awol','leave','sick','wounded','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed','death','retired','missing'];
 const STATUS_LABELS = [
     'present'           => 'Present',
     'awol'              => 'AWOL',
     'leave'             => 'On Leave',
     'sick'              => 'Sick',
+    'wounded'           => 'Wounded',
     'suspended'         => 'Suspended',
     'disciplinary'      => 'Under Disciplinary',
     'on_duty'           => 'On Duty',
@@ -188,12 +189,16 @@ const STATUS_LABELS = [
     'deserted'          => 'Deserted',
     'special_assignment'=> 'Special Assignment',
     'undeployed'        => 'Undeployed',
+    'death'             => 'Death',
+    'retired'           => 'Retired',
+    'missing'           => 'Missing',
 ];
 const STATUS_BADGE_CLASS = [
     'present'           => 'badge-present',
     'awol'              => 'badge-awol',
     'leave'             => 'badge-leave',
     'sick'              => 'badge-sick',
+    'wounded'           => 'badge-wounded',
     'suspended'         => 'badge-suspended',
     'disciplinary'      => 'badge-disciplinary',
     'on_duty'           => 'badge-on_duty',
@@ -201,12 +206,34 @@ const STATUS_BADGE_CLASS = [
     'deserted'          => 'badge-deserted',
     'special_assignment'=> 'badge-special_assignment',
     'undeployed'        => 'badge-undeployed',
+    'death'             => 'badge-death',
+    'retired'           => 'badge-retired',
+    'missing'           => 'badge-missing',
+];
+
+/* Statuses that are reported together in one dashboard bucket. */
+const STATUS_BUCKETS = [
+    'sick' => ['sick','wounded'],
 ];
 
 function status_label(string $s): string { return STATUS_LABELS[$s] ?? ucfirst($s); }
 function status_badge(string $s): string {
     $cls = STATUS_BADGE_CLASS[$s] ?? 'badge';
     return '<span class="badge '.$cls.'">'.e(status_label($s)).'</span>';
+}
+
+/** All database status values represented by a dashboard bucket. */
+function status_bucket_keys(string $key): array {
+    return STATUS_BUCKETS[$key] ?? [$key];
+}
+
+/** Human-readable label for a dashboard status bucket. */
+function status_bucket_label(string $key): string {
+    if (isset(STATUS_BUCKETS[$key])) {
+        $labels = array_map('status_label', STATUS_BUCKETS[$key]);
+        return implode(' / ', $labels);
+    }
+    return status_label($key);
 }
 
 /** Badge for a transfer lifecycle status. */
@@ -471,13 +498,17 @@ function hierarchy_summary(PDO $pdo, string $date, array $user, ?string $scopeLe
                SUM(CASE WHEN ds.status='awol'         THEN 1 ELSE 0 END) AS awol,
                SUM(CASE WHEN ds.status='leave'        THEN 1 ELSE 0 END) AS on_leave,
                SUM(CASE WHEN ds.status='sick'         THEN 1 ELSE 0 END) AS sick,
+               SUM(CASE WHEN ds.status='wounded'      THEN 1 ELSE 0 END) AS wounded,
                SUM(CASE WHEN ds.status='suspended'    THEN 1 ELSE 0 END) AS suspended,
                SUM(CASE WHEN ds.status='disciplinary' THEN 1 ELSE 0 END) AS disciplinary,
                SUM(CASE WHEN ds.status='on_duty'      THEN 1 ELSE 0 END) AS on_duty,
                SUM(CASE WHEN ds.status='on_course'    THEN 1 ELSE 0 END) AS on_course,
                SUM(CASE WHEN ds.status='deserted'     THEN 1 ELSE 0 END) AS deserted,
                SUM(CASE WHEN ds.status='special_assignment' THEN 1 ELSE 0 END) AS special_assignment,
-               SUM(CASE WHEN ds.status='undeployed'   THEN 1 ELSE 0 END) AS undeployed
+               SUM(CASE WHEN ds.status='undeployed'   THEN 1 ELSE 0 END) AS undeployed,
+               SUM(CASE WHEN ds.status='death'        THEN 1 ELSE 0 END) AS death,
+               SUM(CASE WHEN ds.status='retired'      THEN 1 ELSE 0 END) AS retired,
+               SUM(CASE WHEN ds.status='missing'      THEN 1 ELSE 0 END) AS missing
         FROM employees e
         {$joinClause}
         LEFT JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?
@@ -489,10 +520,10 @@ function hierarchy_summary(PDO $pdo, string $date, array $user, ?string $scopeLe
     $stmt->execute(array_merge([$date], $scopeParams, $filterParams));
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
-        foreach (['total','male','female','present','awol','on_leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed'] as $k) {
+        foreach (['total','male','female','present','awol','on_leave','sick','wounded','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed','death','retired','missing'] as $k) {
             $r[$k] = (int)($r[$k] ?? 0);
         }
-        $r['unrecorded'] = $r['total'] - ($r['present']+$r['awol']+$r['on_leave']+$r['sick']+$r['suspended']+$r['disciplinary']+$r['on_duty']+$r['on_course']+$r['deserted']+$r['special_assignment']+$r['undeployed']);
+        $r['unrecorded'] = $r['total'] - ($r['present']+$r['awol']+$r['on_leave']+$r['sick']+$r['wounded']+$r['suspended']+$r['disciplinary']+$r['on_duty']+$r['on_course']+$r['deserted']+$r['special_assignment']+$r['undeployed']+$r['death']+$r['retired']+$r['missing']);
     }
     return $rows;
 }
@@ -511,14 +542,15 @@ function build_hierarchy_joins(string $upTo): string {
 }
 
 function sum_totals(array $rows): array {
-    $t = ['total'=>0,'male'=>0,'female'=>0,'present'=>0,'awol'=>0,'on_leave'=>0,'sick'=>0,'suspended'=>0,'disciplinary'=>0,'on_duty'=>0,'on_course'=>0,'deserted'=>0,'special_assignment'=>0,'undeployed'=>0,'unrecorded'=>0];
+    $t = ['total'=>0,'male'=>0,'female'=>0,'present'=>0,'awol'=>0,'on_leave'=>0,'sick'=>0,'wounded'=>0,'suspended'=>0,'disciplinary'=>0,'on_duty'=>0,'on_course'=>0,'deserted'=>0,'special_assignment'=>0,'undeployed'=>0,'death'=>0,'retired'=>0,'missing'=>0,'unrecorded'=>0];
     foreach ($rows as $r) foreach ($t as $k=>$_) $t[$k] += ($r[$k] ?? 0);
     return $t;
 }
 
 /**
  * Personnel still available for duty. Officers under disciplinary action remain
- * part of the working strength; suspended/deserted/AWOL/leave/sick do not.
+ * part of the working strength; suspended/deserted/AWOL/leave/sick/wounded and
+ * personnel recorded as death, retired or missing do not.
  */
 function working_strength(array $row): int {
     return (int)($row['present'] ?? 0)

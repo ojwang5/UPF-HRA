@@ -39,47 +39,12 @@ include __DIR__ . '/../includes/header.php';
   <div><h1>Notifications</h1><div class="desc">System alerts, approvals, and broadcasts</div></div>
   <div class="action-bar">
     <?php if (is_superadmin($user)): ?>
-    <details class="form-panel" id="broadcast-form">
-      <summary><button type="button" class="btn-icon bi-gold" title="Send broadcast"><?= ICO_BELL ?></button></summary>
-      <div class="form-body">
-        <h4 style="margin:0 0 12px;color:var(--navy-800)">Send Broadcast</h4>
-        <form method="post">
-  <?= csrf_field() ?>
-          <input type="hidden" name="action" value="broadcast">
-          <div class="form-row">
-            <div class="form-group" style="flex:2"><label>Title</label><input type="text" name="title" required></div>
-            <div class="form-group"><label>Audience</label>
-              <select name="audience" id="aud-sel" onchange="var v=this.value;document.getElementById('br-fld').style.display=v==='region'?'':'none';document.getElementById('rl-fld').style.display=v==='role'?'':'none';document.getElementById('dr-fld').style.display=v==='directorate'?'':'none'">
-                <option value="all">All users</option>
-                <option value="region">A Region</option>
-                <option value="role">A Role</option>
-                <option value="directorate">A Directorate</option>
-              </select>
-            </div>
-            <div class="form-group" id="br-fld" style="display:none"><label>Region</label>
-              <select name="region_id"><?php foreach ($regions as $r): ?><option value="<?= $r['id'] ?>"><?= e($r['name']) ?></option><?php endforeach; ?></select>
-            </div>
-            <div class="form-group" id="rl-fld" style="display:none"><label>Role</label>
-              <select name="target_role">
-                <?php foreach (array_keys(ROLE_LABELS) as $r): ?><option value="<?= $r ?>"><?= e(role_label($r)) ?></option><?php endforeach; ?>
-              </select>
-            </div>
-            <div class="form-group" id="dr-fld" style="display:none"><label>Directorate</label>
-              <select name="directorate_id"><?php foreach ($directorates as $d): ?><option value="<?= $d['id'] ?>"><?= e($d['name']) ?></option><?php endforeach; ?></select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group" style="flex:1"><label>Message</label><textarea name="message" rows="2" required></textarea></div>
-          </div>
-          <div class="action-bar" style="margin-top:10px">
-            <button class="btn-icon bi-gold bi-lg" type="submit" title="Send broadcast"><?= ICO_SEND ?></button>
-          </div>
-        </form>
-      </div>
-    </details>
+    <button type="button" class="btn-icon bi-gold btn-labeled" data-open-dialog="broadcast-dialog" title="Send broadcast">
+      <?= ICO_BELL ?><span>Send Broadcast</span>
+    </button>
     <?php endif; ?>
     <!-- Delete all -->
-    <form method="post" style="display:contents" onsubmit="return confirm('Delete all notifications?');">
+    <form method="post" style="display:contents" data-confirm="Delete all notifications? This cannot be undone." data-confirm-title="Delete all notifications" data-confirm-ok="Delete all">
   <?= csrf_field() ?>
       <input type="hidden" name="action" value="delete_all">
       <button type="submit" class="btn-icon bi-danger" title="Delete all notifications"><?= ICO_REJECT ?></button>
@@ -118,7 +83,7 @@ include __DIR__ . '/../includes/header.php';
         <button type="submit" class="btn-icon bi-secondary bi-sm" title="Mark as read"><?= ICO_SAVE ?></button>
       </form>
       <?php endif; ?>
-      <form method="post" style="display:contents" onsubmit="return confirm('Delete this notification?');">
+      <form method="post" style="display:contents" data-confirm="Delete this notification?" data-confirm-title="Delete notification" data-confirm-ok="Delete">
     <?= csrf_field() ?>
         <input type="hidden" name="action" value="delete_one"><input type="hidden" name="id" value="<?= $n['id'] ?>">
         <button type="submit" class="btn-icon bi-danger bi-sm" title="Delete notification"><?= ICO_REJECT ?></button>
@@ -128,9 +93,105 @@ include __DIR__ . '/../includes/header.php';
   <?php endforeach; ?>
 </div>
 
+<?php if (is_superadmin($user)): ?>
+<dialog id="broadcast-dialog" class="app-dialog" aria-labelledby="broadcast-title">
+  <div class="app-dialog-head">
+    <div>
+      <h2 id="broadcast-title">Send Broadcast</h2>
+      <p>Deliver an announcement to everyone or to a targeted group.</p>
+    </div>
+    <button type="button" class="app-dialog-close" data-close-dialog aria-label="Close">&times;</button>
+  </div>
+  <form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="broadcast">
+    <div class="app-dialog-body">
+      <div class="form-group">
+        <label for="broadcast-title-field">Title</label>
+        <input id="broadcast-title-field" type="text" name="title" maxlength="120" placeholder="e.g. Monthly parade change" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="broadcast-audience">Audience</label>
+          <select name="audience" id="broadcast-audience">
+            <option value="all">All users</option>
+            <option value="region">A Region</option>
+            <option value="role">A Role</option>
+            <option value="directorate">A Directorate</option>
+          </select>
+        </div>
+        <div class="form-group" data-audience-panel="region" hidden>
+          <label for="broadcast-region">Region</label>
+          <select name="region_id" id="broadcast-region">
+            <?php foreach ($regions as $r): ?><option value="<?= $r['id'] ?>"><?= e($r['name']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group" data-audience-panel="role" hidden>
+          <label for="broadcast-role">Role</label>
+          <select name="target_role" id="broadcast-role">
+            <?php foreach (array_keys(ROLE_LABELS) as $r): ?><option value="<?= $r ?>"><?= e(role_label($r)) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group" data-audience-panel="directorate" hidden>
+          <label for="broadcast-directorate">Directorate</label>
+          <select name="directorate_id" id="broadcast-directorate">
+            <?php foreach ($directorates as $d): ?><option value="<?= $d['id'] ?>"><?= e($d['name']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="broadcast-message">Message</label>
+        <textarea id="broadcast-message" name="message" rows="5" placeholder="Write the announcement…" required></textarea>
+        <p class="app-dialog-hint" data-audience-hint></p>
+      </div>
+    </div>
+    <div class="app-dialog-foot">
+      <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="btn btn-gold"><?= ICO_SEND ?><span>Send broadcast</span></button>
+    </div>
+  </form>
+</dialog>
+
 <script>
-document.querySelectorAll('details.form-panel').forEach(d=>{
-  d.addEventListener('toggle',()=>{ if(d.open) document.querySelectorAll('details.form-panel').forEach(o=>{ if(o!==d) o.open=false; }); });
-});
+(function(){
+  var dlg = document.getElementById('broadcast-dialog');
+  if(!dlg) return;
+
+  var audience = dlg.querySelector('#broadcast-audience');
+  var hint = dlg.querySelector('[data-audience-hint]');
+  var hints = {
+    all: 'Every active user will receive this notification.',
+    region: 'Only users attached to the selected region will receive this notification.',
+    role: 'Only users with the selected role will receive this notification.',
+    directorate: 'Only users in the selected directorate will receive this notification.'
+  };
+
+  function syncAudience(){
+    var value = audience.value;
+    dlg.querySelectorAll('[data-audience-panel]').forEach(function(panel){
+      panel.hidden = panel.getAttribute('data-audience-panel') !== value;
+    });
+    if(hint) hint.textContent = hints[value] || '';
+  }
+  audience.addEventListener('change', syncAudience);
+  syncAudience();
+
+  document.addEventListener('click', function(e){
+    var opener = e.target.closest('[data-open-dialog="broadcast-dialog"]');
+    if(opener){
+      dlg.showModal();
+      var title = dlg.querySelector('#broadcast-title-field');
+      if(title) title.focus();
+      return;
+    }
+    var closer = e.target.closest('[data-close-dialog]');
+    if(closer && closer.closest('dialog') === dlg) dlg.close();
+  });
+
+  dlg.addEventListener('click', function(e){
+    if(e.target === dlg) dlg.close();
+  });
+})();
 </script>
+<?php endif; ?>
 <?php include __DIR__ . '/../includes/footer.php'; ?>

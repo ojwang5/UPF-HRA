@@ -110,7 +110,7 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <?php if (is_superadmin($user)): ?>
   <div class="action-bar">
-    <form method="post" onsubmit="return confirm('Clear ALL activity logs? This cannot be undone.')">
+    <form method="post" data-confirm="Clear ALL activity logs? This cannot be undone." data-confirm-title="Purge activity log" data-confirm-ok="Purge">
   <?= csrf_field() ?>
       <input type="hidden" name="purge" value="1">
       <button class="btn-icon bi-danger" type="submit" style="gap:6px;padding:0 12px;width:auto;font-size:11px">

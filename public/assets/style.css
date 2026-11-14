@@ -979,6 +979,15 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
 .stat-on_course{
   border-color:#059669
 }
+.stat-death{
+  border-color:#334155
+}
+.stat-retired{
+  border-color:#78716c
+}
+.stat-missing{
+  border-color:#ea580c
+}
 .stat .icon{
   width:42px;
   height:42px;
@@ -1018,6 +1027,15 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
   background:#d1fae5
 
 }
+.stat-death .icon{
+  background:#e2e8f0
+}
+.stat-retired .icon{
+  background:#e7e5e4
+}
+.stat-missing .icon{
+  background:#ffedd5
+}
 
 /* ===== Tables ===== */
 .table-wrap{
@@ -1025,6 +1043,19 @@ td .action-bar{flex-wrap:nowrap;gap:4px}
   border:1px solid var(--border);
   border-radius:8px;
   background:#fff}
+/* Keep row actions visible while a wide table scrolls sideways. */
+.table-action-col{
+  position:sticky;
+  right:0;
+  background:#fff;
+  box-shadow:-8px 0 10px -10px rgba(15,23,42,.35);
+  z-index:2
+}
+th.table-action-col{
+  background:var(--navy-50);
+  z-index:3
+}
+tbody tr:hover td.table-action-col{background:#fafbfd}
 table{
   width:100%;
   border-collapse:collapse;
@@ -1769,6 +1800,135 @@ tbody tr:hover td{
 }
 
 
+/* ===== Modal dialogs (leave requests, broadcasts) ===== */
+.app-dialog,
+.leave-dialog{
+  position:fixed;
+  inset:0;
+  width:min(560px,calc(100vw - 32px));
+  max-width:none;
+  max-height:calc(100dvh - 48px);
+  margin:auto;
+  padding:0;
+  overflow:hidden;
+  border:1px solid var(--border);
+  border-top:4px solid var(--gold);
+  border-radius:14px;
+  background:var(--card);
+  color:var(--text);
+  box-shadow:0 24px 70px rgba(15,23,42,.3)
+}
+.app-dialog-sm,
+.leave-dialog-sm{width:min(400px,calc(100vw - 32px))}
+.app-dialog::backdrop,
+.leave-dialog::backdrop{
+  background:rgba(15,23,42,.58);
+  backdrop-filter:blur(2px)
+}
+.app-dialog form,
+.leave-dialog form{
+  display:flex;
+  flex-direction:column;
+  max-height:calc(100dvh - 52px)
+}
+.app-dialog-head,
+.leave-dialog-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  padding:18px 22px 14px;
+  border-bottom:1px solid var(--border);
+  background:var(--card)
+}
+.app-dialog-head h2,
+.leave-dialog-head h2{
+  margin:0;
+  color:var(--navy-800);
+  font-size:18px
+}
+.app-dialog-head p,
+.leave-dialog-head p{
+  margin:5px 0 0;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45
+}
+.app-dialog-close,
+.leave-dialog-close{
+  flex:0 0 auto;
+  display:grid;
+  place-items:center;
+  width:30px;
+  height:30px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--navy-50);
+  color:var(--navy-700);
+  font-size:20px;
+  line-height:1;
+  cursor:pointer
+}
+.app-dialog-close:hover,
+.leave-dialog-close:hover{
+  background:var(--navy-100);
+  color:var(--navy-800)
+}
+.app-dialog-body,
+.leave-dialog-body{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding:18px 22px;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch
+}
+.app-dialog-body .form-row,
+.leave-dialog-body .form-row{margin-bottom:0}
+.app-dialog-foot,
+.leave-dialog-foot{
+  display:flex;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  gap:10px;
+  padding:14px 22px 18px;
+  border-top:1px solid var(--border);
+  background:var(--card)
+}
+.app-dialog-foot .btn,
+.leave-dialog-foot .btn{
+  min-width:96px;
+  justify-content:center
+}
+.app-dialog .form-group,
+.leave-dialog .form-group{min-width:130px}
+.app-dialog [hidden]{display:none!important}
+.app-dialog textarea,
+.leave-dialog textarea{resize:vertical;min-height:84px}
+.app-dialog-hint{
+  margin:0;
+  color:var(--muted);
+  font-size:11.5px;
+  line-height:1.45
+}
+.btn-success{background:#16a34a}
+.btn-success:hover{background:#15803d}
+
+@media(max-width:520px){
+  .app-dialog,
+  .leave-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 24px)}
+  .app-dialog form,
+  .leave-dialog form{max-height:calc(100dvh - 28px)}
+  .app-dialog-head,
+  .leave-dialog-head{padding:16px 16px 12px}
+  .app-dialog-body,
+  .leave-dialog-body{padding:16px}
+  .app-dialog-foot,
+  .leave-dialog-foot{padding:12px 16px 14px}
+  .app-dialog-foot .btn,
+  .leave-dialog-foot .btn{flex:1;min-width:0}
+}
+
 /* ===== Forms ===== */
 .form-row{
   display:flex;
@@ -1902,6 +2062,26 @@ input:focus,select:focus,textarea:focus{
 .badge-deserted{
   background:#fce7f3;
   color:#9d174d
+}
+.badge-wounded{
+  background:#ffedd5;
+  color:#9a3412
+}
+.badge-death{
+  background:#e2e8f0;
+  color:#1e293b
+}
+.badge-retired{
+  background:#e7e5e4;
+  color:#44403c
+}
+.badge-missing{
+  background:#ffedd5;
+  color:#c2410c
+}
+.badge-undeployed{
+  background:#e2e8f0;
+  color:#475569
 }
 
 /* ===== Daily status table ===== */
@@ -2666,4 +2846,68 @@ gap:8px
 }
 .switch .switch-label small{
   color:var(--muted)
+}
+
+/* ===== Confirmation dialog ===== */
+.confirm-dialog{
+  position:fixed;
+  inset:0;
+  width:min(440px,calc(100vw - 32px));
+  max-width:none;
+  margin:auto;
+  padding:0;
+  border:1px solid var(--border);
+  border-top:4px solid var(--red);
+  border-radius:14px;
+  background:var(--card);
+  color:var(--text);
+  box-shadow:0 24px 70px rgba(15,23,42,.3)
+}
+.confirm-dialog::backdrop{
+  background:rgba(15,23,42,.58);
+  backdrop-filter:blur(2px)
+}
+.confirm-dialog-form{margin:0}
+.confirm-dialog-body{
+  display:flex;
+  gap:16px;
+  padding:24px 24px 8px
+}
+.confirm-dialog-icon{
+  flex:0 0 auto;
+  display:grid;
+  place-items:center;
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  background:#fee2e2;
+  color:var(--red)
+}
+.confirm-dialog-icon svg{width:24px;height:24px}
+.confirm-dialog-text h2{
+  margin:0 0 6px;
+  font-size:17px;
+  color:var(--navy-800)
+}
+.confirm-dialog-text p{
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.5;
+  overflow-wrap:anywhere
+}
+.confirm-dialog-foot{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  padding:16px 24px 22px
+}
+.confirm-dialog-foot .btn{
+  min-width:96px;
+  justify-content:center
+}
+@media(max-width:520px){
+  .confirm-dialog-body{padding:20px 18px 4px}
+  .confirm-dialog-foot{padding:14px 18px 18px}
+  .confirm-dialog-foot .btn{flex:1}
 }

@@ -14,8 +14,10 @@ if ($status === 'unrecorded') {
     $statusClause = 'AND ds.status IS NULL';
     $statusParams  = [];
 } else {
-    $statusClause = 'AND ds.status = ?';
-    $statusParams  = [$status];
+    $statusKeys    = status_bucket_keys($status);
+    $placeholders  = implode(',', array_fill(0, count($statusKeys), '?'));
+    $statusClause  = "AND ds.status IN ($placeholders)";
+    $statusParams  = $statusKeys;
 }
 
 $sql = "SELECT e.*, rg.name AS region_name, dv.name AS division_name, st.name AS station_name, pt.name AS post_name, ds.status, ds.notes
@@ -31,12 +33,12 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute(array_merge([$date], $scopeP, $statusParams));
 $rows = $stmt->fetchAll();
 
-$page_title = status_label($status) . ' — Details';
+$page_title = status_bucket_label($status) . ' — Details';
 include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
   <div>
-    <h1><?= e(status_label($status)) ?> Personnel</h1>
+    <h1><?= e(status_bucket_label($status)) ?> Personnel</h1>
     <div class="desc"><?= e(date('l, j F Y',strtotime($date))) ?> · <?= count($rows) ?> personnel</div>
   </div>
   <a class="btn btn-secondary" href="/?date=<?= urlencode($date) ?>">&larr; Dashboard</a>

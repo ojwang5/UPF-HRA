@@ -190,7 +190,7 @@ foreach ($geoSections as $sec):
         <td>
           <div class="btn-grp">
             <button class="px px-edit" onclick='openGeoEdit("<?= $lvl ?>",<?= $jEnc ?>)'><?= ICO_EDIT ?> Edit</button>
-            <form method="post" style="display:contents" onsubmit="return confirm('Delete this <?= $lvl ?>
+            <form method="post" style="display:contents" data-confirm="Delete this <?= e($lvl) ?>? Child entries must be removed first." data-confirm-title="Delete <?= e($lvl) ?>" data-confirm-ok="Delete">
   <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete"><input type="hidden" name="level" value="<?= $lvl ?>">
               <input type="hidden" name="id" value="<?= $pid ?>"><input type="hidden" name="tab" value="geography">
@@ -235,8 +235,8 @@ foreach ($geoSections as $sec):
 <!-- EDIT dialog -->
 <dialog id="dlg-edit-<?= $lvl ?>">
   <div class="dlg-head"><h4>Edit <?= rtrim($sec['label'],'s') ?></h4><button class="dlg-close" onclick="this.closest('dialog').close()">×</button></div>
-  <form method="post" id="form-edit-<?= $lvl ?>
-  <?= csrf_field() ?>">
+  <form method="post" id="form-edit-<?= $lvl ?>">
+    <?= csrf_field() ?>
     <div class="dlg-body" style="display:flex;flex-direction:column;gap:12px">
       <input type="hidden" name="action" value="edit"><input type="hidden" name="level" value="<?= $lvl ?>"><input type="hidden" name="tab" value="geography">
       <input type="hidden" name="id" id="edit-<?= $lvl ?>-id">
@@ -290,7 +290,7 @@ foreach ($geoSections as $sec):
         <div class="btn-grp">
           <a class="px px-view" href="/structure-view.php?type=directorate&id=<?= $d['id'] ?>"><?= ICO_EYE ?> View</a>
           <button class="px px-edit" onclick='openDirEdit(<?= htmlspecialchars(json_encode($d),ENT_QUOTES) ?>)'><?= ICO_EDIT ?> Edit</button>
-          <form method="post" style="display:contents" onsubmit="return confirm('Delete this directorate? Units inside it will also be removed.')">
+          <form method="post" style="display:contents" data-confirm="Delete this directorate? Units inside it will also be removed." data-confirm-title="Delete directorate" data-confirm-ok="Delete">
   <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete"><input type="hidden" name="level" value="directorate">
             <input type="hidden" name="id" value="<?= $d['id'] ?>"><input type="hidden" name="tab" value="directorates">
@@ -333,7 +333,7 @@ foreach ($geoSections as $sec):
         <div class="btn-grp">
           <a class="px px-view" href="/structure-view.php?type=unit&id=<?= $u['id'] ?>"><?= ICO_EYE ?> View</a>
           <button class="px px-edit" onclick='openUnitEdit(<?= htmlspecialchars(json_encode($u),ENT_QUOTES) ?>)'><?= ICO_EDIT ?> Edit</button>
-          <form method="post" style="display:contents" onsubmit="return confirm('Delete this unit?')">
+          <form method="post" style="display:contents" data-confirm="Delete this unit? This action cannot be undone." data-confirm-title="Delete unit" data-confirm-ok="Delete">
   <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete"><input type="hidden" name="level" value="unit">
             <input type="hidden" name="id" value="<?= $u['id'] ?>"><input type="hidden" name="tab" value="directorates">

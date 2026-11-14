@@ -26,11 +26,15 @@ $chartData = [
     ['on_duty',      'On Duty',      '#0891b2'],
     ['on_leave',     'On Leave',     '#3b82f6'],
     ['sick',         'Sick',         '#f59e0b'],
+    ['wounded',      'Wounded',      '#fb923c'],
     ['on_course',    'On Course',    '#059669'],
     ['awol',         'AWOL',         '#ef4444'],
     ['suspended',    'Suspended',    '#7c3aed'],
     ['disciplinary', 'Disciplinary', '#dc2626'],
     ['deserted',     'Deserted',     '#be185d'],
+    ['death',        'Death',        '#334155'],
+    ['retired',      'Retired',      '#78716c'],
+    ['missing',      'Missing',      '#ea580c'],
     ['unrecorded',   'Unrecorded',   '#94a3b8'],
 ];
 $chartTotal = 0;

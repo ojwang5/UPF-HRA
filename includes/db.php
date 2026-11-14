@@ -72,7 +72,7 @@ function init_schema(PDO $pdo): void {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
             date TEXT NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed')),
+            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','wounded','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed','death','retired','missing')),
             notes TEXT,
             recorded_by INTEGER REFERENCES users(id),
             auto_status INTEGER NOT NULL DEFAULT 0,
@@ -366,6 +366,47 @@ function migrate(PDO $pdo): void {
     if ($v < 22) {
         _migrate_v22($pdo);
     }
+
+    if ($v < 23) {
+        _migrate_v23($pdo);
+    }
+}
+
+/* ─── v23: extend daily_status with wounded, death, retired and missing ─── */
+function _migrate_v23(PDO $pdo): void {
+    $pdo->exec("PRAGMA foreign_keys = OFF");
+    $pdo->exec("BEGIN");
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS daily_status_v23 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            date TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','wounded','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed','death','retired','missing')),
+            notes TEXT,
+            recorded_by INTEGER REFERENCES users(id),
+            auto_status INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(employee_id, date)
+        )");
+        $cols    = array_column($pdo->query("PRAGMA table_info(daily_status)")->fetchAll(), 'name');
+        $hasAuto = in_array('auto_status', $cols, true);
+        if ($hasAuto) {
+            $pdo->exec("INSERT OR IGNORE INTO daily_status_v23 (id,employee_id,date,status,notes,recorded_by,auto_status)
+                        SELECT id,employee_id,date,status,notes,recorded_by,auto_status FROM daily_status");
+        } else {
+            $pdo->exec("INSERT OR IGNORE INTO daily_status_v23 (id,employee_id,date,status,notes,recorded_by,auto_status)
+                        SELECT id,employee_id,date,status,notes,recorded_by,0 FROM daily_status");
+        }
+        $pdo->exec("DROP TABLE daily_status");
+        $pdo->exec("ALTER TABLE daily_status_v23 RENAME TO daily_status");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_daily_status_date ON daily_status(date)");
+        $pdo->exec("PRAGMA user_version = 23");
+        $pdo->exec("COMMIT");
+    } catch (\Throwable $e) {
+        $pdo->exec("ROLLBACK");
+        $pdo->exec("PRAGMA foreign_keys = ON");
+        throw $e;
+    }
+    $pdo->exec("PRAGMA foreign_keys = ON");
 }
 
 /* ─── v22: require an intake for every new or updated course record ─── */
@@ -871,7 +912,7 @@ function _migrate_v9(PDO $pdo): void {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
             date TEXT NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed')),
+            status TEXT NOT NULL CHECK(status IN ('present','awol','leave','sick','wounded','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed','death','retired','missing')),
             notes TEXT,
             recorded_by INTEGER REFERENCES users(id),
             auto_status INTEGER NOT NULL DEFAULT 0,

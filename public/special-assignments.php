@@ -271,7 +271,7 @@ include __DIR__ . '/../includes/header.php';
               </div>
             </details>
             <?php endif; ?>
-            <form method="post" style="display:inline-block" onsubmit="return confirm('Delete this special assignment?')">
+            <form method="post" style="display:inline-block" data-confirm="Delete this special assignment? This action cannot be undone." data-confirm-title="Delete assignment" data-confirm-ok="Delete">
   <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="<?= $r['id'] ?>">

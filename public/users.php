@@ -258,7 +258,7 @@ include __DIR__ . '/../includes/header.php';
               </div>
 
               <!-- Delete -->
-              <form method="post" style="display:contents" onsubmit="return confirm('Remove account for <?= e(addslashes($u['full_name'])) ?>
+              <form method="post" style="display:contents" data-confirm="Remove the account for <?= e($u['full_name']) ?>? This action cannot be undone." data-confirm-title="Remove user account" data-confirm-ok="Remove">
   <?= csrf_field() ?>
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= $u['id'] ?>">

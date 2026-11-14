@@ -16,9 +16,12 @@ $filterUnit     = trim($_POST['unit']         ?? $_GET['unit']        ?? '');
 $requestedCols = $_POST['cols'] ?? $_GET['cols'] ?? null;
 $statusFilter  = $_GET['status'] ?? $_POST['status'] ?? '';   // e.g. present, awol, sick …
 $dateFilter    = $_GET['date']   ?? $_POST['date']   ?? date('Y-m-d');
-$validStatuses = ['present','awol','leave','sick','suspended','disciplinary','on_duty','on_course','deserted','special_assignment','undeployed','unrecorded'];
+$validStatuses = array_merge(ALL_STATUSES, ['unrecorded']);
 if ($statusFilter === 'on_leave') $statusFilter = 'leave'; // dashboard alias
 if ($statusFilter !== '' && !in_array($statusFilter, $validStatuses, true)) $statusFilter = '';
+$statusKeys = ($statusFilter !== '' && $statusFilter !== 'unrecorded')
+    ? status_bucket_keys($statusFilter)
+    : [];
 
 /* ── Column definitions ── */
 $allColDefs = [
@@ -59,15 +62,14 @@ if ($statusFilter === 'unrecorded') {
     $params[] = $dateFilter;
     $dsSelect  = "NULL AS ds_status, NULL AS ds_notes";
     $dsJoin    = "";
-} elseif ($statusFilter !== '') {
-    // Employees with a specific status on that date
-    $where    .= " AND ds.status=?";
-    $params[]  = $statusFilter;
+} elseif ($statusKeys) {
+    // Employees with a specific status (or status bucket, e.g. sick + wounded) on that date
+    $statusPlaceholders = implode(',', array_fill(0, count($statusKeys), '?'));
+    $where    .= " AND ds.status IN ($statusPlaceholders)";
     $dsSelect  = "ds.status AS ds_status, ds.notes AS ds_notes";
     $dsJoin    = "INNER JOIN daily_status ds ON ds.employee_id=e.id AND ds.date=?";
-    array_unshift($params, $dateFilter);   // date goes before scope params in JOIN
-    // Re-build: date first, then scope
-    $params = array_merge([$dateFilter], $scopeP, [$statusFilter]);
+    // Date goes first (JOIN), then scope and status values (WHERE).
+    $params = array_merge([$dateFilter], $scopeP, $statusKeys);
 } else {
     $dsSelect = "";
     $dsJoin   = "";
@@ -104,11 +106,7 @@ $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
 /* ── Human-readable labels for title ── */
-$statusLabels = ['present'=>'Present','awol'=>'AWOL','leave'=>'On Leave','sick'=>'Sick',
-                 'suspended'=>'Suspended','disciplinary'=>'Under Disciplinary','on_duty'=>'On Duty',
-                 'on_course'=>'On Course','deserted'=>'Deserted','special_assignment'=>'Special Assignment',
-                 'undeployed'=>'Undeployed','unrecorded'=>'Unrecorded'];
-$statusLabel = $statusFilter !== '' ? ($statusLabels[$statusFilter] ?? ucfirst($statusFilter)) : 'All Personnel';
+$statusLabel = $statusFilter !== '' ? status_bucket_label($statusFilter) : 'All Personnel';
 $dateFmt     = date('Y-m-d', strtotime($dateFilter));
 $title       = 'UPF Personnel — '.$statusLabel.' — '.$dateFmt;
 

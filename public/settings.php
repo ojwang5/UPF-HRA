@@ -459,7 +459,7 @@ include __DIR__ . '/../includes/header.php';
           </button>
         </form>
         <?php if (get_setting('groq_api_key')): ?>
-        <form method="post" style="display:inline" onsubmit="return confirm('Remove the stored AI assistant API key?')">
+        <form method="post" style="display:inline" data-confirm="Remove the stored AI assistant API key? The assistant will stop working until a new key is saved." data-confirm-title="Remove API key" data-confirm-ok="Remove">
   <?= csrf_field() ?>
           <input type="hidden" name="action" value="clear_groq_key">
           <button class="btn-icon bi-danger" type="submit" title="Remove the stored key"><?= ICO_TRASH ?></button>
@@ -584,7 +584,7 @@ include __DIR__ . '/../includes/header.php';
               <input type="hidden" name="id" value="<?= (int)$lt['id'] ?>">
               <button class="btn-icon bi-secondary bi-sm" title="<?= $lt['active']?'Disable':'Enable' ?>"><?= $lt['active'] ? ICO_CANCEL : ICO_OK ?></button>
             </form>
-            <form method="post" style="display:inline" onsubmit="return confirm('Remove this leave type?')">
+            <form method="post" style="display:inline" data-confirm="Remove this leave type? This action cannot be undone." data-confirm-title="Delete leave type" data-confirm-ok="Remove">
   <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete_leave_type">
               <input type="hidden" name="id" value="<?= (int)$lt['id'] ?>">

@@ -506,8 +506,8 @@ include __DIR__ . '/../includes/header.php';
     <div class="detail-btn-row">
       <a class="btn-icon bi-secondary" href="/employees.php?edit=<?= $viewing['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit record"><?= ICO_EDIT ?> <span>Edit Record</span></a>
       <span class="detail-btn-sep" aria-hidden="true"></span>
-      <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($viewing['full_name'])) ?>
-  <?= csrf_field() ?>?')">
+      <form method="post" style="display:contents" data-confirm="Remove <?= e($viewing['full_name']) ?>? This action cannot be undone." data-confirm-title="Remove personnel record" data-confirm-ok="Remove">
+  <?= csrf_field() ?>
         <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= $viewing['id'] ?>">
         <button class="btn-icon bi-danger" type="submit" title="Remove this personnel record"><?= ICO_TRASH ?> <span>Remove</span></button>
       </form>
@@ -748,7 +748,7 @@ include __DIR__ . '/../includes/header.php';
             <div style="display:flex;gap:3px;justify-content:center">
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?view=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="View details"><?= ICO_EYE ?></a>
               <a class="btn-icon bi-secondary bi-sm" href="/employees.php?edit=<?= $emp['id'] ?><?= $search?'&q='.urlencode($search):'' ?>" title="Edit"><?= ICO_EDIT ?></a>
-              <form method="post" style="display:contents" onsubmit="return confirm('Remove <?= e(addslashes($emp['full_name'])) ?>
+              <form method="post" style="display:contents" data-confirm="Remove <?= e($emp['full_name']) ?>? This action cannot be undone." data-confirm-title="Remove personnel record" data-confirm-ok="Remove">
   <?= csrf_field() ?>
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= $emp['id'] ?>">

@@ -274,40 +274,20 @@ function lr_pill(string $s): string {
     return '<span class="badge '.$c.'">'.htmlspecialchars($l).'</span>';
 }
 
+/** Compact "FILE — RANK Name" label for the leave dialogs. */
+function lr_row_label(array $r): string {
+    $rankName = trim((string)($r['rank'] ?? '') . ' ' . (string)($r['emp_name'] ?? ''));
+    return implode(' — ', array_filter([(string)($r['service_no'] ?? ''), $rankName]));
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 <div class="page-header">
   <div><h1>Leave Management</h1><div class="desc">Leave requests, adjustments &amp; per-personnel leave counts</div></div>
   <div class="action-bar">
-    <details class="form-panel" id="leave-form">
-      <summary><button type="button" class="btn-icon bi-primary" title="Submit leave request"><?= ICO_PLUS ?></button></summary>
-      <div class="form-body">
-        <h4 style="margin:0 0 14px;color:var(--navy-800)">New Leave Request</h4>
-        <form method="post">
-  <?= csrf_field() ?>
-          <input type="hidden" name="action" value="submit">
-          <div class="form-row">
-            <div class="form-group" style="flex:2"><label>Employee</label>
-              <select name="employee_id" required><option value="">— select —</option>
-                <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e(personnel_label($emp)) ?></option><?php endforeach; ?>
-              </select>
-            </div>
-            <div class="form-group"><label>Leave Type</label>
-              <select name="leave_type">
-                <?php foreach ($leaveTypes as $lt): ?><option value="<?= e($lt['name']) ?>"><?= e($lt['name']) ?></option><?php endforeach; ?>
-              </select>
-            </div>
-            <div class="form-group"><label>Start Date</label><input type="date" name="start_date" required value="<?= date('Y-m-d') ?>"></div>
-            <div class="form-group"><label>End Date</label><input type="date" name="end_date" required value="<?= date('Y-m-d') ?>"></div>
-            <div class="form-group" style="flex:2"><label>Reason</label><input type="text" name="reason" required></div>
-            <div class="form-group" style="flex:2"><label>Destination (where going)</label><input type="text" name="destination" placeholder="e.g. Kampala / home district"></div>
-          </div>
-          <div class="action-bar" style="margin-top:10px">
-            <button class="btn-icon bi-gold bi-lg" type="submit" title="Submit request"><?= ICO_SEND ?></button>
-          </div>
-        </form>
-      </div>
-    </details>
+    <button type="button" class="btn-icon bi-primary btn-labeled" data-open-dialog="leave-new-dialog" title="Submit leave request">
+      <?= ICO_PLUS ?><span>New Request</span>
+    </button>
   </div>
 </div>
 
@@ -538,19 +518,9 @@ sort($pgNums);
     <h3>Leave Counts / Balances — <?= $balYear ?>
       <span style="font-weight:400;color:var(--muted);font-size:12px">(entitlement + adjustments − approved taken)</span></h3>
     <div class="action-bar">
-      <details class="form-panel">
-        <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Leave year"><?= ICO_SEARCH ?></button></summary>
-        <div class="form-body" style="padding:12px 16px">
-          <form method="get" style="display:flex;gap:8px;align-items:flex-end">
-            <input type="hidden" name="q" value="<?= e($balQ) ?>">
-            <input type="hidden" name="rank" value="<?= e($balRank) ?>">
-            <div class="form-group"><label>Leave Year</label>
-              <input type="number" name="byear" value="<?= $balYear ?>" min="2000" max="2100">
-            </div>
-            <button class="btn-icon bi-primary" type="submit" title="Apply"><?= ICO_SAVE ?></button>
-          </form>
-        </div>
-      </details>
+      <button type="button" class="btn-icon bi-secondary btn-labeled" data-open-dialog="leave-year-dialog" title="Change leave year">
+        <?= ICO_SEARCH ?><span>Year</span>
+      </button>
       <?php if (role_rank($user['role']) > role_rank('officer')): ?>
       <div class="panel-wrap">
         <button class="btn-icon bi-primary bi-sm" data-panel="panel-adjust" title="Adjust leave days"><?= ICO_EDIT ?></button>
@@ -662,7 +632,7 @@ sort($pgNums);
   <div class="chr"><h3>Leave Requests</h3></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Region</th><th>Type</th><th>Dates</th><th>Destination</th><th>Remaining</th><th>Reason</th><th>Status</th><th>Submitted</th><th style="width:80px"></th></tr></thead>
+      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Region</th><th>Type</th><th>Dates</th><th>Destination</th><th>Remaining</th><th>Reason</th><th>Status</th><th>Submitted</th><th class="table-action-col" style="width:80px"></th></tr></thead>
       <tbody>
         <?php foreach ($requests as $r): ?>
         <tr id="lr-<?= $r['id'] ?>">
@@ -690,40 +660,23 @@ sort($pgNums);
             <?php if ($r['reviewer']): ?><div class="muted" style="font-size:10px"><?= e($r['reviewer']) ?></div><?php endif; ?>
           </td>
           <td class="muted" style="font-size:11px"><?= e(date('M j, H:i',strtotime($r['submitted_at']))) ?><br><?= e($r['submitter']??'—') ?></td>
-          <td>
+          <td class="table-action-col">
             <?php if ($r['status']==='pending' && can_approve_leave($user, $r['leave_type'])): ?>
-            <details class="form-panel" style="position:relative">
-              <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review request"><?= ICO_EYE ?></button></summary>
-              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:260px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
-                <form method="post" style="display:flex;flex-direction:column;gap:8px">
-  <?= csrf_field() ?>
-                  <input type="hidden" name="action" value="review"><input type="hidden" name="id" value="<?= $r['id'] ?>">
-                  <input type="text" name="notes" placeholder="Review notes (optional)">
-                  <div class="action-bar">
-                    <button class="btn-icon bi-green" name="decision" value="approve" title="Approve"><?= ICO_OK ?></button>
-                    <button class="btn-icon bi-danger" name="decision" value="reject" title="Reject"><?= ICO_REJECT ?></button>
-                  </div>
-                </form>
-              </div>
-            </details>
+            <button type="button" class="btn-icon bi-secondary bi-sm" title="Review request"
+                    data-open-dialog="leave-review-dialog"
+                    data-id="<?= (int)$r['id'] ?>"
+                    data-name="<?= e(lr_row_label($r)) ?>"
+                    data-type="<?= e($r['leave_type']) ?>"
+                    data-start="<?= e($r['start_date']) ?>"
+                    data-end="<?= e($r['end_date']) ?>"><?= ICO_EYE ?></button>
             <?php endif; ?>
             <?php if ($r['status']==='approved'): ?>
-            <details class="form-panel" style="position:relative">
-              <summary><button type="button" class="btn-icon bi-gold bi-sm" title="Request leave extension"><?= ICO_EDIT ?></button></summary>
-              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:270px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
-                <form method="post" style="display:flex;flex-direction:column;gap:8px">
-  <?= csrf_field() ?>
-                  <input type="hidden" name="action" value="submit_extension">
-                  <input type="hidden" name="leave_request_id" value="<?= $r['id'] ?>">
-                  <div style="font-size:12px;color:var(--muted)">Current end date: <strong><?= e($r['end_date']) ?></strong></div>
-                  <input type="date" name="new_end_date" required value="<?= e(date('Y-m-d', strtotime($r['end_date'].' +7 days'))) ?>">
-                  <input type="text" name="reason" placeholder="Reason for extension (optional)">
-                  <div class="action-bar" style="justify-content:flex-end">
-                    <button class="btn-icon bi-gold bi-sm" type="submit" title="Submit extension request"><?= ICO_SEND ?></button>
-                  </div>
-                </form>
-              </div>
-            </details>
+            <button type="button" class="btn-icon bi-gold bi-sm" title="Request leave extension"
+                    data-open-dialog="leave-extend-dialog"
+                    data-id="<?= (int)$r['id'] ?>"
+                    data-name="<?= e(lr_row_label($r)) ?>"
+                    data-type="<?= e($r['leave_type']) ?>"
+                    data-end="<?= e($r['end_date']) ?>"><?= ICO_EDIT ?></button>
             <?php endif; ?>
           </td>
         </tr>
@@ -738,7 +691,7 @@ sort($pgNums);
   <div class="chr"><h3>Leave Extensions <span class="badge badge-admin"><?= count($extensions) ?></span></h3></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Type</th><th>Extension</th><th>Reason</th><th>Requested By</th><th>Status</th><th style="width:80px"></th></tr></thead>
+      <thead><tr><th>File/Force No</th><th>Rank</th><th>Full Name</th><th>Type</th><th>Extension</th><th>Reason</th><th>Requested By</th><th>Status</th><th class="table-action-col" style="width:80px"></th></tr></thead>
       <tbody>
         <?php foreach ($extensions as $x): ?>
         <tr id="le-<?= (int)$x['id'] ?>">
@@ -755,22 +708,15 @@ sort($pgNums);
               <?php if ($x['reviewer']): ?><div class="muted" style="font-size:10px"><?= e($x['reviewer']) ?></div><?php endif; ?>
             <?php else: ?><span class="badge badge-awol">Rejected</span><?php endif; ?>
           </td>
-          <td>
+          <td class="table-action-col">
             <?php if ($x['status']==='pending' && can_approve_leave($user, $x['leave_type'])): ?>
-            <details class="form-panel" style="position:relative">
-              <summary><button type="button" class="btn-icon bi-secondary bi-sm" title="Review extension"><?= ICO_EYE ?></button></summary>
-              <div class="form-body form-pop" style="position:absolute;right:0;top:100%;min-width:260px;z-index:20;padding:14px;box-shadow:var(--shadow-md)">
-                <form method="post" style="display:flex;flex-direction:column;gap:8px">
-  <?= csrf_field() ?>
-                  <input type="hidden" name="action" value="review_extension"><input type="hidden" name="id" value="<?= (int)$x['id'] ?>">
-                  <input type="text" name="notes" placeholder="Review notes (optional)">
-                  <div class="action-bar">
-                    <button class="btn-icon bi-green" name="decision" value="approve" title="Approve extension"><?= ICO_OK ?></button>
-                    <button class="btn-icon bi-danger" name="decision" value="reject" title="Reject extension"><?= ICO_REJECT ?></button>
-                  </div>
-                </form>
-              </div>
-            </details>
+            <button type="button" class="btn-icon bi-secondary bi-sm" title="Review extension"
+                    data-open-dialog="extension-review-dialog"
+                    data-id="<?= (int)$x['id'] ?>"
+                    data-name="<?= e(lr_row_label($x)) ?>"
+                    data-type="<?= e($x['leave_type']) ?>"
+                    data-old-end="<?= e($x['old_end_date']) ?>"
+                    data-new-end="<?= e($x['new_end_date']) ?>"><?= ICO_EYE ?></button>
             <?php endif; ?>
           </td>
         </tr>
@@ -846,9 +792,212 @@ sort($pgNums);
   </div>
 </div>
 
+<!-- ═══ Leave dialogs ═══════════════════════════════════════════════════════ -->
+<dialog id="leave-new-dialog" class="leave-dialog" aria-labelledby="leave-new-title">
+  <div class="leave-dialog-head">
+    <div>
+      <h2 id="leave-new-title">New Leave Request</h2>
+      <p>Submit a leave request for review.</p>
+    </div>
+    <button type="button" class="leave-dialog-close" data-close-dialog aria-label="Close">&times;</button>
+  </div>
+  <form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="submit">
+    <div class="leave-dialog-body">
+      <div class="form-row">
+        <div class="form-group" style="flex:2"><label>Employee</label>
+          <select name="employee_id" required><option value="">— select —</option>
+            <?php foreach ($emps as $emp): ?><option value="<?= $emp['id'] ?>"><?= e(personnel_label($emp)) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group"><label>Leave Type</label>
+          <select name="leave_type">
+            <?php foreach ($leaveTypes as $lt): ?><option value="<?= e($lt['name']) ?>"><?= e($lt['name']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group"><label>Start Date</label><input type="date" name="start_date" required value="<?= date('Y-m-d') ?>"></div>
+        <div class="form-group"><label>End Date</label><input type="date" name="end_date" required value="<?= date('Y-m-d') ?>"></div>
+        <div class="form-group" style="flex:2"><label>Reason</label><input type="text" name="reason" required></div>
+        <div class="form-group" style="flex:2"><label>Destination (where going)</label><input type="text" name="destination" placeholder="e.g. Kampala / home district"></div>
+      </div>
+    </div>
+    <div class="leave-dialog-foot">
+      <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="btn btn-gold"><?= ICO_SEND ?><span>Submit request</span></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="leave-year-dialog" class="leave-dialog leave-dialog-sm" aria-labelledby="leave-year-title">
+  <div class="leave-dialog-head">
+    <div>
+      <h2 id="leave-year-title">Leave Year</h2>
+      <p>Choose the year used for leave balances.</p>
+    </div>
+    <button type="button" class="leave-dialog-close" data-close-dialog aria-label="Close">&times;</button>
+  </div>
+  <form method="get">
+    <input type="hidden" name="q" value="<?= e($balQ) ?>">
+    <input type="hidden" name="rank" value="<?= e($balRank) ?>">
+    <div class="leave-dialog-body">
+      <div class="form-group"><label>Leave Year</label>
+        <input type="number" name="byear" value="<?= $balYear ?>" min="2000" max="2100">
+      </div>
+    </div>
+    <div class="leave-dialog-foot">
+      <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="btn"><?= ICO_SAVE ?><span>Apply</span></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="leave-review-dialog" class="leave-dialog" aria-labelledby="leave-review-title">
+  <div class="leave-dialog-head">
+    <div>
+      <h2 id="leave-review-title">Review Leave Request</h2>
+      <p data-dialog-summary></p>
+    </div>
+    <button type="button" class="leave-dialog-close" data-close-dialog aria-label="Close">&times;</button>
+  </div>
+  <form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="review">
+    <input type="hidden" name="id" value="">
+    <div class="leave-dialog-body">
+      <div class="form-group"><label>Review notes <span class="muted" style="text-transform:none;font-weight:400">(optional)</span></label>
+        <textarea name="notes" rows="3" placeholder="Add a note that will be stored with the decision"></textarea>
+      </div>
+    </div>
+    <div class="leave-dialog-foot">
+      <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+      <button type="submit" name="decision" value="reject" class="btn btn-danger"><?= ICO_REJECT ?><span>Reject</span></button>
+      <button type="submit" name="decision" value="approve" class="btn btn-success"><?= ICO_OK ?><span>Approve</span></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="leave-extend-dialog" class="leave-dialog" aria-labelledby="leave-extend-title">
+  <div class="leave-dialog-head">
+    <div>
+      <h2 id="leave-extend-title">Request Leave Extension</h2>
+      <p data-dialog-summary></p>
+    </div>
+    <button type="button" class="leave-dialog-close" data-close-dialog aria-label="Close">&times;</button>
+  </div>
+  <form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="submit_extension">
+    <input type="hidden" name="leave_request_id" value="">
+    <div class="leave-dialog-body">
+      <div class="form-row">
+        <div class="form-group"><label>Current end date</label>
+          <input type="date" data-current-end disabled>
+        </div>
+        <div class="form-group"><label>New end date</label>
+          <input type="date" name="new_end_date" required>
+        </div>
+      </div>
+      <div class="form-group"><label>Reason for extension <span class="muted" style="text-transform:none;font-weight:400">(optional)</span></label>
+        <input type="text" name="reason" placeholder="Why is the leave being extended?">
+      </div>
+    </div>
+    <div class="leave-dialog-foot">
+      <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="btn btn-gold"><?= ICO_SEND ?><span>Request extension</span></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="extension-review-dialog" class="leave-dialog" aria-labelledby="extension-review-title">
+  <div class="leave-dialog-head">
+    <div>
+      <h2 id="extension-review-title">Review Leave Extension</h2>
+      <p data-dialog-summary></p>
+    </div>
+    <button type="button" class="leave-dialog-close" data-close-dialog aria-label="Close">&times;</button>
+  </div>
+  <form method="post">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="review_extension">
+    <input type="hidden" name="id" value="">
+    <div class="leave-dialog-body">
+      <div class="form-group"><label>Review notes <span class="muted" style="text-transform:none;font-weight:400">(optional)</span></label>
+        <textarea name="notes" rows="3" placeholder="Add a note that will be stored with the decision"></textarea>
+      </div>
+    </div>
+    <div class="leave-dialog-foot">
+      <button type="button" class="btn btn-secondary" data-close-dialog>Cancel</button>
+      <button type="submit" name="decision" value="reject" class="btn btn-danger"><?= ICO_REJECT ?><span>Reject</span></button>
+      <button type="submit" name="decision" value="approve" class="btn btn-success"><?= ICO_OK ?><span>Approve</span></button>
+    </div>
+  </form>
+</dialog>
+
 <script>
-document.querySelectorAll('details.form-panel').forEach(d=>{
-  d.addEventListener('toggle',()=>{ if(d.open) document.querySelectorAll('details.form-panel').forEach(o=>{ if(o!==d) o.open=false; }); });
-});
+(function(){
+  function addDays(iso, days){
+    var p = (iso || '').split('-').map(Number);
+    if(p.length !== 3 || !p[0]) return '';
+    var d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  document.addEventListener('click', function(e){
+    var trigger = e.target.closest('[data-open-dialog]');
+    if(trigger){
+      var dlg = document.getElementById(trigger.getAttribute('data-open-dialog'));
+      if(!dlg) return;
+      var data = trigger.dataset;
+
+      var summary = dlg.querySelector('[data-dialog-summary]');
+      if(summary){
+        if(dlg.id === 'leave-review-dialog'){
+          summary.textContent = data.name + ' — ' + data.type + ' leave from ' + data.start + ' to ' + data.end + '.';
+        } else if(dlg.id === 'leave-extend-dialog'){
+          summary.textContent = data.name + ' — ' + data.type + ' leave currently ends ' + data.end + '.';
+        } else if(dlg.id === 'extension-review-dialog'){
+          summary.textContent = data.name + ' — ' + data.type + ' leave extended from ' + data.oldEnd + ' to ' + data.newEnd + '.';
+        }
+      }
+
+      var idInput = dlg.querySelector('input[name="id"], input[name="leave_request_id"]');
+      if(idInput) idInput.value = data.id || '';
+
+      var notes = dlg.querySelector('textarea[name="notes"]');
+      if(notes) notes.value = '';
+
+      if(dlg.id === 'leave-extend-dialog'){
+        var current = dlg.querySelector('[data-current-end]');
+        if(current) current.value = data.end || '';
+        var newEnd = dlg.querySelector('input[name="new_end_date"]');
+        if(newEnd && data.end){
+          newEnd.min = addDays(data.end, 1);
+          newEnd.value = addDays(data.end, 7);
+        }
+        var reason = dlg.querySelector('input[name="reason"]');
+        if(reason) reason.value = '';
+      }
+
+      dlg.showModal();
+      var first = dlg.querySelector('textarea, input:not([type="hidden"]):not([disabled]), select');
+      if(first) setTimeout(function(){ first.focus(); }, 30);
+      return;
+    }
+
+    var closer = e.target.closest('[data-close-dialog]');
+    if(closer){
+      var open = closer.closest('dialog');
+      if(open) open.close();
+    }
+  });
+
+  document.querySelectorAll('.leave-dialog').forEach(function(dlg){
+    dlg.addEventListener('click', function(e){
+      if(e.target === dlg) dlg.close();
+    });
+  });
+})();
 </script>
 <?php include __DIR__ . '/../includes/footer.php'; ?>
